@@ -1,0 +1,1 @@
+"""Module to define a simple UI"""

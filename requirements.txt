@@ -1,0 +1,9 @@
+pyside6 
+pandas 
+numpy
+portalocker
+pypdf
+
+huggingface_hub
+transformers
+datasets
