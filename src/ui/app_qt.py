@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QProgressDialog,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -113,6 +114,11 @@ class MainWindow(QMainWindow):
 
         self.extractor = TextExtractor()
 
+        init_dlg = self._make_progress("Starting application", "Initializing window…", 0)
+        init_dlg.setRange(0, 0)  # indeterminate/busy
+        init_dlg.setLabelText("Loading EDS-PSEUDO model…")
+        QApplication.processEvents()
+
         # EDS-PSEUDO model initialization (used later during commit).
         self.pseudonymizer: TextPseudonymizer | None = None
         try:
@@ -123,8 +129,10 @@ class MainWindow(QMainWindow):
                 auto_update=False,
                 secret_salt="CHANGE_ME",
             )
+            init_dlg.close()
         except Exception as e:
             # Keep the UI usable (e.g., for extraction), but block commits until the model is available.
+            init_dlg.close()
             self.pseudonymizer = None
             QMessageBox.critical(
                 self,
@@ -183,6 +191,18 @@ class MainWindow(QMainWindow):
         root.setLayout(layout)
         self.setCentralWidget(root)
 
+    def _make_progress(self, title: str, label: str, maximum: int) -> QProgressDialog:
+        dlg = QProgressDialog(label, None, 0, maximum, self)
+        dlg.setWindowTitle(title)
+        dlg.setWindowModality(Qt.ApplicationModal)
+        dlg.setMinimumDuration(0)  # show immediately
+        dlg.setAutoClose(False)
+        dlg.setAutoReset(False)
+        dlg.setValue(0)
+        dlg.show()
+        QApplication.processEvents()
+        return dlg
+    
     def choose_db(self):
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -266,7 +286,6 @@ class MainWindow(QMainWindow):
             self._error("No documents loaded. Click 'Documents…' first.")
             return
 
-        # Defensive: ensure DB contains expected columns (especially SOURCE_FILE)
         required_cols = {"PID", "SOURCE_FILE", "DOCUMENT", "PSEUDO", "ORDER"}
         missing_db = required_cols - set(df.columns)
         if missing_db:
@@ -277,7 +296,6 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # Ensure we have a persistent pseudonymization salt for this DB, and configure the pseudonymizer.
         try:
             salt = get_or_create_salt_file(db_path)
             self.pseudonymizer.secret_salt = salt
@@ -286,7 +304,7 @@ class MainWindow(QMainWindow):
             return
 
         # -------------------------
-        # Parallel extraction (Windows-safe via threads)
+        # Validate rows + collect metadata
         # -------------------------
         rows_meta = []  # keep original order + validated metadata
         for r in range(n):
@@ -342,7 +360,11 @@ class MainWindow(QMainWindow):
         # Use half CPU threads (min 1). Threads are safer than processes on Windows.
         max_workers = max(1, (os.cpu_count() or 1) // 2)
 
-        self.status.setText(f"Extracting text in parallel (n={n}, workers={max_workers})…")
+        # -------------------------
+        # Phase 1: Parallel extraction with visible progress dialog
+        # -------------------------
+        extract_dlg = self._make_progress("Commit", "Extracting text…", n)
+        extract_dlg.setLabelText(f"Extracting text…\nWorkers: {max_workers}")
         QApplication.processEvents()
 
         extracted_by_row: dict[int, str] = {}
@@ -359,37 +381,50 @@ class MainWindow(QMainWindow):
                     try:
                         extracted_by_row[r] = fut.result()
                     except Exception as e:
+                        extract_dlg.close()
                         self._error(f"Row {r+1}: text extraction failed for {p.name}:\n{e}")
                         return
 
                     completed += 1
-                    # Lightweight progress updates
-                    self.status.setText(f"Extracted ({completed}/{n}): {p.name}")
+                    extract_dlg.setLabelText(f"Extracting text… ({completed}/{n})\n{p.name}")
+                    extract_dlg.setValue(completed)
                     QApplication.processEvents()
+
         except Exception as e:
+            extract_dlg.close()
             self._error(f"Parallel extraction failed:\n{e}")
             return
 
-        # -------------------------
-        # Sequential pseudonymization (stable)
-        # -------------------------
-        rows = []
-        for idx, (r, p, pid, order_val) in enumerate(rows_meta, start=1):
-            extracted_text = extracted_by_row.get(r, "")
-            if not extracted_text.strip():
-                self._error(f"Row {r+1}: empty extracted text for {p.name}.")
-                return
+        extract_dlg.close()
 
+        # Update previews in table order (nice UX; avoids “random” completion order)
+        for (r, p, pid, order_val) in rows_meta:
+            extracted_text = extracted_by_row.get(r, "")
             preview = extracted_text.strip().replace("\n", " ")
             preview = preview[:160] + ("…" if len(preview) > 160 else "")
             self._set_preview(r, preview)
 
-            self.status.setText(f"Pseudonymizing ({idx}/{n}): {p.name}")
+        # -------------------------
+        # Phase 2: Sequential pseudonymization with visible progress dialog
+        # -------------------------
+        pseudo_dlg = self._make_progress("Commit", "Pseudonymizing extracted texts…", n)
+
+        rows = []
+        for idx, (r, p, pid, order_val) in enumerate(rows_meta, start=1):
+            extracted_text = extracted_by_row.get(r, "")
+            if not extracted_text.strip():
+                pseudo_dlg.close()
+                self._error(f"Row {r+1}: empty extracted text for {p.name}.")
+                return
+
+            pseudo_dlg.setLabelText(f"Pseudonymizing extracted texts… ({idx}/{n})\n{p.name}")
+            pseudo_dlg.setValue(idx - 1)
             QApplication.processEvents()
 
             try:
                 pseudo_text = self.pseudonymizer.pseudonymize(extracted_text, pid=pid)
             except Exception as e:
+                pseudo_dlg.close()
                 self._error(f"Row {r+1}: pseudonymization failed for {p.name}:\n{e}")
                 return
 
@@ -403,6 +438,9 @@ class MainWindow(QMainWindow):
                 }
             )
 
+        pseudo_dlg.setValue(n)
+        pseudo_dlg.close()
+
         new_rows = pd.DataFrame(rows)
 
         try:
@@ -413,6 +451,7 @@ class MainWindow(QMainWindow):
 
         self.table.setRowCount(0)
         self.status.setText(f"Committed {n} document(s) to DB.")
+
 
     def _add_row(self, file_path: str, pid: str, order: str = ""):
         r = self.table.rowCount()
@@ -453,7 +492,7 @@ def main():
         ),
     )
     args, qt_args = parser.parse_known_args()
-
+    print("\nStarting application and loading EDS-PSEUDO, this may take a few minutes..")
     app = QApplication([sys.argv[0], *qt_args])
     w = MainWindow(eds_path=args.eds_path)
     w.show()
