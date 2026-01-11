@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 import argparse
 import importlib
 import pkgutil
 import sys
 from pathlib import Path
 
+import concurrent.futures as cf
 import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -283,7 +285,10 @@ class MainWindow(QMainWindow):
             self._error(f"Could not initialize pseudonymization salt for this DB:\n{e}")
             return
 
-        rows = []
+        # -------------------------
+        # Parallel extraction (Windows-safe via threads)
+        # -------------------------
+        rows_meta = []  # keep original order + validated metadata
         for r in range(n):
             fp = (self.table.item(r, 0).text().strip() if self.table.item(r, 0) else "")
             pid = (self.table.item(r, 1).text().strip() if self.table.item(r, 1) else "")
@@ -322,7 +327,6 @@ class MainWindow(QMainWindow):
                     self._error(f"Row {r+1}: ORDER must be an integer.")
                     return
 
-                # Allow insert at end: 1..max+1
                 max_order = int(pd.to_numeric(df.loc[df["PID"] == pid, "ORDER"], errors="coerce").max())
                 if not (1 <= order_val <= max_order + 1):
                     self._error(
@@ -331,25 +335,58 @@ class MainWindow(QMainWindow):
                     )
                     return
             else:
-                # New PID: ORDER assigned automatically in ops layer
                 order_val = pd.NA
 
-            # Extract BEFORE writing to DB
-            self.status.setText(f"Extracting text ({r+1}/{n}): {p.name}")
-            QApplication.processEvents()
+            rows_meta.append((r, p, pid, order_val))
 
-            try:
-                extracted_text = self.extractor.pdf_to_text(p)
-            except Exception as e:
-                self._error(f"Row {r+1}: text extraction failed for {p.name}:\n{e}")
+        # Use half CPU threads (min 1). Threads are safer than processes on Windows.
+        max_workers = max(1, (os.cpu_count() or 1) // 2)
+
+        self.status.setText(f"Extracting text in parallel (n={n}, workers={max_workers})…")
+        QApplication.processEvents()
+
+        extracted_by_row: dict[int, str] = {}
+        try:
+            with cf.ThreadPoolExecutor(max_workers=max_workers) as ex:
+                futs = {
+                    ex.submit(self.extractor.pdf_to_text, p): (r, p)
+                    for (r, p, _, _) in rows_meta
+                }
+
+                completed = 0
+                for fut in cf.as_completed(futs):
+                    r, p = futs[fut]
+                    try:
+                        extracted_by_row[r] = fut.result()
+                    except Exception as e:
+                        self._error(f"Row {r+1}: text extraction failed for {p.name}:\n{e}")
+                        return
+
+                    completed += 1
+                    # Lightweight progress updates
+                    self.status.setText(f"Extracted ({completed}/{n}): {p.name}")
+                    QApplication.processEvents()
+        except Exception as e:
+            self._error(f"Parallel extraction failed:\n{e}")
+            return
+
+        # -------------------------
+        # Sequential pseudonymization (stable)
+        # -------------------------
+        rows = []
+        for idx, (r, p, pid, order_val) in enumerate(rows_meta, start=1):
+            extracted_text = extracted_by_row.get(r, "")
+            if not extracted_text.strip():
+                self._error(f"Row {r+1}: empty extracted text for {p.name}.")
                 return
 
-            # Optional small preview
             preview = extracted_text.strip().replace("\n", " ")
             preview = preview[:160] + ("…" if len(preview) > 160 else "")
             self._set_preview(r, preview)
 
-            # Pseudonymize text using the initialized eds-pseudo model
+            self.status.setText(f"Pseudonymizing ({idx}/{n}): {p.name}")
+            QApplication.processEvents()
+
             try:
                 pseudo_text = self.pseudonymizer.pseudonymize(extracted_text, pid=pid)
             except Exception as e:
