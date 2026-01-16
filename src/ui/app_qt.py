@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os
+import os, sys
 import argparse
 import importlib
 import pkgutil
@@ -9,8 +9,10 @@ from pathlib import Path
 
 import concurrent.futures as cf
 import pandas as pd
-from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
+from PySide6.QtCore import Qt, QSettings, QSize, QObject, QThread, Signal
 from PySide6.QtWidgets import (
+    QFrame,
     QApplication,
     QFileDialog,
     QGridLayout,
@@ -25,16 +27,141 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
+    QCheckBox,
 )
 
 from huggingface_hub import snapshot_download
+
+PATH_TO_SRC_FOLDER = str(Path(__file__).parent.parent.parent.resolve())
+if PATH_TO_SRC_FOLDER not in sys.path:
+    sys.path.append(PATH_TO_SRC_FOLDER)
 
 from src.database.ops import init_db, append_rows_locked, load_db, DEFAULT_COLUMNS
 from src.database.pseudonymizer import TextPseudonymizer
 from src.database.security import get_or_create_salt_file
 from src.database.text_extraction import TextExtractor
 
+LIGHT_QSS = """
+QMainWindow, QWidget {
+    background: #ffffff;
+    color: #111111;
+    font-size: 12px;
+}
+QLabel {
+    color: #111111;
+}
+QLineEdit {
+    background: #ffffff;
+    color: #111111;
+    border: 1px solid #cfcfcf;
+    padding: 6px;
+    border-radius: 6px;
+}
+QTableWidget {
+    background: #ffffff;
+    color: #111111;
+    gridline-color: #e6e6e6;
+    border: 1px solid #cfcfcf;
+}
+QHeaderView::section {
+    background: #f2f2f2;
+    color: #111111;
+    padding: 6px;
+    border: 0px;
+    border-bottom: 1px solid #d9d9d9;
+}
+QPushButton {
+    background: #f2f2f2;
+    color: #111111;
+    border: 1px solid #cfcfcf;
+    padding: 7px 10px;
+    border-radius: 8px;
+}
+QPushButton:hover {
+    background: #eaeaea;
+}
+QPushButton:disabled {
+    color: #777777;
+    background: #f6f6f6;
+    border-color: #e0e0e0;
+}
+QCheckBox {
+    color: #111111;
+}
+"""
 
+DARK_QSS = """
+QMainWindow, QWidget {
+    background: #121212;
+    color: #f1f1f1;
+    font-size: 12px;
+}
+QLabel {
+    color: #f1f1f1;
+}
+QLineEdit {
+    background: #1e1e1e;
+    color: #f1f1f1;
+    border: 1px solid #3a3a3a;
+    padding: 6px;
+    border-radius: 6px;
+}
+QTableWidget {
+    background: #1a1a1a;
+    color: #f1f1f1;
+    gridline-color: #2a2a2a;
+    border: 1px solid #2f2f2f;
+}
+QHeaderView::section {
+    background: #202020;
+    color: #f1f1f1;
+    padding: 6px;
+    border: 0px;
+    border-bottom: 1px solid #2f2f2f;
+}
+QPushButton {
+    background: #2a2a2a;
+    color: #f1f1f1;
+    border: 1px solid #3a3a3a;
+    padding: 7px 10px;
+    border-radius: 8px;
+}
+QPushButton:hover {
+    background: #333333;
+}
+QPushButton:disabled {
+    color: #999999;
+    background: #242424;
+    border-color: #333333;
+}
+QCheckBox {
+    color: #f1f1f1;
+}
+"""
+
+class EDSInitWorker(QObject):
+    finished = Signal(object)          # emits TextPseudonymizer instance
+    failed = Signal(str)               # emits error message
+
+    def __init__(self, eds_path: str | None):
+        super().__init__()
+        self.eds_path = eds_path
+
+    def run(self) -> None:
+        try:
+            artifacts_path = resolve_eds_model_path(self.eds_path)
+            prepare_eds_registry(artifacts_path.parent)
+
+            pseudo = TextPseudonymizer(
+                model_path=str(artifacts_path),
+                auto_update=False,
+                secret_salt="CHANGE_ME",
+            )
+            self.finished.emit(pseudo)
+
+        except Exception as e:
+            self.failed.emit(str(e))
+            
 def _import_recursive(package_name: str) -> None:
     """Import a package and all its submodules to trigger any registry decorators."""
     try:
@@ -106,42 +233,62 @@ def prepare_eds_registry(cache_dir: Path) -> None:
 class MainWindow(QMainWindow):
     def __init__(self, *, eds_path: str | None = None):
         super().__init__()
+
         self.setWindowTitle("Clinical Database - Document Intake")
         self.resize(980, 560)
 
         self.db_path_edit = QLineEdit()
         self.db_path_edit.setPlaceholderText("Select a database CSV path...")
 
+        self.settings = QSettings("ClinicalDatabase", "DocumentIntake")
+        self.theme = self.settings.value("ui/theme", "light", type=str)
+
         self.extractor = TextExtractor()
 
-        init_dlg = self._make_progress("Starting application", "Initializing window…", 0)
-        init_dlg.setRange(0, 0)  # indeterminate/busy
-        init_dlg.setLabelText("Loading EDS-PSEUDO model…")
-        QApplication.processEvents()
+        # Theme toggle button (icon-only, GitHub style)
+        self.btn_theme = QPushButton()
+        self.btn_theme.setCheckable(True)
+        self.btn_theme.setFixedSize(36, 36)
+        self.btn_theme.setIconSize(QSize(18, 18))
+        self.btn_theme.setToolTip("Toggle light / dark mode")
+        self.btn_theme.clicked.connect(self._toggle_theme)
 
-        # EDS-PSEUDO model initialization (used later during commit).
-        self.pseudonymizer: TextPseudonymizer | None = None
-        try:
-            artifacts_path = resolve_eds_model_path(eds_path)
-            prepare_eds_registry(artifacts_path.parent)
-            self.pseudonymizer = TextPseudonymizer(
-                model_path=str(artifacts_path),
-                auto_update=False,
-                secret_salt="CHANGE_ME",
-            )
-            init_dlg.close()
-        except Exception as e:
-            # Keep the UI usable (e.g., for extraction), but block commits until the model is available.
-            init_dlg.close()
-            self.pseudonymizer = None
-            QMessageBox.critical(
-                self,
-                "EDS-PSEUDO initialization failed",
-                "Could not initialize the eds-pseudo model.\n\n"
-                f"Details: {e}\n\n"
-                "You can provide --eds_path to point to the hf_cache folder, or ensure hf_cache/artifacts "
-                "is available relative to this script.",
-            )
+        icon_dir = Path(__file__).parent / "assets" / "icons"
+        self.icon_sun = QIcon(str(icon_dir / "sun.svg"))
+        self.icon_moon = QIcon(str(icon_dir / "moon.svg"))
+
+        # Prominent in-app message banner (replaces tiny bottom-left status text)
+        self.msg_frame = QFrame()
+        self.msg_frame.setObjectName("MessageBanner")
+        self.msg_frame.setFrameShape(QFrame.StyledPanel)
+
+        self.msg_title = QLabel("Status")
+        self.msg_title.setObjectName("MessageTitle")
+
+        msg_layout = QVBoxLayout()
+        msg_layout.setContentsMargins(12, 10, 12, 10)
+        msg_layout.setSpacing(4)
+        msg_layout.addWidget(self.msg_title)
+
+        self.btn_commit = QPushButton("Commit to DB")
+        self.btn_commit.clicked.connect(self.commit)
+
+        # EDS-PSEUDO loading
+        self._loading_eds(eds_path)
+
+        if self.pseudonymizer is None:
+            self.btn_commit.setEnabled(False)
+
+        self.msg_body = QLabel("Ready." if self.pseudonymizer else "Not Ready (pseudonymization model not loaded yet).")
+        self.msg_body.setObjectName("MessageBody")
+        self.msg_body.setWordWrap(True)
+
+        msg_layout.addWidget(self.msg_body)
+        self.msg_frame.setLayout(msg_layout)
+        
+        # Apply the saved theme now (also sets button label)
+        self.set_theme(self.theme)
+        self._set_message("info", self.msg_body.text())
 
         self.btn_choose_db = QPushButton("Select database…")
         self.btn_choose_db.clicked.connect(self.choose_db)
@@ -152,10 +299,13 @@ class MainWindow(QMainWindow):
         self.btn_add_docs = QPushButton("Documents…")
         self.btn_add_docs.clicked.connect(self.add_documents)
 
-        self.btn_commit = QPushButton("Commit to DB")
-        self.btn_commit.clicked.connect(self.commit)
-        if self.pseudonymizer is None:
-            self.btn_commit.setEnabled(False)
+        # pseudo-only export option (checked by default)
+        self.chk_pseudo_only = QCheckBox("Make pseudo-only copy")
+        self.chk_pseudo_only.setChecked(True)
+        self.chk_pseudo_only.setToolTip(
+            "After each commit, write a sibling CSV named '<db>_pseudo_only.csv' "
+            "containing all columns except DOCUMENT."
+        )
 
         # Table: one row per file, with PID + ORDER entry
         self.table = QTableWidget(0, 4)
@@ -171,6 +321,7 @@ class MainWindow(QMainWindow):
         self.status.setStyleSheet("color: #333;")
 
         top = QGridLayout()
+        top.addWidget(self.btn_theme, 0, 6)
         top.addWidget(QLabel("Database:"), 0, 0)
         top.addWidget(self.db_path_edit, 0, 1, 1, 3)
         top.addWidget(self.btn_choose_db, 0, 4)
@@ -179,17 +330,68 @@ class MainWindow(QMainWindow):
         actions = QHBoxLayout()
         actions.addWidget(self.btn_add_docs)
         actions.addStretch(1)
+        actions.addWidget(self.chk_pseudo_only)
         actions.addWidget(self.btn_commit)
 
         layout = QVBoxLayout()
         layout.addLayout(top)
         layout.addLayout(actions)
+        layout.addWidget(self.msg_frame)
         layout.addWidget(self.table)
-        layout.addWidget(self.status)
 
         root = QWidget()
         root.setLayout(layout)
         self.setCentralWidget(root)
+
+    def _on_eds_ready(self, pseudo: object) -> None:
+        self.pseudonymizer = pseudo  # type: ignore[assignment]
+        if hasattr(self, "init_dlg") and self.init_dlg:
+            self.init_dlg.close()
+
+        self.btn_commit.setEnabled(True)
+        self._set_message("info", "EDS-PSEUDO model loaded. Ready.")
+
+    def _on_eds_failed(self, err: str) -> None:
+        self.pseudonymizer = None
+        if hasattr(self, "init_dlg") and self.init_dlg:
+            self.init_dlg.close()
+
+        self.btn_commit.setEnabled(False)
+        QMessageBox.critical(
+            self,
+            "EDS-PSEUDO initialization failed",
+            "Could not initialize the eds-pseudo model.\n\n"
+            f"Details: {err}\n\n"
+            "You can provide --eds_path to point to the hf_cache folder, or ensure hf_cache/artifacts "
+            "is available relative to this script.",
+        )
+        self._set_message("error", "Pseudonymization model not loaded. Commit disabled.")
+
+    def _loading_eds(self, eds_path):
+        # EDS-PSEUDO model initialization (async so UI remains responsive)
+        self.pseudonymizer: TextPseudonymizer | None = None
+        self.btn_commit.setEnabled(False)  # will be enabled when model is ready
+
+        self.init_dlg = self._make_progress("Starting application", "Loading EDS-PSEUDO model…", 0)
+        self.init_dlg.setRange(0, 0)  # indeterminate busy animation
+        self.init_dlg.setLabelText("Loading EDS-PSEUDO model…")
+        self.init_dlg.show()
+
+        self._eds_thread = QThread(self)
+        self._eds_worker = EDSInitWorker(eds_path)
+        self._eds_worker.moveToThread(self._eds_thread)
+
+        self._eds_thread.started.connect(self._eds_worker.run)
+        self._eds_worker.finished.connect(self._on_eds_ready)
+        self._eds_worker.failed.connect(self._on_eds_failed)
+
+        # Cleanup
+        self._eds_worker.finished.connect(self._eds_thread.quit)
+        self._eds_worker.failed.connect(self._eds_thread.quit)
+        self._eds_thread.finished.connect(self._eds_worker.deleteLater)
+        self._eds_thread.finished.connect(self._eds_thread.deleteLater)
+
+        self._eds_thread.start()
 
     def _make_progress(self, title: str, label: str, maximum: int) -> QProgressDialog:
         dlg = QProgressDialog(label, None, 0, maximum, self)
@@ -203,44 +405,139 @@ class MainWindow(QMainWindow):
         QApplication.processEvents()
         return dlg
     
+    def set_theme(self, theme: str) -> None:
+        theme = (theme or "").lower().strip()
+        if theme not in {"light", "dark"}:
+            theme = "dark"
+
+        self.theme = theme
+        self.settings.setValue("ui/theme", self.theme)
+
+        if self.theme == "dark":
+            self.btn_theme.setChecked(True)
+            self.btn_theme.setIcon(self.icon_moon)
+            self.btn_theme.setToolTip("Switch to light mode")
+            self.setStyleSheet(DARK_QSS + self._message_banner_qss(dark=True))
+        else:
+            self.btn_theme.setChecked(False)
+            self.btn_theme.setIcon(self.icon_sun)
+            self.btn_theme.setToolTip("Switch to dark mode")
+            self.setStyleSheet(LIGHT_QSS + self._message_banner_qss(dark=False))
+
+    def _toggle_theme(self) -> None:
+        self.set_theme("dark" if self.btn_theme.isChecked() else "light")
+
+    def _message_banner_qss(self, *, dark: bool) -> str:
+        # Banner base style + per-severity variants.
+        # Use objectName selectors for targeted styling.
+        if dark:
+            base_bg = "#1b1b1b"
+            base_border = "#2f2f2f"
+            title_color = "#f1f1f1"
+            body_color = "#e6e6e6"
+        else:
+            base_bg = "#f7f7f7"
+            base_border = "#d9d9d9"
+            title_color = "#111111"
+            body_color = "#222222"
+
+        return f"""
+        QFrame#MessageBanner {{
+            background: {base_bg};
+            border: 1px solid {base_border};
+            border-radius: 10px;
+        }}
+        QLabel#MessageTitle {{
+            font-weight: 700;
+            color: {title_color};
+            font-size: 12px;
+        }}
+        QLabel#MessageBody {{
+            color: {body_color};
+            font-size: 12px;
+        }}
+        """
+
+    def _set_message(self, level: str, message: str) -> None:
+        level = (level or "").lower().strip()
+        if level not in {"info", "warning", "error"}:
+            level = "info"
+
+        if level == "error":
+            title = "Error"
+        elif level == "warning":
+            title = "Warning"
+        else:
+            title = "Info"
+
+        self.msg_title.setText(title)
+        self.msg_body.setText(message)
+
+    def _get_last_dir(self, key: str) -> str:
+        val = self.settings.value(key, "", type=str)
+        if val and Path(val).exists():
+            return val
+        return str(Path.home())
+
+    def _set_last_dir(self, key: str, path: str) -> None:
+        p = Path(path).expanduser()
+        # If a file path is given, store its parent dir; if already a dir, store it.
+        folder = p if p.is_dir() else p.parent
+        try:
+            folder = folder.resolve()
+        except Exception:
+            pass
+        self.settings.setValue(key, str(folder))
+
     def choose_db(self):
+        start_dir = self._get_last_dir("paths/select_db")
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Select database CSV",
-            str(Path.home()),
+            start_dir,
             "CSV files (*.csv);;All files (*.*)",
         )
         if path:
             self.db_path_edit.setText(path)
-            self.status.setText(f"Selected DB: {path}")
+            self._set_message("info", f"Selected DB: {path}")
+            self._set_last_dir("paths/select_db", path)
+
 
     def create_db(self):
+        start_dir = self._get_last_dir("paths/create_db")
+        default_path = str(Path(start_dir) / "clinical_db.csv")
+
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Create database CSV",
-            str(Path.home() / "clinical_db.csv"),
+            default_path,
             "CSV files (*.csv)",
         )
         if not path:
             return
         try:
             init_db(path, columns=DEFAULT_COLUMNS)
-            # Create/store a persistent pseudonymization salt for this DB
             get_or_create_salt_file(path)
             self.db_path_edit.setText(path)
-            self.status.setText(f"Created DB: {path}")
+            self._set_message("info", f"Created DB: {path}")
+            self._set_last_dir("paths/create_db", path)
         except Exception as e:
             self._error(str(e))
 
+
     def add_documents(self):
+        start_dir = self._get_last_dir("paths/documents")
         files, _ = QFileDialog.getOpenFileNames(
             self,
             "Select PDF documents",
-            str(Path.home()),
+            start_dir,
             "PDF files (*.pdf);;All files (*.*)",
         )
         if not files:
             return
+
+        # Persist last directory based on the first selected file
+        self._set_last_dir("paths/documents", files[0])
 
         # Add to table (deduplicate exact same file path already present in the table)
         existing = set()
@@ -256,7 +553,30 @@ class MainWindow(QMainWindow):
             self._add_row(file_path=f, pid="", order="")
             added += 1
 
-        self.status.setText(f"Loaded {added} file(s). Enter PID for each (ORDER only for known PID).")
+        self._set_message("info", f"Loaded {added} file(s). Enter PID for each (ORDER only for known PID).")
+
+
+    def _pseudo_only_path(self, db_path: str) -> Path:
+        p = Path(db_path).expanduser().resolve()
+        return p.with_name(f"{p.stem}_pseudo_only{p.suffix}")
+
+    def _write_pseudo_only_copy(self, db_path: str) -> None:
+        """
+        Create/overwrite '<db_stem>_pseudo_only.csv' with all DB rows but without DOCUMENT.
+        """
+        src = Path(db_path).expanduser().resolve()
+        dst = self._pseudo_only_path(db_path)
+
+        df_full = load_db(str(src))
+
+        # Drop non-pseudonymized text column if present
+        if "DOCUMENT" in df_full.columns:
+            df_out = df_full.drop(columns=["DOCUMENT"])
+        else:
+            df_out = df_full
+
+        # Write as a full snapshot (simple + robust)
+        df_out.to_csv(dst, index=False)
 
     def commit(self):
         db_path = self.db_path_edit.text().strip()
@@ -283,7 +603,34 @@ class MainWindow(QMainWindow):
 
         n = self.table.rowCount()
         if n == 0:
-            self._error("No documents loaded. Click 'Documents…' first.")
+            # If DB has at least one non-empty row, do not error; just inform.
+            # "Non-empty row" interpreted as: dataframe has at least one row.
+            has_any_row = len(df) > 0
+
+            pseudo_msg = ""
+            if getattr(self, "chk_pseudo_only", None) is not None and self.chk_pseudo_only.isChecked():
+                try:
+                    self._write_pseudo_only_copy(db_path)
+                    pseudo_msg = " Pseudo-only copy made."
+                except Exception as e:
+                    # Keep same semantics: DB not updated anyway, but warn that copy failed.
+                    QMessageBox.warning(
+                        self,
+                        "Pseudo-only copy failed",
+                        "No documents selected and the database was not updated, but the pseudo-only copy "
+                        "could not be updated.\n\n"
+                        f"Details: {e}",
+                    )
+                    self._set_message("info", "No documents selected. The database was not updated.")
+                    return
+
+            if has_any_row:
+                self._info(f"No documents selected. The database was not updated.{pseudo_msg}")
+                return
+
+            # If DB is empty (no rows), keep the previous error-style behavior.
+            # (You did not specify a custom message for empty DB; this preserves a useful guard.)
+            self._error("No documents selected.")
             return
 
         required_cols = {"PID", "SOURCE_FILE", "DOCUMENT", "PSEUDO", "ORDER"}
@@ -449,9 +796,23 @@ class MainWindow(QMainWindow):
             self._error(f"Commit failed: {e}")
             return
 
-        self.table.setRowCount(0)
-        self.status.setText(f"Committed {n} document(s) to DB.")
+        if getattr(self, "chk_pseudo_only", None) is not None and self.chk_pseudo_only.isChecked():
+            try:
+                self._write_pseudo_only_copy(db_path)
+            except Exception as e:
+                # Do not rollback the main commit; just warn.
+                QMessageBox.warning(
+                    self,
+                    "Pseudo-only copy failed",
+                    "Commit succeeded, but the pseudo-only copy could not be updated.\n\n"
+                    f"Details: {e}",
+                )
 
+        pseudo_note = ""
+        if self.chk_pseudo_only.isChecked():
+            pseudo_note = f" Pseudo-only copy: {self._pseudo_only_path(db_path)}"
+        self.table.setRowCount(0)
+        self._set_message("info", f"Committed {n} document(s) to DB.{pseudo_note}")
 
     def _add_row(self, file_path: str, pid: str, order: str = ""):
         r = self.table.rowCount()
@@ -476,9 +837,13 @@ class MainWindow(QMainWindow):
             self.table.setItem(row, 3, it)
         it.setText(preview)
 
+    def _info(self, message: str):
+        QMessageBox.information(self, "Info", message)
+        self._set_message("info", message)
+
     def _error(self, message: str):
         QMessageBox.critical(self, "Error", message)
-        self.status.setText("Error.")
+        self._set_message("error", message)
 
 
 def main():

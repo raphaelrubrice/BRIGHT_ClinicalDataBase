@@ -57,3 +57,12 @@ huggingface_hub.login(token=YOUR_TOKEN, new_session=False, add_to_git_credential
 ```bash
 python test_eds.py
 ```
+
+# **Launch the Database interface**
+```bash
+python .\src\ui\app_qt.py
+```
+Or
+```bash
+python -m src.ui.app_qt
+```
