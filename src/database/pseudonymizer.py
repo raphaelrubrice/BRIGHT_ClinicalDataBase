@@ -15,6 +15,7 @@ class DetectedSpan:
     end: int
     label: str
     text: str
+    pseudo_value: str
 
 
 class TextPseudonymizer:
@@ -23,7 +24,7 @@ class TextPseudonymizer:
 
     Key properties:
     - Replacement is done from right-to-left to preserve offsets.
-    - Pseudonyms are deterministic per (pid, label, original_text) using a secret salt,
+    - Pseudonyms are deterministic per (ipp, label, original_text) using a secret salt,
       so repeated occurrences map to the same token across documents if desired.
     """
 
@@ -34,6 +35,7 @@ class TextPseudonymizer:
         hf_cache_dir: Optional[str] = None,
         secret_salt: Optional[str] = None,
         auto_update: bool = False,
+        keep: list[str] = ["IPP", "NDA", "DATE"]
     ) -> None:
         """
         model_path: local path to eds-pseudo artifacts directory (the path you pass to edsnlp.load)
@@ -45,6 +47,7 @@ class TextPseudonymizer:
         self.hf_cache_dir = hf_cache_dir
         self.secret_salt = secret_salt or os.environ.get("PSEUDO_SALT", "CHANGE_ME")
         self.nlp = edsnlp.load(model_path, auto_update=auto_update)
+        self.keep = keep
 
     # ---------------------------
     # Public API
@@ -54,17 +57,17 @@ class TextPseudonymizer:
         self,
         text: str,
         *,
-        pid: Optional[str] = None,
-        consistent_across_pid: bool = False,
+        ipp: Optional[str] = None,
+        consistent_across_ipp: bool = False,
         label_to_template: Optional[Dict[str, str]] = None,
     ) -> str:
         """
         Returns a pseudonymized version of the provided text.
 
-        pid:
+        ipp:
           If provided, can be used to generate per-patient deterministic pseudonyms.
-        consistent_across_pid:
-          - False (recommended): pseudonyms are stable within the patient (PID) but different across patients.
+        consistent_across_ipp:
+          - False (recommended): pseudonyms are stable within the patient (ipp) but different across patients.
           - True: pseudonyms are stable globally across all patients (useful for longitudinal cross-patient linking;
                   usually not desired for strict de-identification).
         label_to_template:
@@ -77,23 +80,21 @@ class TextPseudonymizer:
 
         # Default templates: readable, explicit placeholders.
         # You should tune these labels to the ones produced by your eds-pseudo model.
+
         templates = {
-            "PERSON": "[PERSON_{token}]",
-            "NOM": "[PERSON_{token}]",
-            "PRENOM": "[PERSON_{token}]",
-            "TEL": "[PHONE_{token}]",
-            "PHONE": "[PHONE_{token}]",
-            "EMAIL": "[EMAIL_{token}]",
+            "NOM": "[NOM_{token}]",
+            "PRENOM": "[PRENOM_{token}]",
+            "TEL": "[TEL_{token}]",
+            "MAIL": "[MAIL_{token}]",
             "DATE": "[DATE_{token}]",
-            "BIRTHDATE": "[DATE_{token}]",
+            "DATE_NAISSANCE": "{pseudo_value}",
             "ADRESSE": "[ADDRESS_{token}]",
-            "ADDRESS": "[ADDRESS_{token}]",
             "ZIP": "[ZIP_{token}]",
-            "CITY": "[CITY_{token}]",
-            "HOSPITAL": "[ORG_{token}]",
-            "ORG": "[ORG_{token}]",
-            "ID": "[ID_{token}]",
-            "IPP": "[ID_{token}]",
+            "VILLE": "[VILLE_{token}]",
+            "HOPITAL": "[HOPITAL_{token}]",
+            "IPP": "[IPP_{token}]",
+            "NDA": "[NDA_{token}]",
+            "SECU": "[SSID_{token}]"
         }
         if label_to_template:
             templates.update(label_to_template)
@@ -101,15 +102,19 @@ class TextPseudonymizer:
         # Build replacements
         replacements: List[Tuple[int, int, str]] = []
         for sp in spans:
-            template = templates.get(sp.label, "[PHI_{label}_{token}]")
-            token = self._stable_token(
-                sp.text,
-                label=sp.label,
-                pid=pid,
-                consistent_across_pid=consistent_across_pid,
-            )
-            repl = template.format(label=sp.label, token=token)
-            replacements.append((sp.start, sp.end, repl))
+            if sp.label not in self.keep:
+                template = templates.get(sp.label, "[PHI_{label}_{token}]")
+                token = self._stable_token(
+                    sp.text,
+                    label=sp.label,
+                    ipp=ipp,
+                    consistent_across_ipp=consistent_across_ipp,
+                )
+                if sp.label == "DATE_NAISSANCE":
+                    repl = template.format(pseudo_value=sp.pseudo_value)
+                else:
+                    repl = template.format(label=sp.label, token=token)
+                replacements.append((sp.start, sp.end, repl))
 
         # Apply right-to-left to avoid offset shift
         return self._apply_replacements(text, replacements)
@@ -138,21 +143,31 @@ class TextPseudonymizer:
                 continue
 
             doc = self.nlp(chunk)
-
             for ent in getattr(doc, "ents", []):
                 start = int(ent.start_char) + offset
                 end = int(ent.end_char) + offset
                 if start < 0 or end <= start or end > len(text):
                     continue
-
-                all_spans.append(
-                    DetectedSpan(
+                
+                if str(ent.label_) == "DATE_NAISSANCE":
+                    pseudo_value = str(ent._.date).split("-")[0] + "-??-??"
+                    span = DetectedSpan(
                         start=start,
                         end=end,
                         label=str(ent.label_),
                         text=text[start:end],
+                        pseudo_value=pseudo_value,
                     )
-                )
+                else:
+                    span = DetectedSpan(
+                        start=start,
+                        end=end,
+                        label=str(ent.label_),
+                        text=text[start:end],
+                        pseudo_value="",
+                    )
+
+                all_spans.append(span)
 
         if not all_spans:
             return []
@@ -171,13 +186,13 @@ class TextPseudonymizer:
         original: str,
         *,
         label: str,
-        pid: Optional[str],
-        consistent_across_pid: bool,
+        ipp: Optional[str],
+        consistent_across_ipp: bool,
     ) -> str:
         """
-        Deterministic short token derived from secret salt + (pid scope) + label + original text.
+        Deterministic short token derived from secret salt + (ipp scope) + label + original text.
         """
-        scope = "GLOBAL" if consistent_across_pid else (pid or "NO_PID")
+        scope = "GLOBAL" if consistent_across_ipp else (ipp or "NO_ipp")
         payload = f"{self.secret_salt}|{scope}|{label}|{original}".encode("utf-8", errors="ignore")
         digest = hashlib.sha256(payload).hexdigest()
         return digest[:10].upper()
@@ -307,3 +322,30 @@ class TextPseudonymizer:
             start = max(0, end - overlap)
             if start >= n:
                 break
+
+
+if __name__ == "__main__":
+    from pathlib import Path
+    from utils import prepare_eds_registry
+    import os
+    os.chdir(Path(__file__).resolve().parent)
+
+    artifacts_path = Path("../../hf_cache/artifacts").resolve()
+    prepare_eds_registry(artifacts_path.parent)
+    TP = TextPseudonymizer(str(artifacts_path))
+
+    test_text = """
+                Références : ALE/ALE
+                Compte-Rendu de Consultation du 01/12/2025
+                Madame LAURENGE ep. LEPRINCE Alice, née le 18/05/1989, âgée de 36 ans, a été vue en
+                consultation.
+                Antécédents et allergies
+                Allergies :
+                - Rhinite allergique au pollen
+
+                Pat.: Alice LAURENGE (Nom usuel : LEPRINCE) | F | 18/05/1989 | INS/NIR : 289055951218119 | 8008897828 | 6602777525
+                Imprimé le 01/12/2025 17:22
+                CR CONSULTATION PSL NEURO-ONCOLOGIE
+                """
+    
+    print(TP.pseudonymize(test_text))

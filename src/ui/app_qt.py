@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import os, sys
-import argparse
-import importlib
-import pkgutil
+import os
 import sys
+import argparse
 from pathlib import Path
-
 import concurrent.futures as cf
+
 import pandas as pd
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QSettings, QSize, QObject, QThread, Signal
@@ -27,19 +25,29 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
+    QMenu,
     QCheckBox,
 )
-
-from huggingface_hub import snapshot_download
 
 PATH_TO_SRC_FOLDER = str(Path(__file__).parent.parent.parent.resolve())
 if PATH_TO_SRC_FOLDER not in sys.path:
     sys.path.append(PATH_TO_SRC_FOLDER)
 
-from src.database.ops import init_db, append_rows_locked, load_db, DEFAULT_COLUMNS
+from src.database.ops import (
+    init_db,
+    append_rows_locked,
+    load_db,
+    DEFAULT_COLUMNS,
+    extract_IPP_from_document,
+    extract_IPP_from_path,
+)
 from src.database.pseudonymizer import TextPseudonymizer
 from src.database.security import get_or_create_salt_file
 from src.database.text_extraction import TextExtractor
+from src.database.utils import resolve_eds_model_path, prepare_eds_registry
+from src.ui.utils import SleepInhibitor
+
+CHUNK_SIZE = 10
 
 LIGHT_QSS = """
 QMainWindow, QWidget {
@@ -139,9 +147,236 @@ QCheckBox {
 }
 """
 
+# -------------------------
+# Simple i18n (EN default)
+# -------------------------
+I18N = {
+    "en": {
+        # window / labels
+        "window_title": "Clinical Database - Document Intake",
+        "database_label": "Database:",
+        "placeholder_db": "Select a database CSV path...",
+
+        # buttons / controls
+        "btn_select_db": "Select database…",
+        "btn_create_db": "Create DB…",
+        "btn_add_documents": "Add documents…",
+        "btn_add_from_files": "From Files…",
+        "btn_add_from_folder": "From Folder…",
+        "btn_commit": "Commit to DB",
+        "chk_pseudo_only": "Make pseudo-only copy",
+
+        # tooltips
+        "tip_theme_dark": "Switch to dark mode",
+        "tip_theme_light": "Switch to light mode",
+        "tip_lang_to_fr": "Passer en français",
+        "tip_lang_to_en": "Switch to English",
+        "tip_pseudo_only": (
+            "After each commit, write a sibling CSV named '<db>_pseudo_only.csv' "
+            "containing all columns except DOCUMENT."
+        ),
+
+        # table
+        "table_headers": ["File path", "IPP (auto)", "ORDER (auto)", "Preview"],    
+
+        # message banner titles
+        "msg_title_info": "Info",
+        "msg_title_warning": "Warning",
+        "msg_title_error": "Error",
+
+        # general statuses
+        "status_ready": "Ready.",
+        "status_not_ready": "Not Ready (pseudonymization model not loaded yet).",
+
+        # dialogs: choose/create/select docs
+        "dlg_select_db_title": "Select database CSV",
+        "dlg_create_db_title": "Create database CSV",
+        "dlg_select_pdf_title": "Select PDF documents",
+        "dlg_select_folder_title": "Select folder containing PDFs",
+
+        # progress dialogs
+        "progress_start_title": "Starting application",
+        "progress_loading_eds": "Loading EDS-PSEUDO model…",
+        "progress_commit_title": "Commit",
+        "progress_extracting": "Extracting text…",
+        "progress_pseudonymizing": "Pseudonymizing extracted texts…",
+        "progress_extracting_with_workers": "Extracting text…\nWorkers: {workers}",
+        "progress_extracting_step": "Extracting text… ({done}/{total})\n{name}",
+        "progress_pseudonymizing_step": "Pseudonymizing extracted texts… ({done}/{total})\n{name}",
+
+        # runtime messages (banner + boxes)
+        "eds_loaded_ready": "EDS-PSEUDO model loaded. Ready.",
+        "model_not_initialized": (
+            "Pseudonymization model is not initialized. "
+            "Provide --eds_path pointing to the hf_cache folder (containing artifacts), "
+            "or ensure hf_cache/artifacts exists relative to the app script."
+        ),
+        "please_select_db_first": "Please select a database file first.",
+        "db_not_found": "Database not found. Create it first or select an existing CSV.",
+        "could_not_read_db": "Could not read DB: {err}",
+        "no_docs_loaded_click_docs": "No documents loaded. Click 'Documents…' first.",
+        "loaded_files_enter_ipp": "Loaded {n} file(s). IPP/ORDER will be detected automatically at commit.",
+        "selected_db": "Selected DB: {path}",
+        "created_db": "Created DB: {path}",
+        "no_docs_selected_db_not_updated": "No documents selected. The database was not updated.{pseudo_msg}",
+        "no_docs_selected": "No documents selected.",
+        "schema_mismatch": (
+            "Database schema mismatch.\n"
+            "Missing columns in DB: {missing}\n"
+            "Please recreate the DB with the updated DEFAULT_COLUMNS."
+        ),
+        "salt_init_failed": "Could not initialize pseudonymization salt for this DB:\n{err}",
+        "row_missing_file": "Row {row}: missing file path.",
+        "row_only_pdf": "Row {row}: only PDF files are allowed:\n{fp}",
+        "row_file_missing": "Row {row}: file does not exist:\n{fp}",
+        "row_ipp_required": "Row {row}: IPP is required.",
+        "row_order_required_existing_ipp": "Row {row}: ORDER is required because IPP={ipp} already exists.",
+        "row_order_int": "Row {row}: ORDER must be an integer.",
+        "row_order_invalid": (
+            "Row {row}: ORDER={order} invalid for IPP={ipp}. Must be between 1 and {max_order}."
+        ),
+        "row_extract_failed": "Row {row}: text extraction failed for {name}:\n{err}",
+        "parallel_extract_failed": "Parallel extraction failed:\n{err}",
+        "row_empty_extracted": "Row {row}: empty extracted text for {name}.",
+        "row_pseudo_failed": "Row {row}: pseudonymization failed for {name}:\n{err}",
+        "commit_failed": "Commit failed: {err}",
+        "commit_ok": "Committed {n} document(s) to DB.{pseudo_note}",
+
+        # pseudo-only copy warnings
+        "pseudo_only_copy_failed_title": "Pseudo-only copy failed",
+        "pseudo_only_copy_failed_no_docs": (
+            "No documents selected and the database was not updated, but the pseudo-only copy "
+            "could not be updated.\n\nDetails: {err}"
+        ),
+        "pseudo_only_copy_failed_after_commit": (
+            "Commit succeeded, but the pseudo-only copy could not be updated.\n\nDetails: {err}"
+        ),
+        "pseudo_only_copy_made": " Pseudo-only copy made.",
+        "pseudo_only_copy_note": " Pseudo-only copy: {path}",
+
+        # eds init failure dialog
+        "eds_init_failed_title": "EDS-PSEUDO initialization failed",
+        "eds_init_failed_body": (
+            "Could not initialize the eds-pseudo model.\n\n"
+            "Details: {err}\n\n"
+            "You can provide --eds_path to point to the hf_cache folder, or ensure hf_cache/artifacts "
+            "is available relative to this script."
+        ),
+
+        # QMessageBox titles
+        "box_info": "Info",
+        "box_error": "Error",
+    },
+    "fr": {
+        "window_title": "Base Clinique - Import de documents",
+        "database_label": "Base de données :",
+        "placeholder_db": "Sélectionner un chemin CSV de base de données...",
+
+        "btn_select_db": "Sélectionner la base…",
+        "btn_create_db": "Créer la base…",
+        "btn_add_documents": "Ajouter des documents…",
+        "btn_add_from_files": "Depuis des fichiers…",
+        "btn_add_from_folder": "Depuis un dossier…",
+        "btn_commit": "Enregistrer dans la base",
+        "chk_pseudo_only": "Créer une copie pseudonymisée",
+
+        "tip_theme_dark": "Passer en mode sombre",
+        "tip_theme_light": "Passer en mode clair",
+        "tip_lang_to_fr": "Passer en français",
+        "tip_lang_to_en": "Switch to English",
+        "tip_pseudo_only": (
+            "Après chaque enregistrement, écrire un CSV frère nommé '<db>_pseudo_only.csv' "
+            "contenant toutes les colonnes sauf DOCUMENT."
+        ),
+
+        "table_headers": ["Chemin du fichier", "IPP (auto)", "ORDER (auto)", "Aperçu"],
+
+        "msg_title_info": "Info",
+        "msg_title_warning": "Avertissement",
+        "msg_title_error": "Erreur",
+
+        "status_ready": "Prêt.",
+        "status_not_ready": "Pas prêt (modèle de pseudonymisation non chargé).",
+
+        "dlg_select_db_title": "Sélectionner une base CSV",
+        "dlg_create_db_title": "Créer une base CSV",
+        "dlg_select_pdf_title": "Sélectionner des documents PDF",
+        "dlg_select_folder_title": "Sélectionner un dossier contenant des PDF",
+
+        "progress_start_title": "Démarrage de l'application",
+        "progress_loading_eds": "Chargement du modèle EDS-PSEUDO…",
+        "progress_commit_title": "Enregistrement",
+        "progress_extracting": "Extraction du texte…",
+        "progress_pseudonymizing": "Pseudonymisation des textes extraits…",
+        "progress_extracting_with_workers": "Extraction du texte…\nWorkers : {workers}",
+        "progress_extracting_step": "Extraction du texte… ({done}/{total})\n{name}",
+        "progress_pseudonymizing_step": "Pseudonymisation des textes extraits… ({done}/{total})\n{name}",
+
+        "eds_loaded_ready": "Modèle EDS-PSEUDO chargé. Prêt.",
+        "model_not_initialized": (
+            "Le modèle de pseudonymisation n'est pas initialisé. "
+            "Fournissez --eds_path pointant vers le dossier hf_cache (contenant artifacts), "
+            "ou assurez-vous que hf_cache/artifacts existe relativement à ce script."
+        ),
+        "please_select_db_first": "Veuillez d'abord sélectionner un fichier de base de données.",
+        "db_not_found": "Base introuvable. Créez-la d'abord ou sélectionnez un CSV existant.",
+        "could_not_read_db": "Impossible de lire la base : {err}",
+        "no_docs_loaded_click_docs": "Aucun document chargé. Cliquez d'abord sur 'Documents…'.",
+        "loaded_files_enter_ipp": "{n} fichier(s) chargé(s). IPP/ORDRE seront détectés automatiquement lors de l'enregistrement.",
+        "selected_db": "Base sélectionnée : {path}",
+        "created_db": "Base créée : {path}",
+        "no_docs_selected_db_not_updated": "Aucun document sélectionné. La base n'a pas été modifiée.{pseudo_msg}",
+        "no_docs_selected": "Aucun document sélectionné.",
+        "schema_mismatch": (
+            "Incompatibilité du schéma de la base.\n"
+            "Colonnes manquantes : {missing}\n"
+            "Veuillez recréer la base avec DEFAULT_COLUMNS mis à jour."
+        ),
+        "salt_init_failed": "Impossible d'initialiser le sel de pseudonymisation pour cette base :\n{err}",
+        "row_missing_file": "Ligne {row} : chemin de fichier manquant.",
+        "row_only_pdf": "Ligne {row} : seuls les PDF sont autorisés :\n{fp}",
+        "row_file_missing": "Ligne {row} : fichier introuvable :\n{fp}",
+        "row_ipp_required": "Ligne {row} : IPP requis.",
+        "row_order_required_existing_ipp": "Ligne {row} : ORDRE requis car IPP={ipp} existe déjà.",
+        "row_order_int": "Ligne {row} : ORDRE doit être un entier.",
+        "row_order_invalid": (
+            "Ligne {row} : ORDRE={order} invalide pour IPP={ipp}. Doit être entre 1 et {max_order}."
+        ),
+        "row_extract_failed": "Ligne {row} : échec d'extraction de texte pour {name} :\n{err}",
+        "parallel_extract_failed": "Échec de l'extraction parallèle :\n{err}",
+        "row_empty_extracted": "Ligne {row} : texte extrait vide pour {name}.",
+        "row_pseudo_failed": "Ligne {row} : échec de pseudonymisation pour {name} :\n{err}",
+        "commit_failed": "Échec de l'enregistrement : {err}",
+        "commit_ok": "{n} document(s) enregistré(s) dans la base.{pseudo_note}",
+
+        "pseudo_only_copy_failed_title": "Échec de la copie pseudonymisée",
+        "pseudo_only_copy_failed_no_docs": (
+            "Aucun document sélectionné et la base n'a pas été modifiée, mais la copie pseudonymisée "
+            "n'a pas pu être mise à jour.\n\nDétails : {err}"
+        ),
+        "pseudo_only_copy_failed_after_commit": (
+            "Enregistrement réussi, mais la copie pseudonymisée n'a pas pu être mise à jour.\n\nDétails : {err}"
+        ),
+        "pseudo_only_copy_made": " Copie pseudonymisée créée.",
+        "pseudo_only_copy_note": " Copie pseudonymisée : {path}",
+
+        "eds_init_failed_title": "Échec d'initialisation EDS-PSEUDO",
+        "eds_init_failed_body": (
+            "Impossible d'initialiser le modèle eds-pseudo.\n\n"
+            "Détails : {err}\n\n"
+            "Vous pouvez fournir --eds_path pointant vers hf_cache, ou vérifier que hf_cache/artifacts "
+            "est disponible relativement à ce script."
+        ),
+
+        "box_info": "Info",
+        "box_error": "Erreur",
+    },
+}
+
+
 class EDSInitWorker(QObject):
-    finished = Signal(object)          # emits TextPseudonymizer instance
-    failed = Signal(str)               # emits error message
+    finished = Signal(object)  # emits TextPseudonymizer instance
+    failed = Signal(str)  # emits error message
 
     def __init__(self, eds_path: str | None):
         super().__init__()
@@ -161,87 +396,26 @@ class EDSInitWorker(QObject):
 
         except Exception as e:
             self.failed.emit(str(e))
-            
-def _import_recursive(package_name: str) -> None:
-    """Import a package and all its submodules to trigger any registry decorators."""
-    try:
-        package = importlib.import_module(package_name)
-    except ImportError as e:
-        raise RuntimeError(f"Could not import {package_name}: {e}") from e
-
-    if hasattr(package, "__path__"):
-        for _, name, _ in pkgutil.walk_packages(package.__path__, package_name + "."):
-            try:
-                importlib.import_module(name)
-            except Exception as e:
-                # Non-fatal: some optional submodules may fail, but the core registry should be loaded.
-                # Keep going to mirror the behavior in test_eds.py.
-                print(f"[eds-pseudo] Warning: failed to import {name}: {e}")
-
-
-def resolve_eds_model_path(eds_path: str | None) -> Path:
-    """
-    Resolve an EDS-PSEUDO model 'artifacts' path.
-
-    Resolution order:
-    1) CLI --eds_path: expects a folder that contains 'artifacts/'
-    2) Relative to this file: <repo>/hf_cache/artifacts
-    3) Download from Hugging Face into <repo>/hf_cache, then use artifacts
-    """
-    # 1) CLI argument provided
-    if eds_path:
-        cache_dir = Path(eds_path).expanduser().resolve()
-        artifacts = cache_dir / "artifacts"
-        if artifacts.exists() and artifacts.is_dir():
-            return artifacts
-        raise FileNotFoundError(
-            f"--eds_path was provided but does not contain an 'artifacts' folder: {artifacts}"
-        )
-
-    # 2) Assume relative hf_cache next to the app entrypoint
-    base_dir = Path(__file__).resolve().parent
-    cache_dir = base_dir / "hf_cache"
-    artifacts = cache_dir / "artifacts"
-    if artifacts.exists() and artifacts.is_dir():
-        return artifacts
-
-    # 3) Download model (same approach as test_eds.py)
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    snapshot_download(
-        repo_id="AP-HP/eds-pseudo-public",
-        local_dir=str(cache_dir),
-        local_dir_use_symlinks=False,
-        ignore_patterns=["*.git*"],
-    )
-    artifacts = cache_dir / "artifacts"
-    if not artifacts.exists():
-        raise FileNotFoundError(
-            "Downloaded eds-pseudo cache, but could not find 'artifacts' folder at "
-            f"{artifacts}. Check the Hugging Face snapshot structure."
-        )
-    return artifacts
-
-
-def prepare_eds_registry(cache_dir: Path) -> None:
-    """Ensure custom eds_pseudo components are registered (per your test_eds.py)."""
-    abs_cache = str(cache_dir.resolve())
-    if abs_cache not in sys.path:
-        sys.path.insert(0, abs_cache)
-    _import_recursive("eds_pseudo")
 
 
 class MainWindow(QMainWindow):
     def __init__(self, *, eds_path: str | None = None):
         super().__init__()
+        self.sleep_inhibitor = SleepInhibitor()
+        self.settings = QSettings("ClinicalDatabase", "DocumentIntake")
 
-        self.setWindowTitle("Clinical Database - Document Intake")
+        # Language (default EN)
+        self.lang = self.settings.value("ui/lang", "en", type=str)
+        if self.lang not in ("en", "fr"):
+            self.lang = "en"
+
+        self.theme = self.settings.value("ui/theme", "light", type=str)
+
+        self.setWindowTitle(self.tr("window_title"))
         self.resize(980, 560)
 
         self.db_path_edit = QLineEdit()
-        self.db_path_edit.setPlaceholderText("Select a database CSV path...")
-
-        self.settings = QSettings("ClinicalDatabase", "DocumentIntake")
-        self.theme = self.settings.value("ui/theme", "light", type=str)
+        self.db_path_edit.setPlaceholderText(self.tr("placeholder_db"))
 
         self.extractor = TextExtractor()
 
@@ -250,7 +424,6 @@ class MainWindow(QMainWindow):
         self.btn_theme.setCheckable(True)
         self.btn_theme.setFixedSize(36, 36)
         self.btn_theme.setIconSize(QSize(18, 18))
-        self.btn_theme.setToolTip("Toggle light / dark mode")
         self.btn_theme.clicked.connect(self._toggle_theme)
 
         icon_dir = Path(__file__).parent / "assets" / "icons"
@@ -262,7 +435,7 @@ class MainWindow(QMainWindow):
         self.msg_frame.setObjectName("MessageBanner")
         self.msg_frame.setFrameShape(QFrame.StyledPanel)
 
-        self.msg_title = QLabel("Status")
+        self.msg_title = QLabel(self.tr("msg_title_info"))
         self.msg_title.setObjectName("MessageTitle")
 
         msg_layout = QVBoxLayout()
@@ -270,7 +443,7 @@ class MainWindow(QMainWindow):
         msg_layout.setSpacing(4)
         msg_layout.addWidget(self.msg_title)
 
-        self.btn_commit = QPushButton("Commit to DB")
+        self.btn_commit = QPushButton(self.tr("btn_commit"))
         self.btn_commit.clicked.connect(self.commit)
 
         # EDS-PSEUDO loading
@@ -279,53 +452,68 @@ class MainWindow(QMainWindow):
         if self.pseudonymizer is None:
             self.btn_commit.setEnabled(False)
 
-        self.msg_body = QLabel("Ready." if self.pseudonymizer else "Not Ready (pseudonymization model not loaded yet).")
+        self.msg_body = QLabel(
+            self.tr("status_ready") if self.pseudonymizer else self.tr("status_not_ready")
+        )
         self.msg_body.setObjectName("MessageBody")
         self.msg_body.setWordWrap(True)
 
         msg_layout.addWidget(self.msg_body)
         self.msg_frame.setLayout(msg_layout)
-        
-        # Apply the saved theme now (also sets button label)
-        self.set_theme(self.theme)
-        self._set_message("info", self.msg_body.text())
 
-        self.btn_choose_db = QPushButton("Select database…")
+        self.btn_choose_db = QPushButton(self.tr("btn_select_db"))
         self.btn_choose_db.clicked.connect(self.choose_db)
 
-        self.btn_init_db = QPushButton("Create DB…")
+        self.btn_init_db = QPushButton(self.tr("btn_create_db"))
         self.btn_init_db.clicked.connect(self.create_db)
 
-        self.btn_add_docs = QPushButton("Documents…")
-        self.btn_add_docs.clicked.connect(self.add_documents)
+        self.btn_add_docs = QPushButton(self.tr("btn_add_documents"))
+        self.btn_add_docs.setMenu(QMenu(self))
 
-        # pseudo-only export option (checked by default)
-        self.chk_pseudo_only = QCheckBox("Make pseudo-only copy")
-        self.chk_pseudo_only.setChecked(True)
-        self.chk_pseudo_only.setToolTip(
-            "After each commit, write a sibling CSV named '<db>_pseudo_only.csv' "
-            "containing all columns except DOCUMENT."
+        self.action_add_files = self.btn_add_docs.menu().addAction(
+            self.tr("btn_add_from_files")
+        )
+        self.action_add_folder = self.btn_add_docs.menu().addAction(
+            self.tr("btn_add_from_folder")
         )
 
-        # Table: one row per file, with PID + ORDER entry
+        self.action_add_files.triggered.connect(self.add_documents_from_files)
+        self.action_add_folder.triggered.connect(self.add_documents_from_folder)
+
+        # Language toggle button (icon-only)
+        self.btn_lang = QPushButton()
+        self.btn_lang.setFixedSize(36, 36)
+        self.btn_lang.setIconSize(QSize(22, 22))
+        self.btn_lang.clicked.connect(self.toggle_language)
+
+        self.icon_flag_uk = QIcon(str(icon_dir / "uk.svg"))
+        self.icon_flag_fr = QIcon(str(icon_dir / "fr.svg"))
+
+        # pseudo-only export option (checked by default)
+        self.chk_pseudo_only = QCheckBox(self.tr("chk_pseudo_only"))
+        self.chk_pseudo_only.setChecked(True)
+        self.chk_pseudo_only.setToolTip(self.tr("tip_pseudo_only"))
+
+        # Table: one row per file, with IPP + ORDER entry
         self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["File path", "PID", "ORDER", "Preview"])
+        self.table.setHorizontalHeaderLabels(self.tr("table_headers"))
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setColumnWidth(0, 520)
         self.table.setColumnWidth(1, 140)
         self.table.setColumnWidth(2, 80)
         self.table.setColumnWidth(3, 180)
 
-        # Status label
-        self.status = QLabel("Ready." if self.pseudonymizer else "Ready (pseudonymization model not loaded).")
+        # Status label (kept for compatibility; message banner is primary UX)
+        self.status = QLabel(self.tr("status_ready") if self.pseudonymizer else self.tr("status_not_ready"))
         self.status.setStyleSheet("color: #333;")
 
         top = QGridLayout()
-        top.addWidget(self.btn_theme, 0, 6)
-        top.addWidget(QLabel("Database:"), 0, 0)
+        top.addWidget(QLabel(self.tr("database_label")), 0, 0)
         top.addWidget(self.db_path_edit, 0, 1, 1, 3)
         top.addWidget(self.btn_choose_db, 0, 4)
         top.addWidget(self.btn_init_db, 0, 5)
+        top.addWidget(self.btn_theme, 0, 6)
+        top.addWidget(self.btn_lang, 0, 7)
 
         actions = QHBoxLayout()
         actions.addWidget(self.btn_add_docs)
@@ -343,13 +531,84 @@ class MainWindow(QMainWindow):
         root.setLayout(layout)
         self.setCentralWidget(root)
 
+        # Apply saved theme + translations last (ensures tooltips/icons and texts align)
+        self.set_theme(self.theme)
+        self._apply_translations()
+        self._set_message("info", self.msg_body.text())
+
+    def tr(self, key: str, **kwargs) -> str:
+        pack = I18N.get(self.lang, I18N["en"])
+        text = pack.get(key, I18N["en"].get(key, key))
+        try:
+            return text.format(**kwargs)
+        except Exception:
+            return text
+
+    def _is_duplicate(self, df_db: pd.DataFrame, ipp: str, document: str) -> bool:
+        if df_db.empty:
+            return False
+        return ((df_db["IPP"] == ipp) & (df_db["DOCUMENT"] == document)).any()
+
+    def set_language(self, lang: str) -> None:
+        lang = (lang or "").lower().strip()
+        if lang not in ("en", "fr"):
+            lang = "en"
+        self.lang = lang
+        self.settings.setValue("ui/lang", self.lang)
+        self._apply_translations()
+
+    def toggle_language(self) -> None:
+        self.set_language("fr" if self.lang == "en" else "en")
+
+    def _apply_translations(self) -> None:
+        # Window + top label + placeholder
+        self.setWindowTitle(self.tr("window_title"))
+        self.db_path_edit.setPlaceholderText(self.tr("placeholder_db"))
+
+        # Buttons / checkbox
+        self.btn_choose_db.setText(self.tr("btn_select_db"))
+        self.btn_init_db.setText(self.tr("btn_create_db"))
+        self.btn_add_docs.setText(self.tr("btn_add_documents"))
+        self.action_add_files.setText(self.tr("btn_add_from_files"))
+        self.action_add_folder.setText(self.tr("btn_add_from_folder"))
+        self.btn_commit.setText(self.tr("btn_commit"))
+        self.chk_pseudo_only.setText(self.tr("chk_pseudo_only"))
+        self.chk_pseudo_only.setToolTip(self.tr("tip_pseudo_only"))
+
+        # Table headers
+        self.table.setHorizontalHeaderLabels(self.tr("table_headers"))
+
+        # Theme tooltips depend on theme
+        if getattr(self, "theme", "light") == "dark":
+            self.btn_theme.setToolTip(self.tr("tip_theme_light"))
+        else:
+            self.btn_theme.setToolTip(self.tr("tip_theme_dark"))
+
+        # Flag icon + tooltip depends on current language (show the OTHER language as the action)
+        if self.lang == "en":
+            self.btn_lang.setIcon(self.icon_flag_fr)
+            self.btn_lang.setToolTip(self.tr("tip_lang_to_fr"))
+        else:
+            self.btn_lang.setIcon(self.icon_flag_uk)
+            self.btn_lang.setToolTip(self.tr("tip_lang_to_en"))
+
+        # Ensure the banner title (Info/Warning/Error) is re-translated on language switch.
+        # Re-apply current body text and the last severity to force title refresh.
+        if not hasattr(self, "_last_msg_level"):
+            self._last_msg_level = "info"
+        self._set_message(
+            self._last_msg_level,
+            self.msg_body.text()
+            or (self.tr("status_ready") if self.pseudonymizer else self.tr("status_not_ready")),
+        )
+
+
     def _on_eds_ready(self, pseudo: object) -> None:
         self.pseudonymizer = pseudo  # type: ignore[assignment]
         if hasattr(self, "init_dlg") and self.init_dlg:
             self.init_dlg.close()
-
         self.btn_commit.setEnabled(True)
-        self._set_message("info", "EDS-PSEUDO model loaded. Ready.")
+        self._set_message("info", self.tr("eds_loaded_ready"))
 
     def _on_eds_failed(self, err: str) -> None:
         self.pseudonymizer = None
@@ -359,22 +618,23 @@ class MainWindow(QMainWindow):
         self.btn_commit.setEnabled(False)
         QMessageBox.critical(
             self,
-            "EDS-PSEUDO initialization failed",
-            "Could not initialize the eds-pseudo model.\n\n"
-            f"Details: {err}\n\n"
-            "You can provide --eds_path to point to the hf_cache folder, or ensure hf_cache/artifacts "
-            "is available relative to this script.",
+            self.tr("eds_init_failed_title"),
+            self.tr("eds_init_failed_body", err=err),
         )
-        self._set_message("error", "Pseudonymization model not loaded. Commit disabled.")
+        self._set_message("error", self.tr("status_not_ready"))
 
     def _loading_eds(self, eds_path):
         # EDS-PSEUDO model initialization (async so UI remains responsive)
         self.pseudonymizer: TextPseudonymizer | None = None
         self.btn_commit.setEnabled(False)  # will be enabled when model is ready
 
-        self.init_dlg = self._make_progress("Starting application", "Loading EDS-PSEUDO model…", 0)
+        self.init_dlg = self._make_progress(
+            self.tr("progress_start_title"),
+            self.tr("progress_loading_eds"),
+            0,
+        )
         self.init_dlg.setRange(0, 0)  # indeterminate busy animation
-        self.init_dlg.setLabelText("Loading EDS-PSEUDO model…")
+        self.init_dlg.setLabelText(self.tr("progress_loading_eds"))
         self.init_dlg.show()
 
         self._eds_thread = QThread(self)
@@ -404,7 +664,7 @@ class MainWindow(QMainWindow):
         dlg.show()
         QApplication.processEvents()
         return dlg
-    
+
     def set_theme(self, theme: str) -> None:
         theme = (theme or "").lower().strip()
         if theme not in {"light", "dark"}:
@@ -416,12 +676,12 @@ class MainWindow(QMainWindow):
         if self.theme == "dark":
             self.btn_theme.setChecked(True)
             self.btn_theme.setIcon(self.icon_moon)
-            self.btn_theme.setToolTip("Switch to light mode")
+            self.btn_theme.setToolTip(self.tr("tip_theme_light"))
             self.setStyleSheet(DARK_QSS + self._message_banner_qss(dark=True))
         else:
             self.btn_theme.setChecked(False)
             self.btn_theme.setIcon(self.icon_sun)
-            self.btn_theme.setToolTip("Switch to dark mode")
+            self.btn_theme.setToolTip(self.tr("tip_theme_dark"))
             self.setStyleSheet(LIGHT_QSS + self._message_banner_qss(dark=False))
 
     def _toggle_theme(self) -> None:
@@ -462,13 +722,14 @@ class MainWindow(QMainWindow):
         level = (level or "").lower().strip()
         if level not in {"info", "warning", "error"}:
             level = "info"
+        self._last_msg_level = level
 
         if level == "error":
-            title = "Error"
+            title = self.tr("msg_title_error")
         elif level == "warning":
-            title = "Warning"
+            title = self.tr("msg_title_warning")
         else:
-            title = "Info"
+            title = self.tr("msg_title_info")
 
         self.msg_title.setText(title)
         self.msg_body.setText(message)
@@ -493,15 +754,14 @@ class MainWindow(QMainWindow):
         start_dir = self._get_last_dir("paths/select_db")
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Select database CSV",
+            self.tr("dlg_select_db_title"),
             start_dir,
             "CSV files (*.csv);;All files (*.*)",
         )
         if path:
             self.db_path_edit.setText(path)
-            self._set_message("info", f"Selected DB: {path}")
+            self._set_message("info", self.tr("selected_db", path=path))
             self._set_last_dir("paths/select_db", path)
-
 
     def create_db(self):
         start_dir = self._get_last_dir("paths/create_db")
@@ -509,7 +769,7 @@ class MainWindow(QMainWindow):
 
         path, _ = QFileDialog.getSaveFileName(
             self,
-            "Create database CSV",
+            self.tr("dlg_create_db_title"),
             default_path,
             "CSV files (*.csv)",
         )
@@ -519,17 +779,54 @@ class MainWindow(QMainWindow):
             init_db(path, columns=DEFAULT_COLUMNS)
             get_or_create_salt_file(path)
             self.db_path_edit.setText(path)
-            self._set_message("info", f"Created DB: {path}")
+            self._set_message("info", self.tr("created_db", path=path))
             self._set_last_dir("paths/create_db", path)
         except Exception as e:
             self._error(str(e))
 
+    def add_documents_from_folder(self):
+        start_dir = self._get_last_dir("paths/documents")
 
-    def add_documents(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            self.tr("dlg_select_folder_title"),
+            start_dir,
+        )
+
+        if not folder:
+            return
+
+        folder_path = Path(folder)
+        pdf_files = sorted(folder_path.glob("*.pdf"))
+
+        if not pdf_files:
+            self._info(self.tr("no_docs_selected"))
+            return
+
+        self._set_last_dir("paths/documents", folder)
+
+        existing = {
+            self.table.item(r, 0).text().strip()
+            for r in range(self.table.rowCount())
+            if self.table.item(r, 0)
+        }
+
+        added = 0
+        for p in pdf_files:
+            fp = str(p.resolve())
+            if fp in existing:
+                continue
+            self._add_row(fp)
+            added += 1
+
+        self._set_message("info", self.tr("loaded_files_enter_ipp", n=added))
+
+
+    def add_documents_from_files(self):
         start_dir = self._get_last_dir("paths/documents")
         files, _ = QFileDialog.getOpenFileNames(
             self,
-            "Select PDF documents",
+            self.tr("dlg_select_pdf_title"),
             start_dir,
             "PDF files (*.pdf);;All files (*.*)",
         )
@@ -550,11 +847,10 @@ class MainWindow(QMainWindow):
         for f in files:
             if f in existing:
                 continue
-            self._add_row(file_path=f, pid="", order="")
+            self._add_row(file_path=f)
             added += 1
 
-        self._set_message("info", f"Loaded {added} file(s). Enter PID for each (ORDER only for known PID).")
-
+        self._set_message("info", self.tr("loaded_files_enter_ipp", n=added))
 
     def _pseudo_only_path(self, db_path: str) -> Path:
         p = Path(db_path).expanduser().resolve()
@@ -576,245 +872,203 @@ class MainWindow(QMainWindow):
             df_out = df_full
 
         # Write as a full snapshot (simple + robust)
-        df_out.to_csv(dst, index=False)
+        df_out.to_csv(dst, index=True)
 
     def commit(self):
-        db_path = self.db_path_edit.text().strip()
-        if not db_path:
-            self._error("Please select a database file first.")
-            return
-
-        if self.pseudonymizer is None:
-            self._error(
-                "Pseudonymization model is not initialized. "
-                "Provide --eds_path pointing to the hf_cache folder (containing artifacts), "
-                "or ensure hf_cache/artifacts exists relative to the app script."
-            )
-            return
-
+        self.sleep_inhibitor.enable()
         try:
-            df = load_db(db_path)
-        except FileNotFoundError:
-            self._error("Database not found. Create it first or select an existing CSV.")
-            return
-        except Exception as e:
-            self._error(f"Could not read DB: {e}")
-            return
+            db_path = self.db_path_edit.text().strip()
+            if not db_path:
+                self._error(self.tr("please_select_db_first"))
+                return
 
-        n = self.table.rowCount()
-        if n == 0:
-            # If DB has at least one non-empty row, do not error; just inform.
-            # "Non-empty row" interpreted as: dataframe has at least one row.
-            has_any_row = len(df) > 0
+            if self.pseudonymizer is None:
+                self._error(self.tr("model_not_initialized"))
+                return
 
-            pseudo_msg = ""
-            if getattr(self, "chk_pseudo_only", None) is not None and self.chk_pseudo_only.isChecked():
+            try:
+                df_db = load_db(db_path)
+            except Exception as e:
+                self._error(self.tr("could_not_read_db", err=e))
+                return
+
+            try:
+                salt = get_or_create_salt_file(db_path)
+                self.pseudonymizer.secret_salt = salt
+            except Exception as e:
+                self._error(self.tr("salt_init_failed", err=e))
+                return
+
+            n = self.table.rowCount()
+            if n == 0:
+                self._error(self.tr("no_docs_selected"))
+                return
+
+            # Logs
+            errors: list[str] = []
+            skipped: list[str] = []
+
+            # -------------------------
+            # Phase 1 — Extraction + IPP + duplicate check
+            # -------------------------
+            extract_dlg = self._make_progress(
+                self.tr("progress_commit_title"),
+                self.tr("progress_extracting"),
+                n,
+            )
+
+            candidates: list[dict] = []
+
+            for r in range(n):
+                fp = self.table.item(r, 0).text().strip()
+                p = Path(fp)
+
+                try:
+                    text = self.extractor.pdf_to_text(p)
+                    if not text.strip():
+                        raise ValueError("Empty extracted text")
+
+                    try:
+                        ipp = str(int(extract_IPP_from_document(text)))
+                    except Exception:
+                        ipp = str(int(extract_IPP_from_path(p)))
+
+                    if self._is_duplicate(df_db, ipp, text):
+                        skipped.append(p.name)
+                    else:
+                        candidates.append(
+                            {
+                                "path": p,
+                                "ipp": ipp,
+                                "document": text,
+                            }
+                        )
+
+                except Exception as e:
+                    errors.append(f"{p.name}: {e}")
+
+                extract_dlg.setValue(r + 1)
+                extract_dlg.setLabelText(
+                    self.tr("progress_extracting_step", done=r + 1, total=n, name=p.name)
+                )
+                QApplication.processEvents()
+
+            extract_dlg.close()
+
+            if not candidates:
+                self._info(
+                    f"No document to commit.\n\n"
+                    f"Skipped (duplicates): {len(skipped)}\n"
+                    f"Errors: {len(errors)}"
+                )
+                return
+
+            # -------------------------
+            # Phase 2 — Pseudonymization + chunked commit
+            # -------------------------
+            pseudo_dlg = self._make_progress(
+                self.tr("progress_commit_title"),
+                self.tr("progress_pseudonymizing"),
+                len(candidates),
+            )
+
+            pending_rows = []
+            committed_files: list[str] = []
+
+            for i, item in enumerate(candidates, start=1):
+                p = item["path"]
+
+                try:
+                    pseudo = self.pseudonymizer.pseudonymize(
+                        item["document"],
+                        ipp=item["ipp"],
+                    )
+
+                    pending_rows.append(
+                        {
+                            "IPP": item["ipp"],
+                            "SOURCE_FILE": str(p.resolve()),
+                            "DOCUMENT": item["document"],
+                            "PSEUDO": pseudo,
+                            "ORDER": 1,
+                        }
+                    )
+                    committed_files.append(p.name)
+
+                    if len(pending_rows) >= CHUNK_SIZE:
+                        append_rows_locked(db_path, pd.DataFrame(pending_rows))
+                        df_db = load_db(db_path)
+                        pending_rows.clear()
+
+                        self._set_message(
+                            "info",
+                            f"Committed: {len(committed_files)} | "
+                            f"Skipped: {len(skipped)} | "
+                            f"Errors: {len(errors)}"
+                        )
+
+                except Exception as e:
+                    errors.append(f"{p.name}: {e}")
+
+                pseudo_dlg.setValue(i)
+                pseudo_dlg.setLabelText(
+                    self.tr(
+                        "progress_pseudonymizing_step",
+                        done=i,
+                        total=len(candidates),
+                        name=p.name,
+                    )
+                )
+                QApplication.processEvents()
+
+            pseudo_dlg.close()
+
+            # Final flush
+            if pending_rows:
+                append_rows_locked(db_path, pd.DataFrame(pending_rows))
+
+            # -------------------------
+            # Pseudo-only copy (if requested)
+            # -------------------------
+            pseudo_note = ""
+            if self.chk_pseudo_only.isChecked():
                 try:
                     self._write_pseudo_only_copy(db_path)
-                    pseudo_msg = " Pseudo-only copy made."
+                    pseudo_path = self._pseudo_only_path(db_path)
+                    pseudo_note = self.tr(
+                        "pseudo_only_copy_note", path=str(pseudo_path)
+                    )
                 except Exception as e:
-                    # Keep same semantics: DB not updated anyway, but warn that copy failed.
                     QMessageBox.warning(
                         self,
-                        "Pseudo-only copy failed",
-                        "No documents selected and the database was not updated, but the pseudo-only copy "
-                        "could not be updated.\n\n"
-                        f"Details: {e}",
+                        self.tr("pseudo_only_copy_failed_title"),
+                        self.tr(
+                            "pseudo_only_copy_failed_after_commit",
+                            err=e,
+                        ),
                     )
-                    self._set_message("info", "No documents selected. The database was not updated.")
-                    return
 
-            if has_any_row:
-                self._info(f"No documents selected. The database was not updated.{pseudo_msg}")
-                return
-
-            # If DB is empty (no rows), keep the previous error-style behavior.
-            # (You did not specify a custom message for empty DB; this preserves a useful guard.)
-            self._error("No documents selected.")
-            return
-
-        required_cols = {"PID", "SOURCE_FILE", "DOCUMENT", "PSEUDO", "ORDER"}
-        missing_db = required_cols - set(df.columns)
-        if missing_db:
-            self._error(
-                "Database schema mismatch.\n"
-                f"Missing columns in DB: {sorted(missing_db)}\n"
-                "Please recreate the DB with the updated DEFAULT_COLUMNS."
-            )
-            return
-
-        try:
-            salt = get_or_create_salt_file(db_path)
-            self.pseudonymizer.secret_salt = salt
-        except Exception as e:
-            self._error(f"Could not initialize pseudonymization salt for this DB:\n{e}")
-            return
-
-        # -------------------------
-        # Validate rows + collect metadata
-        # -------------------------
-        rows_meta = []  # keep original order + validated metadata
-        for r in range(n):
-            fp = (self.table.item(r, 0).text().strip() if self.table.item(r, 0) else "")
-            pid = (self.table.item(r, 1).text().strip() if self.table.item(r, 1) else "")
-            try:
-                f = float(pid)
-                if f.is_integer():
-                    pid = str(int(f))
-            except Exception:
-                pass
-            order_txt = (self.table.item(r, 2).text().strip() if self.table.item(r, 2) else "")
-
-            if not fp:
-                self._error(f"Row {r+1}: missing file path.")
-                return
-
-            p = Path(fp)
-            if p.suffix.lower() != ".pdf":
-                self._error(f"Row {r+1}: only PDF files are allowed:\n{fp}")
-                return
-            if not p.exists():
-                self._error(f"Row {r+1}: file does not exist:\n{fp}")
-                return
-            if not pid:
-                self._error(f"Row {r+1}: PID is required.")
-                return
-
-            pid_exists = (df["PID"] == pid).any() if len(df) else False
-
-            if pid_exists:
-                if not order_txt:
-                    self._error(f"Row {r+1}: ORDER is required because PID={pid} already exists.")
-                    return
-                try:
-                    order_val = int(order_txt)
-                except ValueError:
-                    self._error(f"Row {r+1}: ORDER must be an integer.")
-                    return
-
-                max_order = int(pd.to_numeric(df.loc[df["PID"] == pid, "ORDER"], errors="coerce").max())
-                if not (1 <= order_val <= max_order + 1):
-                    self._error(
-                        f"Row {r+1}: ORDER={order_val} invalid for PID={pid}. "
-                        f"Must be between 1 and {max_order + 1}."
-                    )
-                    return
-            else:
-                order_val = pd.NA
-
-            rows_meta.append((r, p, pid, order_val))
-
-        # Use half CPU threads (min 1). Threads are safer than processes on Windows.
-        max_workers = max(1, (os.cpu_count() or 1) // 2)
-
-        # -------------------------
-        # Phase 1: Parallel extraction with visible progress dialog
-        # -------------------------
-        extract_dlg = self._make_progress("Commit", "Extracting text…", n)
-        extract_dlg.setLabelText(f"Extracting text…\nWorkers: {max_workers}")
-        QApplication.processEvents()
-
-        extracted_by_row: dict[int, str] = {}
-        try:
-            with cf.ThreadPoolExecutor(max_workers=max_workers) as ex:
-                futs = {
-                    ex.submit(self.extractor.pdf_to_text, p): (r, p)
-                    for (r, p, _, _) in rows_meta
-                }
-
-                completed = 0
-                for fut in cf.as_completed(futs):
-                    r, p = futs[fut]
-                    try:
-                        extracted_by_row[r] = fut.result()
-                    except Exception as e:
-                        extract_dlg.close()
-                        self._error(f"Row {r+1}: text extraction failed for {p.name}:\n{e}")
-                        return
-
-                    completed += 1
-                    extract_dlg.setLabelText(f"Extracting text… ({completed}/{n})\n{p.name}")
-                    extract_dlg.setValue(completed)
-                    QApplication.processEvents()
-
-        except Exception as e:
-            extract_dlg.close()
-            self._error(f"Parallel extraction failed:\n{e}")
-            return
-
-        extract_dlg.close()
-
-        # Update previews in table order (nice UX; avoids “random” completion order)
-        for (r, p, pid, order_val) in rows_meta:
-            extracted_text = extracted_by_row.get(r, "")
-            preview = extracted_text.strip().replace("\n", " ")
-            preview = preview[:160] + ("…" if len(preview) > 160 else "")
-            self._set_preview(r, preview)
-
-        # -------------------------
-        # Phase 2: Sequential pseudonymization with visible progress dialog
-        # -------------------------
-        pseudo_dlg = self._make_progress("Commit", "Pseudonymizing extracted texts…", n)
-
-        rows = []
-        for idx, (r, p, pid, order_val) in enumerate(rows_meta, start=1):
-            extracted_text = extracted_by_row.get(r, "")
-            if not extracted_text.strip():
-                pseudo_dlg.close()
-                self._error(f"Row {r+1}: empty extracted text for {p.name}.")
-                return
-
-            pseudo_dlg.setLabelText(f"Pseudonymizing extracted texts… ({idx}/{n})\n{p.name}")
-            pseudo_dlg.setValue(idx - 1)
-            QApplication.processEvents()
-
-            try:
-                pseudo_text = self.pseudonymizer.pseudonymize(extracted_text, pid=pid)
-            except Exception as e:
-                pseudo_dlg.close()
-                self._error(f"Row {r+1}: pseudonymization failed for {p.name}:\n{e}")
-                return
-
-            rows.append(
-                {
-                    "PID": pid,
-                    "SOURCE_FILE": str(p.resolve()),
-                    "DOCUMENT": extracted_text,
-                    "PSEUDO": pseudo_text,
-                    "ORDER": order_val,
-                }
+            # Final report
+            summary = (
+                f"Commit finished.\n\n"
+                f"Committed: {len(committed_files)}\n"
+                f"Skipped (duplicates): {len(skipped)}\n"
+                f"Errors: {len(errors)}\n"
+                f"{pseudo_note}"
             )
 
-        pseudo_dlg.setValue(n)
-        pseudo_dlg.close()
+            QMessageBox.information(
+                self,
+                self.tr("box_info"),
+                summary,
+            )
 
-        new_rows = pd.DataFrame(rows)
+            self.table.setRowCount(0)
+            self._set_message("info", summary)
+        finally:
+            self.sleep_inhibitor.disable()
 
-        try:
-            append_rows_locked(db_path, new_rows)
-        except Exception as e:
-            self._error(f"Commit failed: {e}")
-            return
-
-        if getattr(self, "chk_pseudo_only", None) is not None and self.chk_pseudo_only.isChecked():
-            try:
-                self._write_pseudo_only_copy(db_path)
-            except Exception as e:
-                # Do not rollback the main commit; just warn.
-                QMessageBox.warning(
-                    self,
-                    "Pseudo-only copy failed",
-                    "Commit succeeded, but the pseudo-only copy could not be updated.\n\n"
-                    f"Details: {e}",
-                )
-
-        pseudo_note = ""
-        if self.chk_pseudo_only.isChecked():
-            pseudo_note = f" Pseudo-only copy: {self._pseudo_only_path(db_path)}"
-        self.table.setRowCount(0)
-        self._set_message("info", f"Committed {n} document(s) to DB.{pseudo_note}")
-
-    def _add_row(self, file_path: str, pid: str, order: str = ""):
+    def _add_row(self, file_path: str):
         r = self.table.rowCount()
         self.table.insertRow(r)
 
@@ -822,12 +1076,20 @@ class MainWindow(QMainWindow):
         fp_item.setFlags(fp_item.flags() ^ Qt.ItemIsEditable)
         self.table.setItem(r, 0, fp_item)
 
-        self.table.setItem(r, 1, QTableWidgetItem(pid))
-        self.table.setItem(r, 2, QTableWidgetItem(order))
+        # IPP (auto, read-only)
+        ipp_item = QTableWidgetItem("—")
+        ipp_item.setFlags(ipp_item.flags() ^ Qt.ItemIsEditable)
+        self.table.setItem(r, 1, ipp_item)
+
+        # ORDER (auto, read-only)
+        order_item = QTableWidgetItem("—")
+        order_item.setFlags(order_item.flags() ^ Qt.ItemIsEditable)
+        self.table.setItem(r, 2, order_item)
 
         preview_item = QTableWidgetItem("")
         preview_item.setFlags(preview_item.flags() ^ Qt.ItemIsEditable)
         self.table.setItem(r, 3, preview_item)
+
 
     def _set_preview(self, row: int, preview: str) -> None:
         it = self.table.item(row, 3)
@@ -838,11 +1100,11 @@ class MainWindow(QMainWindow):
         it.setText(preview)
 
     def _info(self, message: str):
-        QMessageBox.information(self, "Info", message)
+        QMessageBox.information(self, self.tr("box_info"), message)
         self._set_message("info", message)
 
     def _error(self, message: str):
-        QMessageBox.critical(self, "Error", message)
+        QMessageBox.critical(self, self.tr("box_error"), message)
         self._set_message("error", message)
 
 

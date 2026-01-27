@@ -53,7 +53,6 @@ class TextExtractor:
     Robust extractor:
       - Try PyMuPDF (fitz) first (layout-aware)
       - Fallback to pypdf
-      - (Optional) add Docling branch later if you want
     """
     def __init__(self) -> None:
         pass
