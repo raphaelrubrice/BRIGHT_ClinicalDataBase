@@ -247,14 +247,64 @@ def extract_consult_date_num(text):
     out_list = [el if len(el) >= 2 else '0' + el for el in out_list]
     return int(''.join(out_list))
 
+# def extract_consult_date(text):
+#     matches = re.search(r"(c|C)onsultation.du.[0-9]{2}\/[0-9]{2}\/[0-9]{4}", text, re.MULTILINE)
+#     if matches is None:
+#         matches = re.search(r"(c|C)onsultation.du.[0-9]{4}\/[0-9]{2}\/[0-9]{2}", text, re.MULTILINE)
+#         if matches is None:
+#             raise ValueError("Unable to find a date in supported formats (DD/MM/YYYY or MM/DD/YYYY or YYYY/DD/MM or YYYY/MM/DD) for at least one row.")
+#     date = matches.group(0)[16:] # assuming first one is the last 
+#     num_list = sorted([int(num) for num in date.split("/")], reverse=True)
+#     return '/'.join([str(el) for el in num_list])
+
+import re
+
 def extract_consult_date(text):
-    matches = re.search(r"(c|C)onsultation.du.[0-9]{2}\/[0-9]{2}\/[0-9]{4}", text, re.MULTILINE)
+    # Mapping French month names to numbers
+    # Keys should be lowercase to handle case-insensitivity
+    months_map = {
+        "janvier": 1, "février": 2, "mars": 3, "avril": 4,
+        "mai": 5, "juin": 6, "juillet": 7, "août": 8,
+        "septembre": 9, "octobre": 10, "novembre": 11, "décembre": 12,
+        # Handling potential encoding/spelling variations
+        "fevrier": 2, "aout": 8, "decembre": 12
+    }
+
+    # The exact regex pattern provided
+    pattern = r"(((c|C)onsultation.du.)|(Paris, le ))(([0-9]{2}\/[0-9]{2}\/[0-9]{4})|([0-9]{2} [a-zA-Z]+ [0-9]{4}))"
+    
+    matches = re.search(pattern, text, re.MULTILINE)
+
     if matches is None:
-        matches = re.search(r"(c|C)onsultation.du.[0-9]{4}\/[0-9]{2}\/[0-9]{2}", text, re.MULTILINE)
-        if matches is None:
-            raise ValueError("Unable to find a date in supported formats (DD/MM/YYYY or MM/DD/YYYY or YYYY/DD/MM or YYYY/MM/DD) for at least one row.")
-    date = matches.group(0)[16:] # assuming first one is the last 
-    num_list = sorted([int(num) for num in date.split("/")], reverse=True)
+        raise ValueError("Unable to find a date in supported formats for at least one row.")
+
+    # Group 5 contains the actual date string (ignoring the "Consultation..." or "Paris..." prefix)
+    # It will contain either "DD/MM/YYYY" or "DD Month YYYY"
+    raw_date = matches.group(5)
+    
+    num_list = []
+
+    # Logic to handle "DD/MM/YYYY"
+    if "/" in raw_date:
+        num_list = [int(num) for num in raw_date.split("/")]
+
+    # Logic to handle "DD Month YYYY" (e.g., "17 Janvier 2023")
+    else:
+        parts = raw_date.split() # Splits by space
+        day = int(parts[0])
+        year = int(parts[2])
+        month_str = parts[1].lower()
+        
+        if month_str in months_map:
+            month = months_map[month_str]
+        else:
+            raise ValueError(f"Could not map month name '{parts[1]}' to a number.")
+            
+        num_list = [day, month, year]
+
+    # Preserving your original return logic: Sort descending (Year/Max/Min)
+    num_list = sorted(num_list, reverse=True)
+    
     return '/'.join([str(el) for el in num_list])
 
 def insert_documents_with_order(df: pd.DataFrame, new_rows: pd.DataFrame) -> pd.DataFrame:
@@ -312,7 +362,7 @@ def extract_IPP_from_document(text):
     """
     Retrieves the IPP from the INS/NIR line.
     """
-    matches = re.search(r"\| 8[0-9]{9} \|", text)
+    matches = re.search(r" 8[0-9]{9}", text)
     if matches is None:
         raise ValueError(f"No IPP found in document.")
     return int(matches.group(0)[2:-2])
