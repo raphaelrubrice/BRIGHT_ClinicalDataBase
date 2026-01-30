@@ -257,11 +257,56 @@ def extract_consult_date_num(text):
 #     num_list = sorted([int(num) for num in date.split("/")], reverse=True)
 #     return '/'.join([str(el) for el in num_list])
 
-import re
+# def extract_consult_date(text):
+#     # Mapping French month names to numbers
+#     # Keys should be lowercase to handle case-insensitivity
+#     months_map = {
+#         "janvier": 1, "février": 2, "mars": 3, "avril": 4,
+#         "mai": 5, "juin": 6, "juillet": 7, "août": 8,
+#         "septembre": 9, "octobre": 10, "novembre": 11, "décembre": 12,
+#         # Handling potential encoding/spelling variations
+#         "fevrier": 2, "aout": 8, "decembre": 12
+#     }
 
-def extract_consult_date(text):
+#     # The exact regex pattern provided
+#     pattern = r"(((c|C)onsultation.du.)|(Paris, le ))(([0-9]{2}\/[0-9]{2}\/[0-9]{4})|([0-9]{2} [a-zA-Z]+ [0-9]{4}))"
+    
+#     matches = re.search(pattern, text, re.MULTILINE)
+
+#     if matches is None:
+#         raise ValueError("Unable to find a date in supported formats for at least one row.")
+
+#     # Group 5 contains the actual date string (ignoring the "Consultation..." or "Paris..." prefix)
+#     # It will contain either "DD/MM/YYYY" or "DD Month YYYY"
+#     raw_date = matches.group(5)
+    
+#     num_list = []
+
+#     # Logic to handle "DD/MM/YYYY"
+#     if "/" in raw_date:
+#         num_list = [int(num) for num in raw_date.split("/")]
+
+#     # Logic to handle "DD Month YYYY" (e.g., "17 Janvier 2023")
+#     else:
+#         parts = raw_date.split() # Splits by space
+#         day = int(parts[0])
+#         year = int(parts[2])
+#         month_str = parts[1].lower()
+        
+#         if month_str in months_map:
+#             month = months_map[month_str]
+#         else:
+#             raise ValueError(f"Could not map month name '{parts[1]}' to a number.")
+            
+#         num_list = [day, month, year]
+
+#     # Preserving your original return logic: Sort descending (Year/Max/Min)
+#     num_list = sorted(num_list, reverse=True)
+    
+#     return '/'.join([str(el) for el in num_list])
+
+def extract_consult_date_num(text):
     # Mapping French month names to numbers
-    # Keys should be lowercase to handle case-insensitivity
     months_map = {
         "janvier": 1, "février": 2, "mars": 3, "avril": 4,
         "mai": 5, "juin": 6, "juillet": 7, "août": 8,
@@ -270,7 +315,8 @@ def extract_consult_date(text):
         "fevrier": 2, "aout": 8, "decembre": 12
     }
 
-    # The exact regex pattern provided
+    # New regex pattern supporting "Consultation du" or "Paris, le"
+    # Group 5 contains the date string
     pattern = r"(((c|C)onsultation.du.)|(Paris, le ))(([0-9]{2}\/[0-9]{2}\/[0-9]{4})|([0-9]{2} [a-zA-Z]+ [0-9]{4}))"
     
     matches = re.search(pattern, text, re.MULTILINE)
@@ -278,10 +324,7 @@ def extract_consult_date(text):
     if matches is None:
         raise ValueError("Unable to find a date in supported formats for at least one row.")
 
-    # Group 5 contains the actual date string (ignoring the "Consultation..." or "Paris..." prefix)
-    # It will contain either "DD/MM/YYYY" or "DD Month YYYY"
     raw_date = matches.group(5)
-    
     num_list = []
 
     # Logic to handle "DD/MM/YYYY"
@@ -302,10 +345,23 @@ def extract_consult_date(text):
             
         num_list = [day, month, year]
 
-    # Preserving your original return logic: Sort descending (Year/Max/Min)
+    # Sort descending (Year, Max(M,D), Min(M,D))
     num_list = sorted(num_list, reverse=True)
+
+    # Original logic to determine Day/Month order and format as YYYYMMDD
+    # If the second largest number is > 12, it must be the Day -> [Year, Day, Month]
+    # We want output [Year, Month, Day]
+    if num_list[1] > 12:
+        out_list = [str(num_list[0]), str(num_list[2]), str(num_list[1])]
+    else:
+        # Otherwise assume [Year, Month, Day]
+        out_list = [str(num_list[0]), str(num_list[1]), str(num_list[2])]
+
+    # Pad with leading zeros where necessary
+    out_list = [el if len(el) >= 2 else '0' + el for el in out_list]
     
-    return '/'.join([str(el) for el in num_list])
+    # Return integer
+    return int(''.join(out_list))
 
 def insert_documents_with_order(df: pd.DataFrame, new_rows: pd.DataFrame) -> pd.DataFrame:
     """
