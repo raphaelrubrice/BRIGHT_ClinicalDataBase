@@ -1,8 +1,10 @@
 pyside6 
 pandas 
 numpy
+matplotlib
 portalocker
 pypdf
+edspdf
 
 huggingface_hub
 transformers

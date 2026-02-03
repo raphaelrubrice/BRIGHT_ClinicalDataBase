@@ -47,7 +47,7 @@ from src.database.text_extraction import TextExtractor
 from src.database.utils import resolve_eds_model_path, prepare_eds_registry
 from src.ui.utils import SleepInhibitor
 
-CHUNK_SIZE = 10
+CHUNK_SIZE = 1
 
 LIGHT_QSS = """
 QMainWindow, QWidget {
@@ -945,7 +945,7 @@ class MainWindow(QMainWindow):
                         )
 
                 except Exception as e:
-                    errors.append(f"{p.name}: {e}")
+                    errors.append(f"[Extraction] {p.name}: {e}")
 
                 extract_dlg.setValue(r + 1)
                 extract_dlg.setLabelText(
@@ -973,59 +973,68 @@ class MainWindow(QMainWindow):
             )
 
             pending_rows = []
+            pending_names: list[str] = []
             committed_files: list[str] = []
 
-            for i, item in enumerate(candidates, start=1):
-                p = item["path"]
+            try:
+                for i, item in enumerate(candidates, start=1):
+                    p = item["path"]
 
-                try:
-                    pseudo = self.pseudonymizer.pseudonymize(
-                        item["document"],
-                        ipp=item["ipp"],
-                    )
-
-                    pending_rows.append(
-                        {
-                            "IPP": item["ipp"],
-                            "SOURCE_FILE": str(p.resolve()),
-                            "DOCUMENT": item["document"],
-                            "PSEUDO": pseudo,
-                            "ORDER": 1,
-                        }
-                    )
-                    committed_files.append(p.name)
-
-                    if len(pending_rows) >= CHUNK_SIZE:
-                        append_rows_locked(db_path, pd.DataFrame(pending_rows))
-                        df_db = load_db(db_path)
-                        pending_rows.clear()
-
-                        self._set_message(
-                            "info",
-                            f"Committed: {len(committed_files)} | "
-                            f"Skipped: {len(skipped)} | "
-                            f"Errors: {len(errors)}"
+                    try:
+                        pseudo = self.pseudonymizer.pseudonymize(
+                            item["document"],
+                            ipp=item["ipp"],
                         )
 
-                except Exception as e:
-                    errors.append(f"{p.name}: {e}")
+                        pending_rows.append(
+                            {
+                                "IPP": item["ipp"],
+                                "SOURCE_FILE": str(p.resolve()),
+                                "DOCUMENT": item["document"],
+                                "PSEUDO": pseudo,
+                                "ORDER": 1,
+                            }
+                        )
+                        pending_names.append(p.name)
 
-                pseudo_dlg.setValue(i)
-                pseudo_dlg.setLabelText(
-                    self.tr(
-                        "progress_pseudonymizing_step",
-                        done=i,
-                        total=len(candidates),
-                        name=p.name,
+                        if len(pending_rows) >= CHUNK_SIZE:
+                            self._flush_pending(
+                                db_path, pending_rows, pending_names,
+                                committed_files, errors,
+                            )
+                            pending_rows.clear()
+                            pending_names.clear()
+
+                            self._set_message(
+                                "info",
+                                f"Committed: {len(committed_files)} | "
+                                f"Skipped: {len(skipped)} | "
+                                f"Errors: {len(errors)}"
+                            )
+
+                    except Exception as e:
+                        errors.append(f"[Pseudonymization] {p.name}: {e}")
+
+                    pseudo_dlg.setValue(i)
+                    pseudo_dlg.setLabelText(
+                        self.tr(
+                            "progress_pseudonymizing_step",
+                            done=i,
+                            total=len(candidates),
+                            name=p.name,
+                        )
                     )
-                )
-                QApplication.processEvents()
+                    QApplication.processEvents()
 
-            pseudo_dlg.close()
+                # Final flush
+                if pending_rows:
+                    self._flush_pending(
+                        db_path, pending_rows, pending_names,
+                        committed_files, errors,
+                    )
 
-            # Final flush
-            if pending_rows:
-                append_rows_locked(db_path, pd.DataFrame(pending_rows))
+            finally:
+                pseudo_dlg.close()
 
             # -------------------------
             # Pseudo-only copy (if requested)
@@ -1048,6 +1057,17 @@ class MainWindow(QMainWindow):
                         ),
                     )
 
+            # Write commit log (always; serves as audit trail)
+            log_note = ""
+            try:
+                log_path = self._write_commit_log(
+                    db_path, committed_files, skipped, errors,
+                )
+                if errors:
+                    log_note = f"\nCommit log: {log_path}"
+            except Exception:
+                pass  # Never fail the commit over a log write issue
+
             # Final report
             summary = (
                 f"Commit finished.\n\n"
@@ -1055,6 +1075,7 @@ class MainWindow(QMainWindow):
                 f"Skipped (duplicates): {len(skipped)}\n"
                 f"Errors: {len(errors)}\n"
                 f"{pseudo_note}"
+                f"{log_note}"
             )
 
             QMessageBox.information(
@@ -1067,6 +1088,77 @@ class MainWindow(QMainWindow):
             self._set_message("info", summary)
         finally:
             self.sleep_inhibitor.disable()
+
+    def _flush_pending(
+        self,
+        db_path: str,
+        pending_rows: list[dict],
+        pending_names: list[str],
+        committed_files: list[str],
+        errors: list[str],
+    ) -> None:
+        """
+        Try to commit a chunk of rows to the DB.
+        If the chunk fails, fall back to row-by-row commits so that
+        one bad file does not prevent the rest from being saved.
+        Modifies *committed_files* and *errors* in-place.
+        """
+        if not pending_rows:
+            return
+
+        try:
+            append_rows_locked(db_path, pd.DataFrame(pending_rows))
+            committed_files.extend(pending_names)
+        except Exception:
+            # Chunk failed — try rows individually to salvage what we can
+            for row_dict, name in zip(pending_rows, pending_names):
+                try:
+                    append_rows_locked(db_path, pd.DataFrame([row_dict]))
+                    committed_files.append(name)
+                except Exception as row_err:
+                    errors.append(f"[Commit] {name}: {row_err}")
+
+    def _write_commit_log(
+        self,
+        db_path: str,
+        committed: list[str],
+        skipped: list[str],
+        errors: list[str],
+    ) -> Path:
+        """Append a timestamped commit summary to ``<db_stem>_commit_log.txt``."""
+        from datetime import datetime
+
+        p = Path(db_path).expanduser().resolve()
+        log_path = p.with_name(f"{p.stem}_commit_log.txt")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        lines = [
+            f"{'=' * 60}",
+            f"Commit — {timestamp}",
+            f"Database: {p}",
+            f"{'=' * 60}",
+            "",
+            f"Committed: {len(committed)} file(s)",
+        ]
+        for f in committed:
+            lines.append(f"  OK   {f}")
+        lines.append("")
+
+        lines.append(f"Skipped (duplicates): {len(skipped)} file(s)")
+        for f in skipped:
+            lines.append(f"  --   {f}")
+        lines.append("")
+
+        lines.append(f"Errors: {len(errors)}")
+        for e in errors:
+            lines.append(f"  ERR  {e}")
+        lines.append("")
+        lines.append("")
+
+        with open(log_path, "a", encoding="utf-8") as fh:
+            fh.write("\n".join(lines))
+
+        return log_path
 
     def _add_row(self, file_path: str):
         r = self.table.rowCount()
