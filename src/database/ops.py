@@ -124,11 +124,27 @@ def append_rows_locked(db_path: str | Path, new_rows: pd.DataFrame) -> None:
 _LLM_PIPELINE = None
 _LLM_MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"
 
-_LLM_PROMPT = """\
-You are a medical document date extractor. Given the text of a clinical report (in french or english), find the **consultation date** — that is, the date the patient was seen by the doctor and on which the clinical report was made initially (not a birth date, not a print/download date, not a confirmation date, not a date of arrival in hospital, not any other date).
+# _LLM_PROMPT = """\
+# You are a medical document date extractor. Given the text of a clinical report (in french or english), find the **consultation date** — that is, the date the patient was seen by the doctor and on which the clinical report was made initially (not a birth date, not a print/download date, not a confirmation date, not a date of arrival in hospital, not any other date).
+# The consultation date is can usually be found at the beginning or the end of the text. It is not necessarily explicitly indicated as a consultation date. For example having "Paris le DD/MM/YYYY" before the beginning or at the end is the consultation date
+# Return ONLY the date in DD/MM/YYYY format. Nothing else.
+# If no consultation date can be robustly identified, return exactly: Not found
 
-Return ONLY the date in DD/MM/YYYY format. Nothing else.
-If no consultation date can be robustly identified, return exactly: Not found
+# Text:
+# {text}"""
+
+_LLM_PROMPT = """\
+You are a medical document date extractor. Your task is to extract the **consultation date** from the clinical report below (English or French).
+
+### Rules:
+1. The consultation date is the date the report was written (i.e. when the patient was seen by the doctor).
+2. **IGNORE:** Birth dates, discharge dates, print dates, lab result dates, treatment dates etc..
+3. **LOCATION:** Look primarily at the very beginning (header) or very end (footer).
+4. **FORMAT:** Return ONLY the date as DD/MM/YYYY.
+5. **FAILURE:** If no consultation date can be robustly found, return explicitly: Not found
+
+### Constraints:
+- Do not provide any preamble or explanation.
 
 Text:
 {text}"""
@@ -354,7 +370,7 @@ def insert_documents_with_order(df: pd.DataFrame, new_rows: pd.DataFrame) -> pd.
     return concat_db
 
 def extract_IPP_from_path(path):
-    file_name = Path(path).name if isinstance(str, path) else path.name
+    file_name = Path(path).name if isinstance(path, str) else path.name
     matches = re.search(r"8[0-9]{9}", file_name)
     if matches is None:
         raise ValueError(f"No IPP found in file {path}. Must contain a 10 digit id starting by 8.")
@@ -381,7 +397,7 @@ def ensure_correct_IPP(df):
     return df
 
 def extract_ORDER_from_path(path):
-    file_name = Path(path).name if isinstance(str, path) else path.name
+    file_name = Path(path).name if isinstance(path, str) else path.name
     if "_cs.pdf" in file_name:
         return 2
     else:
