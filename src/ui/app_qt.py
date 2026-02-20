@@ -72,7 +72,7 @@ QTableWidget {
     border: 1px solid #cfcfcf;
 }
 QHeaderView::section {
-    background: #f2f2f2;
+    background: #ffffff;
     color: #111111;
     padding: 6px;
     border: 0px;
@@ -143,7 +143,7 @@ QPushButton:disabled {
     border-color: #333333;
 }
 QCheckBox {
-    color: #f1f1f1;
+    color: #e6e6ff;
 }
 """
 
@@ -266,6 +266,15 @@ I18N = {
         # QMessageBox titles
         "box_info": "Info",
         "box_error": "Error",
+
+        # selection / removal
+        "btn_select_mode": "Select file(s)",
+        "btn_cancel_select": "Cancel",
+        "btn_remove_selected": "Remove selected",
+        "chk_select_all": "Select all",
+        "dlg_confirm_remove_title": "Confirm removal",
+        "dlg_confirm_remove_body": "Remove {n} selected document(s) from the list?",
+        "no_selection": "No documents are selected.",
     },
     "fr": {
         "window_title": "Base Clinique - Import de documents",
@@ -370,6 +379,15 @@ I18N = {
 
         "box_info": "Info",
         "box_error": "Erreur",
+
+        # selection / removal
+        "btn_select_mode": "Sélectionner fichier",
+        "btn_cancel_select": "Annuler",
+        "btn_remove_selected": "Supprimer la sélection",
+        "chk_select_all": "Tout sélectionner",
+        "dlg_confirm_remove_title": "Confirmer la suppression",
+        "dlg_confirm_remove_body": "Supprimer {n} document(s) sélectionné(s) de la liste ?",
+        "no_selection": "Aucun document sélectionné.",
     },
 }
 
@@ -494,6 +512,20 @@ class MainWindow(QMainWindow):
         self.chk_pseudo_only.setChecked(True)
         self.chk_pseudo_only.setToolTip(self.tr("tip_pseudo_only"))
 
+        # Selection mode controls
+        self._selection_mode = False
+
+        self.btn_select_mode = QPushButton(self.tr("btn_select_mode"))
+        self.btn_select_mode.clicked.connect(self._toggle_selection_mode)
+
+        self.chk_select_all = QCheckBox(self.tr("chk_select_all"))
+        self.chk_select_all.stateChanged.connect(self._toggle_select_all)
+        self.chk_select_all.setVisible(False)
+
+        self.btn_remove_selected = QPushButton(self.tr("btn_remove_selected"))
+        self.btn_remove_selected.clicked.connect(self._remove_selected)
+        self.btn_remove_selected.setVisible(False)
+
         # Table: one row per file, with IPP + ORDER entry
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(self.tr("table_headers"))
@@ -517,6 +549,9 @@ class MainWindow(QMainWindow):
 
         actions = QHBoxLayout()
         actions.addWidget(self.btn_add_docs)
+        actions.addWidget(self.btn_select_mode)
+        actions.addWidget(self.chk_select_all)
+        actions.addWidget(self.btn_remove_selected)
         actions.addStretch(1)
         actions.addWidget(self.chk_pseudo_only)
         actions.addWidget(self.btn_commit)
@@ -574,6 +609,13 @@ class MainWindow(QMainWindow):
         self.btn_commit.setText(self.tr("btn_commit"))
         self.chk_pseudo_only.setText(self.tr("chk_pseudo_only"))
         self.chk_pseudo_only.setToolTip(self.tr("tip_pseudo_only"))
+
+        # Selection mode controls
+        self.btn_select_mode.setText(
+            self.tr("btn_cancel_select") if self._selection_mode else self.tr("btn_select_mode")
+        )
+        self.chk_select_all.setText(self.tr("chk_select_all"))
+        self.btn_remove_selected.setText(self.tr("btn_remove_selected"))
 
         # Table headers
         self.table.setHorizontalHeaderLabels(self.tr("table_headers"))
@@ -1160,6 +1202,80 @@ class MainWindow(QMainWindow):
 
         return log_path
 
+    # ------------------------------------------------------------------
+    # Selection mode: select / deselect rows, then remove selected
+    # ------------------------------------------------------------------
+
+    def _toggle_selection_mode(self) -> None:
+        """Enter or leave selection mode."""
+        self._selection_mode = not self._selection_mode
+
+        if self._selection_mode:
+            # Entering selection mode — add checkboxes to every row's column-0 item
+            self.btn_select_mode.setText(self.tr("btn_cancel_select"))
+            self.chk_select_all.setVisible(True)
+            self.btn_remove_selected.setVisible(True)
+            self.chk_select_all.setChecked(True)
+
+            for r in range(self.table.rowCount()):
+                it = self.table.item(r, 0)
+                if it is not None:
+                    it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+                    it.setCheckState(Qt.Checked)
+        else:
+            # Leaving selection mode — strip checkboxes
+            self.btn_select_mode.setText(self.tr("btn_select_mode"))
+            self.chk_select_all.setVisible(False)
+            self.btn_remove_selected.setVisible(False)
+
+            for r in range(self.table.rowCount()):
+                it = self.table.item(r, 0)
+                if it is not None:
+                    it.setFlags(it.flags() & ~Qt.ItemIsUserCheckable)
+                    it.setData(Qt.CheckStateRole, None)
+
+    def _toggle_select_all(self, state: int) -> None:
+        """Check or uncheck every row when the 'Select all' checkbox changes."""
+        if not self._selection_mode:
+            return
+        target = Qt.Checked if state == Qt.Checked.value else Qt.Unchecked
+        for r in range(self.table.rowCount()):
+            it = self.table.item(r, 0)
+            if it is not None:
+                it.setCheckState(target)
+
+    def _remove_selected(self) -> None:
+        """Remove rows whose checkbox is checked, after user confirmation."""
+        selected_rows = []
+        for r in range(self.table.rowCount()):
+            it = self.table.item(r, 0)
+            if it is not None and it.checkState() == Qt.Checked:
+                selected_rows.append(r)
+
+        if not selected_rows:
+            self._info(self.tr("no_selection"))
+            return
+
+        reply = QMessageBox.question(
+            self,
+            self.tr("dlg_confirm_remove_title"),
+            self.tr("dlg_confirm_remove_body", n=len(selected_rows)),
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+
+        if reply != QMessageBox.Yes:
+            return
+
+        # Remove from bottom to top so indices stay valid
+        for r in reversed(selected_rows):
+            self.table.removeRow(r)
+
+        # Leave selection mode after removal
+        self._toggle_selection_mode()
+
+    # ------------------------------------------------------------------
+
     def _add_row(self, file_path: str):
         r = self.table.rowCount()
         self.table.insertRow(r)
@@ -1167,6 +1283,11 @@ class MainWindow(QMainWindow):
         fp_item = QTableWidgetItem(file_path)
         fp_item.setFlags(fp_item.flags() ^ Qt.ItemIsEditable)
         self.table.setItem(r, 0, fp_item)
+
+        # If currently in selection mode, give the new row a checkbox too
+        if self._selection_mode:
+            fp_item.setFlags(fp_item.flags() | Qt.ItemIsUserCheckable)
+            fp_item.setCheckState(Qt.Unchecked)
 
         # IPP (auto, read-only)
         ipp_item = QTableWidgetItem("—")
