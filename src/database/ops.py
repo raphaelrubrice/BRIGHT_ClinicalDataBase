@@ -5,6 +5,9 @@ from typing import Optional
 
 import re
 import pandas as pd
+import logging
+
+logger = logging.getLogger(__name__)
 
 from src.database.security import get_or_create_salt_file
 
@@ -115,76 +118,185 @@ def append_rows_locked(db_path: str | Path, new_rows: pd.DataFrame) -> None:
         df2 = insert_documents_with_order(df, new_rows)
         save_db(df2, db_path)
 
-def extract_consult_date(text, return_num=False):
-    # Mapping French month names to numbers
-    months_map = {
-        "janvier": 1, "février": 2, "mars": 3, "avril": 4,
-        "mai": 5, "juin": 6, "juillet": 7, "août": 8,
-        "septembre": 9, "octobre": 10, "novembre": 11, "décembre": 12,
-        # Handling potential encoding/spelling variations
-        "fevrier": 2, "aout": 8, "decembre": 12
-    }
+# ---------------------------------------------------------------------------
+# LLM singleton – lazy-loaded on first fallback call
+# ---------------------------------------------------------------------------
+_LLM_PIPELINE = None
+_LLM_MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"
 
-    # UPDATED REGEX PATTERN
-    # The (?i:) flag at the start handles case-insensitivity for the prefix
-    pattern = r"(?i:((consultation.+du(|.))|(Paris, le )))(((([0-9]{4})|([0-9]{2}))\/[0-9]{2}\/(([0-9]{4})|([0-9]{2})))|([0-9]{2} \D+ [0-9]{4}))"
-    
-    matches = re.search(pattern, text, re.MULTILINE)
+_LLM_PROMPT = """\
+You are a medical document date extractor. Given the text of a clinical report (in french or english), find the **consultation date** — that is, the date the patient was seen by the doctor and on which the clinical report was made initially (not a birth date, not a print/download date, not a confirmation date, not a date of arrival in hospital, not any other date).
 
-    if matches is None:
-        raise ValueError("Unable to find a date in supported formats for at least one row.")
+Return ONLY the date in DD/MM/YYYY format. Nothing else.
+If no consultation date can be robustly identified, return exactly: Not found
 
-    # UDPATED GROUP INDEX
-    # Old regex date was group 5. In this new regex structure:
-    # Group 1: ((consultation.du.)|(Paris, le ))
-    # Group 2: (consultation.du.)
-    # Group 3: (|.)
-    # Group 4: (Paris, le )
-    # Group 5: The date string
-    raw_date = matches.group(5)
+Text:
+{text}"""
 
-    num_list = []
+def _get_llm_pipeline():
+    """Lazy-load a lightweight text-generation pipeline (CPU-friendly)."""
+    global _LLM_PIPELINE
+    if _LLM_PIPELINE is not None:
+        return _LLM_PIPELINE
 
-    # Logic to handle "DD/MM/YYYY" or similar numeric formats
+    try:
+        from transformers import pipeline as hf_pipeline
+        import torch
+    except ImportError as exc:
+        raise ImportError(
+            "transformers and torch are required for the LLM date-extraction "
+            "fallback.  Install with:  pip install transformers torch"
+        ) from exc
+
+    logger.info("Loading LLM model %s for date extraction fallback …", _LLM_MODEL_ID)
+    _LLM_PIPELINE = hf_pipeline(
+        "text-generation",
+        model=_LLM_MODEL_ID,
+        torch_dtype=torch.float32,   # CPU-safe; use float16 if GPU available
+        device_map="auto",
+        max_new_tokens=30,
+    )
+    logger.info("LLM model loaded.")
+    return _LLM_PIPELINE
+
+
+def _extract_consult_date_llm(text: str) -> str:
+    """
+    Ask a local LLM to find the consultation date.
+
+    Returns the raw date string in DD/MM/YYYY format,
+    or raises ValueError if the model cannot find one.
+    """
+    pipe = _get_llm_pipeline()
+
+    messages = [
+        {"role": "user", "content": _LLM_PROMPT.format(text=text[:2000])},  # truncate to stay within context
+    ]
+    result = pipe(messages, max_new_tokens=30)
+    answer = result[0]["generated_text"][-1]["content"].strip()
+
+    # Check for explicit "not found"
+    if "not found" in answer.lower():
+        raise ValueError(
+            "LLM could not robustly identify a consultation date in the document."
+        )
+
+    # Parse a DD/MM/YYYY date from the answer
+    match = re.search(r"(\d{1,2})/(\d{1,2})/(\d{4})", answer)
+    if match is None:
+        raise ValueError(
+            f"LLM response did not contain a valid DD/MM/YYYY date. Got: '{answer}'"
+        )
+
+    day, month, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+    # Basic sanity check
+    if not (1 <= month <= 12 and 1 <= day <= 31 and 1900 <= year <= 2100):
+        raise ValueError(
+            f"LLM returned an implausible date: {day}/{month}/{year}"
+        )
+
+    return f"{day}/{month}/{year}"
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+# Mapping French month names to numbers
+_MONTHS_MAP = {
+    "janvier": 1, "février": 2, "mars": 3, "avril": 4,
+    "mai": 5, "juin": 6, "juillet": 7, "août": 8,
+    "septembre": 9, "octobre": 10, "novembre": 11, "décembre": 12,
+    # common accent-free variants
+    "fevrier": 2, "aout": 8, "decembre": 12,
+}
+
+
+def _extract_consult_date_regex(text: str) -> Optional[str]:
+    """
+    Try to extract the raw date string from *text* using the rule-based regex.
+    Returns the raw date substring on success, or ``None`` on failure.
+    """
+    pattern =(
+        r"(?i:((consultation.+du(|.))|(Paris(,|) le )))"
+        r"(((([0-9]{4})|([0-9]{2}))\/[0-9]{2}\/(([0-9]{4})|([0-9]{2})))"
+        r"|([0-9]{2} \D+ [0-9]{4}))"
+    )
+    match = re.search(pattern, text, re.MULTILINE)
+    if match is None:
+        return None
+    if match.group(6) is not None:
+        return match.group(6)
+    return match.group(5)
+
+
+def _parse_raw_date(raw_date: str) -> list[int]:
+    """
+    Turn a raw date string (``DD/MM/YYYY``, ``YYYY/MM/DD``, or
+    ``DD Month YYYY``) into a **descending-sorted** ``[year, ?, ?]`` list
+    of three integers, consistent with the original logic.
+    """
     if "/" in raw_date:
-        num_list = [int(num) for num in raw_date.split("/")]
-    
-    # Logic to handle "DD Month YYYY" (e.g., "17 Janvier 2023")
+        num_list = [int(n) for n in raw_date.split("/")]
     else:
-        parts = raw_date.split()  # Splits by space
+        parts = raw_date.split()
         day = int(parts[0])
         year = int(parts[2])
         month_str = parts[1].lower()
-        
-        if month_str in months_map:
-            month = months_map[month_str]
-        else:
+        if month_str not in _MONTHS_MAP:
             raise ValueError(f"Could not map month name '{parts[1]}' to a number.")
-            
-        num_list = [day, month, year]
+        num_list = [day, _MONTHS_MAP[month_str], year]
 
-    # Sort descending (Year, Max(M,D), Min(M,D))
-    # This ensures Year is index 0.
-    num_list = sorted(num_list, reverse=True)
+    return sorted(num_list, reverse=True)
 
-    # Determine Day/Month order and format as YYYYMMDD string components
-    # If the second largest number is > 12, it must be the Day -> [Year, Day, Month]
-    # We want output format [Year, Month, Day]
+
+def _format_date(num_list: list[int], return_num: bool):
+    """
+    Format the descending-sorted ``[year, a, b]`` list into the expected
+    output form.
+    """
+    # Determine Day/Month ordering
     if num_list[1] > 12:
         out_list = [str(num_list[0]), str(num_list[2]), str(num_list[1])]
     else:
-        # Otherwise assume [Year, Month, Day]
         out_list = [str(num_list[0]), str(num_list[1]), str(num_list[2])]
 
-    # Pad with leading zeros where necessary for the numeric return
-    out_list = [el if len(el) >= 2 else '0' + el for el in out_list]
-    
-    # Return integer format (YYYYMMDD)
-    if return_num:
-        return int(''.join(out_list))
+    out_list = [el if len(el) >= 2 else "0" + el for el in out_list]
 
-    # Return string format (Sorted: YYYY/MM/DD or YYYY/DD/MM based on the sort logic above)
-    return '/'.join([str(el) for el in num_list])
+    if return_num:
+        return int("".join(out_list))
+
+    return "/".join(str(el) for el in num_list)
+
+def extract_consult_date(text: str, return_num: bool = False):
+    """
+    Extract consultation date from clinical document text.
+
+    Strategy:
+        1) Rule-based regex extraction (fast, precise).
+        2) If rule-based fails → LLM fallback via a local lightweight model.
+
+    Parameters
+    ----------
+    text : str
+        The full document text.
+    return_num : bool
+        If True return an int YYYYMMDD; otherwise a string "YYYY/MM/DD"
+        (sorted descending components).
+    """
+    # ---- 1) Rule-based approach (unchanged logic) ----
+    raw_date = _extract_consult_date_regex(text)
+
+    # ---- 2) LLM fallback ----
+    if raw_date is None:
+        logger.info("Rule-based date extraction failed; falling back to LLM.")
+        raw_date = _extract_consult_date_llm(text)  # "DD/MM/YYYY" or raises
+
+    # ---- 3) Parse into num_list (shared by both branches) ----
+    num_list = _parse_raw_date(raw_date)
+
+    # ---- 4) Format output ----
+    return _format_date(num_list, return_num)
 
 def insert_documents_with_order(df: pd.DataFrame, new_rows: pd.DataFrame) -> pd.DataFrame:
     """
@@ -252,10 +364,14 @@ def extract_IPP_from_document(text):
     """
     Retrieves the IPP from the INS/NIR line.
     """
-    matches = re.search(r" 8[0-9]{9} ", text)
+    matches = re.search(r"( 8[0-9]{9}( |))|(IPP: 8[0-9]{9})", text)
     if matches is None:
         raise ValueError(f"No IPP found in document.")
-    return int(matches.group(0)[1:-1])
+    
+    # Extract just the 10-digit IPP number (8 followed by 9 digits)
+    matched_text = matches.group(0)
+    ipp_match = re.search(r"8[0-9]{9}", matched_text)
+    return int(ipp_match.group(0))
 
 def ensure_correct_IPP(df):
     """
@@ -276,7 +392,7 @@ if __name__ == "__main__":
 Compte-Rendu de CONSULTATION ONCO-SOMMEILDU01/12/2025
 Madame LAURENGE ep. LEPRINCE Alice, née le 18/05/1989, âgée de 36 ans, a été vue en
 consultation.""", """Références : ALE/ALE
-Compte-Rendu de Consultation du 2024/12/20
+Paris le 2024/12/20
 Madame LAURENGE ep. LEPRINCE Alice, née le 18/05/1989, âgée de 36 ans, a été vue en
 consultation.""", """Références : ALE/ALE
 Paris, le 11 Décembre 2025

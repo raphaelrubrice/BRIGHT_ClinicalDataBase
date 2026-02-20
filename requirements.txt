@@ -9,3 +9,8 @@ edspdf
 huggingface_hub
 transformers
 datasets
+
+# OCR
+Pillow
+surya-ocr
+easyocr
