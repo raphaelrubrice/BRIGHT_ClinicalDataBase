@@ -53,6 +53,8 @@ class ExtractionPipeline:
         Ollama model name (default ``"qwen3:4b-instruct"``).
     ollama_base_url : str
         Ollama server URL.
+    ollama_timeout : int
+        Request timeout in seconds for Ollama calls (default 600).
     use_llm : bool
         Whether to enable Tier 2 LLM extraction. When ``False``,
         only Tier 1 (rule-based) extraction is performed.
@@ -64,6 +66,7 @@ class ExtractionPipeline:
         self,
         ollama_model: str = "qwen3:4b-instruct",
         ollama_base_url: str = "http://localhost:11434",
+        ollama_timeout: int = 600,
         use_llm: bool = True,
         use_negation: bool = True,
     ):
@@ -90,6 +93,7 @@ class ExtractionPipeline:
         self._ollama_client: Optional[OllamaClient] = None
         self._ollama_model = ollama_model
         self._ollama_base_url = ollama_base_url
+        self._ollama_timeout = ollama_timeout
 
     # -- Lazy Ollama client --------------------------------------------------
 
@@ -103,6 +107,7 @@ class ExtractionPipeline:
                 self._ollama_client = OllamaClient(
                     model=self._ollama_model,
                     base_url=self._ollama_base_url,
+                    timeout=self._ollama_timeout,
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.error("Failed to create OllamaClient: %s", exc)
