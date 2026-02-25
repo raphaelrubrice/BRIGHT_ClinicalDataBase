@@ -1,4 +1,4 @@
-import os
+import argparse
 import csv
 import json
 import logging
@@ -16,13 +16,32 @@ from src.aggregation.patient_timeline import build_patient_timeline
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Paths
-BASE_DIR = Path(r"C:\Users\rapha\OneDrive\Bureau\MVA\BRIGHT\test_annotated")
-DB_PATH = BASE_DIR / "RE MAJ Infos cliniques Braincap" / "clinical_db_pseudo_only.csv"
-CLI_ANN_PATH = BASE_DIR / "ANNOTATIONS_RE MAJ Infos cliniques Braincap" / "REQ_CLINIQUE.csv"
-BIO_ANN_PATH = BASE_DIR / "ANNOTATIONS_RE MAJ Infos cliniques Braincap" / "REQ_BIO.csv"
-OUTPUT_DIR = Path("demo_output")
-OUTPUT_DIR.mkdir(exist_ok=True)
+# Default paths
+FILEPATH = Path(__file__).resolve()
+REPO_ROOT = FILEPATH.parent.parent
+PARENT_REPO = REPO_ROOT.parent
+DEFAULT_BASE_DIR = PARENT_REPO / "test_annotated"
+DEFAULT_DB_PATH = DEFAULT_BASE_DIR / "RE MAJ Infos cliniques Braincap" / "clinical_db_pseudo_only.csv"
+DEFAULT_CLI_ANN_PATH = DEFAULT_BASE_DIR / "ANNOTATIONS_RE MAJ Infos cliniques Braincap" / "REQ_CLINIQUE.csv"
+DEFAULT_BIO_ANN_PATH = DEFAULT_BASE_DIR / "ANNOTATIONS_RE MAJ Infos cliniques Braincap" / "REQ_BIO.csv"
+DEFAULT_OUTPUT_DIR = REPO_ROOT / "demo_output"
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Full demo pipeline: extraction, benchmark & timeline.")
+    parser.add_argument("--model", type=str, default="qwen3:0.6b",
+                        help="Ollama model to use (default: qwen3:0.6b)")
+    parser.add_argument("--timeout", type=int, default=None,
+                        help="Request timeout in seconds for the extraction pipeline")
+    parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH,
+                        help="Path to the document database CSV")
+    parser.add_argument("--cli-annotations", type=Path, default=DEFAULT_CLI_ANN_PATH,
+                        help="Path to clinical annotations CSV (REQ_CLINIQUE)")
+    parser.add_argument("--bio-annotations", type=Path, default=DEFAULT_BIO_ANN_PATH,
+                        help="Path to biological annotations CSV (REQ_BIO)")
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_DIR,
+                        help="Path to output directory (created if missing)")
+    return parser.parse_args()
 
 
 def load_transposed_annotations(path: Path) -> dict[str, list[dict[str, str]]]:
@@ -114,18 +133,29 @@ def merge_annotation_lists(
 
 
 def main():
-    logger.info("Starting Full Demo Pipeline Test")
+    args = parse_args()
 
-    if not DB_PATH.exists() or not CLI_ANN_PATH.exists() or not BIO_ANN_PATH.exists():
-        logger.error("Missing necessary data files in test_annotated directory.")
+    db_path = args.db
+    cli_ann_path = args.cli_annotations
+    bio_ann_path = args.bio_annotations
+    output_dir = args.output
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Starting Full Demo Pipeline Test")
+    logger.info("Model: %s | Timeout: %s | DB: %s | Output: %s",
+                args.model, args.timeout, db_path, output_dir)
+
+    if not db_path.exists() or not cli_ann_path.exists() or not bio_ann_path.exists():
+        logger.error("Missing necessary data files. Check paths:\n  DB: %s\n  CLI: %s\n  BIO: %s",
+                      db_path, cli_ann_path, bio_ann_path)
         return
 
     # ------------------------------------------------------------------
     # 1. Load ground truth annotations (preserving per-column structure)
     # ------------------------------------------------------------------
     logger.info("Loading ground truth annotations...")
-    cli_annotations = load_transposed_annotations(CLI_ANN_PATH)
-    bio_annotations = load_transposed_annotations(BIO_ANN_PATH)
+    cli_annotations = load_transposed_annotations(cli_ann_path)
+    bio_annotations = load_transposed_annotations(bio_ann_path)
     merged_annotations = merge_annotation_lists(cli_annotations, bio_annotations)
 
     total_ann_cols = sum(len(v) for v in merged_annotations.values())
@@ -138,7 +168,7 @@ def main():
     # 2. Load documents database
     # ------------------------------------------------------------------
     logger.info("Loading documents database...")
-    docs_db = pd.read_csv(DB_PATH, sep=',', dtype=str)
+    docs_db = pd.read_csv(db_path, sep=',', dtype=str)
     docs_db = docs_db.dropna(subset=['PSEUDO'])
     logger.info("Found %d text documents.", len(docs_db))
 
@@ -155,7 +185,10 @@ def main():
     # 4. Initialise pipeline
     # ------------------------------------------------------------------
     logger.info("Initializing ExtractionPipeline...")
-    pipeline = ExtractionPipeline(ollama_model="qwen3:0.6b")
+    pipeline_kwargs = {"ollama_model": args.model}
+    if args.timeout is not None:
+        pipeline_kwargs["timeout"] = args.timeout
+    pipeline = ExtractionPipeline(**pipeline_kwargs)
 
     # ------------------------------------------------------------------
     # 5. Build gold-standard JSONs and run benchmark
@@ -224,9 +257,9 @@ def main():
         )
 
         logger.info("Running evaluation benchmark...")
-        benchmark_metrics = run_benchmark(str(temp_gs_dir), pipeline, str(OUTPUT_DIR))
+        benchmark_metrics = run_benchmark(str(temp_gs_dir), pipeline, str(output_dir))
 
-        logger.info("Benchmark completed. Metrics saved to %s/benchmark_metrics.csv", OUTPUT_DIR)
+        logger.info("Benchmark completed. Metrics saved to %s/benchmark_metrics.csv", output_dir)
         logger.info("\nOverall Benchmark Head:\n%s", benchmark_metrics.head(10))
 
     # ------------------------------------------------------------------
@@ -239,7 +272,7 @@ def main():
     try:
         timeline_df = build_patient_timeline(sample_patient, patient_docs, pipeline)
         logger.info("Timeline generation test successful.")
-        timeline_df.to_csv(OUTPUT_DIR / f"timeline_{sample_patient}.csv", index=False)
+        timeline_df.to_csv(output_dir / f"timeline_{sample_patient}.csv", index=False)
     except Exception as e:
         logger.error("Timeline generation failed: %s", e)
 
