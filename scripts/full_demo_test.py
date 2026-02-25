@@ -1,12 +1,18 @@
 import argparse
 import csv
 import json
+import sys
 import logging
 from collections import defaultdict
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pandas as pd
+
+# Make sure find custom modules
+FILEPATH = Path(__file__).resolve()
+REPO_ROOT = FILEPATH.parent.parent
+sys.path.append(str(REPO_ROOT))
 
 from src.extraction.pipeline import ExtractionPipeline
 from src.evaluation.benchmark import run_benchmark
@@ -17,8 +23,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Default paths
-FILEPATH = Path(__file__).resolve()
-REPO_ROOT = FILEPATH.parent.parent
 PARENT_REPO = REPO_ROOT.parent
 DEFAULT_BASE_DIR = PARENT_REPO / "test_annotated"
 DEFAULT_DB_PATH = DEFAULT_BASE_DIR / "RE MAJ Infos cliniques Braincap" / "clinical_db_pseudo_only.csv"
