@@ -343,7 +343,7 @@ class DocumentClassifier:
     def __init__(
         self,
         ollama_client: object | None = None,
-        ollama_model: str = "qwen3:4b",
+        ollama_model: str = "qwen3:4b-instruct",
         keywords: dict[str, dict[str, list[str]]] | None = None,
         ambiguity_threshold: int = _AMBIGUITY_THRESHOLD,
     ) -> None:

@@ -76,7 +76,7 @@ class OllamaClient:
     Parameters
     ----------
     model : str
-        Model name (e.g. ``"qwen3:4b"``).
+        Model name (e.g. ``"qwen3:4b-instruct"``).
     base_url : str
         Ollama server URL (default ``http://localhost:11434``).
     timeout : int

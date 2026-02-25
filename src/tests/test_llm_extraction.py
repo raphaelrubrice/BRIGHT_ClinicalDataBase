@@ -43,7 +43,7 @@ from src.extraction.schema import ExtractionValue
 def mock_client() -> MagicMock:
     """Return a mocked OllamaClient."""
     client = MagicMock(spec=OllamaClient)
-    client.model = "qwen3:4b"
+    client.model = "qwen3:4b-instruct"
     return client
 
 
@@ -57,7 +57,7 @@ def _make_ollama_response(
     return OllamaResponse(
         content=content,
         parsed_json=parsed_json,
-        model="qwen3:4b",
+        model="qwen3:4b-instruct",
     )
 
 
