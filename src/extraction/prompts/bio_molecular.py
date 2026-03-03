@@ -19,11 +19,10 @@ MOLECULAR_SYSTEM = """\
 Tu es un extracteur d'informations médicales spécialisé en biologie moléculaire \
 neuro-oncologique. Tu extrais les statuts moléculaires (mutations, variants, \
 méthylation) à partir de comptes rendus français. Tu ne FABRIQUES JAMAIS de données. \
-Si une information n'est pas mentionnée dans le texte, retourne null.\
+Si une information n'est pas mentionnée dans le texte, retourne null. /no_think\
 """
 
 MOLECULAR_PROMPT = """\
-/no_think
 Extrais les résultats de biologie moléculaire du texte suivant.
 
 Pour chaque gène, retourne :
@@ -57,6 +56,22 @@ Distingue les résultats actuels des résultats historiques.
 - Si un variant spécifique est mentionné (ex: "IDH1 R132H"), retourne "mute"
 - Pour MGMT : "méthylé" → "methyle", "non méthylé" → "non methyle"
 - "pas de mutation" → "wt"
+
+### Exemples :
+
+Texte : "Biologie moléculaire : mutations TP53, PTEN, TERT, BRAF V600E, pas de mutation IDH1, IDH2 wt, MGMT non méthylé."
+Réponse :
+{"values": {"mol_p53": "mute", "mol_pten": "mute", "mol_tert": "mute",
+            "mol_braf": "V600E", "mol_idh1": "wt", "mol_idh2": "wt",
+            "mol_mgmt": "non methyle", "mol_CDKN2A": null, "mol_h3f3a": null,
+            "mol_hist1h3b": null, "mol_fgfr1": null, "mol_egfr_mut": null,
+            "mol_prkca": null, "mol_cic": null, "mol_fubp1": null, "mol_atrx": null},
+ "_source": {"mol_p53": "mutations TP53", "mol_pten": "mutations ... PTEN",
+             "mol_braf": "BRAF V600E", "mol_idh1": "pas de mutation IDH1",
+             "mol_idh2": "IDH2 wt", "mol_mgmt": "MGMT non méthylé"}}
+
+RAPPEL CRITIQUE : Il vaut TOUJOURS mieux retourner null qu'une valeur
+dont tu n'es pas sûr. Ne déduis pas, n'invente pas.
 
 ### Texte :
 {section_text}

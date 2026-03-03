@@ -98,6 +98,29 @@ SECTION_PATTERNS: dict[str, re.Pattern[str]] = {
         r"[ \t]*[:.\-—–]*[ \t]*$",
         _RE_FLAGS,
     ),
+    "equipe_soignante": re.compile(
+        r"^[ \t]*(?:[eé]quipe\s+soignante|m[eé]decins?\s+r[eé]f[eé]rents?"
+        r"|r[eé]f[eé]rents?|intervenants?)"
+        r"[ \t]*[:.\-—–]*[ \t]*$",
+        _RE_FLAGS,
+    ),
+    "demographics": re.compile(
+        r"^[ \t]*(?:renseignements?\s+cliniques?|donn[eé]es?\s+patient"
+        r"|identit[eé])"
+        r"[ \t]*[:.\-—–]*[ \t]*$",
+        _RE_FLAGS,
+    ),
+    "summary": re.compile(
+        r"^[ \t]*(?:synth[eè]se|r[eé]sum[eé]|bilan\s+actuel|discussion)"
+        r"[ \t]*[:.\-—–]*[ \t]*$",
+        _RE_FLAGS,
+    ),
+    "rcp_decision": re.compile(
+        r"^[ \t]*(?:d[eé]cision\s+RCP|proposition\s+th[eé]rapeutique\s+RCP"
+        r"|avis\s+de\s+la\s+RCP)"
+        r"[ \t]*[:.\-—–]*[ \t]*$",
+        _RE_FLAGS,
+    ),
 }
 
 # A more lenient set of patterns for inline detection (when strict heading
@@ -147,6 +170,25 @@ SECTION_PATTERNS_LENIENT: dict[str, re.Pattern[str]] = {
     "radiology": re.compile(
         r"^[ \t]*(?:imagerie|IRM(?:\s+c[eé]r[eé]brale)?|scanner(?:\s+c[eé]r[eé]bral)?"
         r"|radiologie|bilan\s+radiologique)",
+        _RE_FLAGS,
+    ),
+    "equipe_soignante": re.compile(
+        r"^[ \t]*(?:[eé]quipe\s+soignante|m[eé]decins?\s+r[eé]f[eé]rents?"
+        r"|r[eé]f[eé]rents?|intervenants?)",
+        _RE_FLAGS,
+    ),
+    "demographics": re.compile(
+        r"^[ \t]*(?:renseignements?\s+cliniques?|donn[eé]es?\s+patient"
+        r"|identit[eé])",
+        _RE_FLAGS,
+    ),
+    "summary": re.compile(
+        r"^[ \t]*(?:synth[eè]se|r[eé]sum[eé]|bilan\s+actuel|discussion)",
+        _RE_FLAGS,
+    ),
+    "rcp_decision": re.compile(
+        r"^[ \t]*(?:d[eé]cision\s+RCP|proposition\s+th[eé]rapeutique\s+RCP"
+        r"|avis\s+de\s+la\s+RCP)",
         _RE_FLAGS,
     ),
 }
@@ -222,6 +264,23 @@ SECTION_TO_FEATURES: dict[str, list[str]] = {
         "contraste_1er_symptome", "oedeme_1er_symptome", "calcif_1er_symptome",
         "tumeur_lateralite", "tumeur_position",
         "progress_radiologique",
+    ],
+
+    # --- New sections (Phase 4.1) ---
+    "equipe_soignante": [
+        "neuroncologue", "neurochirurgien", "radiotherapeute",
+        "localisation_radiotherapie", "localisation_chir",
+    ],
+    "demographics": [
+        "nip", "date_de_naissance", "sexe", "activite_professionnelle",
+    ],
+    "summary": [
+        "diag_histologique", "diag_integre", "grade",
+        "evol_clinique", "chimios", "rx_dose",
+    ],
+    "rcp_decision": [
+        "chimios", "type_chirurgie", "rx_dose",
+        "essai_therapeutique", "optune",
     ],
 }
 

@@ -23,11 +23,10 @@ Tu es un extracteur d'informations médicales spécialisé en neuro-oncologie. \
 Tu extrais les informations d'évolution clinique, de progression tumorale, \
 de localisation tumorale et de suivi à partir de comptes rendus de consultation \
 et de RCP français. Tu ne FABRIQUES JAMAIS de données. Si une information \
-n'est pas mentionnée dans le texte, retourne null.\
+n'est pas mentionnée dans le texte, retourne null. /no_think\
 """
 
 EVOLUTION_PROMPT = """\
-/no_think
 Extrais les informations d'évolution clinique et de suivi du texte suivant.
 
 Pour chaque champ, retourne :
@@ -63,6 +62,31 @@ Si une information n'est PAS mentionnée dans le texte, retourne null. Ne FABRIQ
 - "bilatéral", "deux hémisphères" → tumeur_lateralite = "bilateral"
 - "médian", "ligne médiane", "vermis" → tumeur_lateralite = "median"
 - Normaliser les dates au format JJ/MM/AAAA
+
+### Règles sur les données pseudonymisées :
+- Les dates pseudonymisées (AAAA-??-??) doivent être retournées comme null.
+- Les lieux sous forme [HOPITAL_xxx] ou [VILLE_xxx] doivent être retournés comme null.
+- Ne retourne JAMAIS un token de type [XXX_yyy] comme valeur extraite.
+
+### Exemples :
+
+Texte : "Patient vu le 15/03/2025 en consultation de suivi. Première récidive diagnostiquée le 01/02/2025. Tumeur frontale droite. Décédé le 20/03/2025."
+Réponse :
+{"values": {"dn_date": "15/03/2025", "evol_clinique": "P1",
+            "date_progression": "01/02/2025", "tumeur_lateralite": "droite",
+            "tumeur_position": "frontale droite", "date_deces": "20/03/2025",
+            "progress_clinique": null, "progress_radiologique": null, "infos_deces": null},
+ "_source": {"dn_date": "vu le 15/03/2025", "evol_clinique": "Première récidive",
+             "date_progression": "diagnostiquée le 01/02/2025",
+             "tumeur_lateralite": "droite", "tumeur_position": "frontale droite",
+             "date_deces": "Décédé le 20/03/2025"}}
+
+Pour les dates : normalise au format JJ/MM/AAAA.
+- Dates pseudonymisées (AAAA-??-??) → null
+- "12 février 2024" → "12/02/2024"
+
+RAPPEL CRITIQUE : Il vaut TOUJOURS mieux retourner null qu'une valeur
+dont tu n'es pas sûr. Ne déduis pas, n'invente pas.
 
 ### Texte :
 {section_text}

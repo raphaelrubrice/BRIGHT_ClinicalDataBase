@@ -24,11 +24,10 @@ Tu extrais les informations thérapeutiques (chirurgie, chimiothérapie, \
 radiothérapie, traitements adjuvants) à partir de comptes rendus de \
 consultation et de RCP français. Tu distingues les traitements en cours \
 des traitements historiques. Tu ne FABRIQUES JAMAIS de données. \
-Si une information n'est pas mentionnée dans le texte, retourne null.\
+Si une information n'est pas mentionnée dans le texte, retourne null. /no_think\
 """
 
 TREATMENT_PROMPT = """\
-/no_think
 Extrais les informations thérapeutiques du texte suivant.
 
 Pour chaque champ, retourne :
@@ -65,6 +64,31 @@ IMPORTANT : Distingue les traitements ACTUELS/EN COURS des traitements HISTORIQU
 - "exérèse totale", "résection complète" → type_chirurgie = "exerese complete"
 - "exérèse subtotale", "résection partielle" → type_chirurgie = "exerese partielle"
 - Normaliser les dates au format JJ/MM/AAAA
+
+### Règles sur les données pseudonymisées :
+- Les dates pseudonymisées (AAAA-??-??) doivent être retournées comme null.
+- Les lieux sous forme [HOPITAL_xxx] ou [VILLE_xxx] doivent être retournés comme null.
+- Ne retourne JAMAIS un token de type [XXX_yyy] comme valeur extraite.
+
+### Exemples :
+
+Texte : "radiochimiothérapie (60 Gy en 30 fractions du 26/11/2024 au 09/01/2025), puis Temozolomide adjuvant 4 cycles, dispositif Optune."
+Réponse :
+{"values": {"rx_dose": "60", "rx_date_debut": "26/11/2024", "rx_date_fin": "09/01/2025",
+            "chimios": "témozolomide", "chm_cycles": 4, "optune": "oui",
+            "chir_date": null, "type_chirurgie": null, "chm_date_debut": null,
+            "chm_date_fin": null, "anti_epileptiques": null, "essai_therapeutique": null,
+            "corticoides": null},
+ "_source": {"rx_dose": "60 Gy", "rx_date_debut": "du 26/11/2024",
+             "rx_date_fin": "au 09/01/2025", "chimios": "Temozolomide adjuvant",
+             "chm_cycles": "4 cycles", "optune": "Optune"}}
+
+Pour les dates : normalise au format JJ/MM/AAAA.
+- Dates pseudonymisées (AAAA-??-??) → null
+- "12 février 2024" → "12/02/2024"
+
+RAPPEL CRITIQUE : Il vaut TOUJOURS mieux retourner null qu'une valeur
+dont tu n'es pas sûr. Ne déduis pas, n'invente pas.
 
 ### Texte :
 {section_text}

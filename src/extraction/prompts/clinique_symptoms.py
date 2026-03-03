@@ -25,11 +25,10 @@ Tu es un extracteur d'informations médicales spécialisé en neuro-oncologie. \
 Tu extrais les symptômes initiaux et actuels à partir de comptes rendus de \
 consultation français. Tu distingues soigneusement les symptômes au moment \
 du diagnostic initial des symptômes actuels. Tu ne FABRIQUES JAMAIS de données. \
-Si une information n'est pas mentionnée dans le texte, retourne null.\
+Si une information n'est pas mentionnée dans le texte, retourne null. /no_think\
 """
 
 SYMPTOMS_PROMPT = """\
-/no_think
 Extrais les symptômes initiaux (au diagnostic) et actuels du texte suivant.
 
 Pour chaque champ, retourne :
@@ -66,6 +65,35 @@ IMPORTANT : Distingue bien les symptômes au moment du PREMIER diagnostic des sy
 - "pas d'épilepsie", "absence de crise" → épilepsie = "non"
 - "IK", "Karnofsky", "KPS" suivi d'un nombre → ik_clinique
 - Normaliser les dates au format JJ/MM/AAAA
+
+### Règles sur les données pseudonymisées :
+- Les dates pseudonymisées (AAAA-??-??) doivent être retournées comme null.
+- Ne retourne JAMAIS un token de type [XXX_yyy] comme valeur extraite.
+
+### Exemples :
+
+Texte : "Diagnostic en septembre 2023 sur crise comitiale inaugurale. IRM du 15/09/2023 : lésion temporale gauche avec prise de contraste et œdème péri-lésionnel. Actuellement : IK 80%, pas de déficit, épilepsie sous Keppra."
+Réponse :
+{"values": {"date_1er_symptome": null, "epilepsie_1er_symptome": "oui",
+            "ceph_hic_1er_symptome": null, "deficit_1er_symptome": null,
+            "cognitif_1er_symptome": null, "autre_trouble_1er_symptome": null,
+            "exam_radio_date_decouverte": "15/09/2023", "contraste_1er_symptome": "oui",
+            "oedeme_1er_symptome": "oui", "calcif_1er_symptome": null,
+            "epilepsie": "oui", "ceph_hic": null, "deficit": "non",
+            "cognitif": null, "autre_trouble": null, "ik_clinique": 80},
+ "_source": {"epilepsie_1er_symptome": "crise comitiale inaugurale",
+             "exam_radio_date_decouverte": "IRM du 15/09/2023",
+             "contraste_1er_symptome": "prise de contraste",
+             "oedeme_1er_symptome": "œdème péri-lésionnel",
+             "epilepsie": "épilepsie sous Keppra", "deficit": "pas de déficit",
+             "ik_clinique": "IK 80%"}}
+
+Pour les dates : normalise au format JJ/MM/AAAA.
+- Dates pseudonymisées (AAAA-??-??) → null
+- "12 février 2024" → "12/02/2024"
+
+RAPPEL CRITIQUE : Il vaut TOUJOURS mieux retourner null qu'une valeur
+dont tu n'es pas sûr. Ne déduis pas, n'invente pas.
 
 ### Texte :
 {section_text}

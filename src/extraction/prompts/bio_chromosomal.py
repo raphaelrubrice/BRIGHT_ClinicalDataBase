@@ -21,11 +21,10 @@ Tu es un extracteur d'informations médicales spécialisé en cytogénétique \
 et génomique tumorale neuro-oncologique. Tu extrais les altérations \
 chromosomiques, amplifications et fusions à partir de comptes rendus \
 de CGH-array et de biologie moléculaire en français. Tu ne FABRIQUES \
-JAMAIS de données. Si une information n'est pas mentionnée, retourne null.\
+JAMAIS de données. Si une information n'est pas mentionnée, retourne null. /no_think\
 """
 
 CHROMOSOMAL_PROMPT = """\
-/no_think
 Extrais les altérations chromosomiques, amplifications géniques et fusions du texte suivant.
 
 Pour chaque item, retourne :
@@ -65,6 +64,22 @@ Si une altération n'est PAS mentionnée dans le texte, retourne null. Ne FABRIQ
 - "pas d'amplification de X" → ampli_X="non"
 - "fusion X" ou "réarrangement X" → fusion_X="oui"
 - "pas de fusion" → fusion_X="non"
+
+### Exemples :
+
+Texte : "CGH-array : gain 7p, gain 7q, perte 10p, perte 10q, codélétion 1p/19q absente. Pas d'amplification EGFR ni MDM2."
+Réponse :
+{"values": {"ch7p": "gain", "ch7q": "gain", "ch10p": "perte", "ch10q": "perte",
+            "ch1p": null, "ch19q": null, "ch9p": null, "ch9q": null,
+            "ampli_egfr": "non", "ampli_mdm2": "non",
+            "ampli_cdk4": null, "ampli_met": null, "ampli_mdm4": null,
+            "fusion_fgfr": null, "fusion_ntrk": null, "fusion_autre": null},
+ "_source": {"ch7p": "gain 7p", "ch7q": "gain 7q", "ch10p": "perte 10p",
+             "ch10q": "perte 10q", "ampli_egfr": "Pas d'amplification EGFR",
+             "ampli_mdm2": "Pas d'amplification ... MDM2"}}
+
+RAPPEL CRITIQUE : Il vaut TOUJOURS mieux retourner null qu'une valeur
+dont tu n'es pas sûr. Ne déduis pas, n'invente pas.
 
 ### Texte :
 {section_text}

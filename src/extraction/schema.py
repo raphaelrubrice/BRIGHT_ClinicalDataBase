@@ -581,7 +581,14 @@ FEATURE_ROUTING: dict[str, dict[str, list[str]]] = {
         "clinique": [],
     },
     "consultation": {
-        "bio": [],
+        "bio": _resolve_patterns(BIO_FIELDS, [
+            "diag_histologique", "diag_integre", "classification_oms", "grade",
+            "ihc_idh1", "ihc_p53", "ihc_atrx", "ihc_olig2", "ihc_gfap", "ihc_ki67",
+            "mol_idh1", "mol_idh2", "mol_tert", "mol_mgmt", "mol_CDKN2A",
+            "mol_p53", "mol_pten", "mol_atrx", "mol_braf",
+            "ch1p", "ch19q",
+            "histo_necrose", "histo_pec", "histo_mitoses",
+        ]),
         "clinique": ALL_CLINIQUE_FIELD_NAMES,
     },
     "rcp": {

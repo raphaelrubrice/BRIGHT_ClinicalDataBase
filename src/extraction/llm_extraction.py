@@ -19,12 +19,18 @@ from .ollama_client import OllamaClient, OllamaError, OllamaResponse
 from .prompts import PROMPT_REGISTRY, PromptConfig, get_prompt
 from .schema import (
     ExtractionValue,
+    FieldType,
     FEATURE_GROUPS,
     ALL_FIELDS_BY_NAME,
     get_json_schema,
 )
 
 logger = logging.getLogger(__name__)
+
+# Reject pseudo-token values leaked from pseudonymisation
+_PSEUDO_TOKEN_RE = re.compile(
+    r'\[?(NOM|PRENOM|TEL|MAIL|ADDRESS|HOPITAL|VILLE|IPP|DATE|ZIP|SSID|NDA)_[A-Fa-f0-9]+\]?'
+)
 
 
 # ---------------------------------------------------------------------------
@@ -43,6 +49,10 @@ _SECTION_TO_GROUPS: dict[str, list[str]] = {
     "treatment": ["treatment"],
     "clinical_exam": ["symptoms"],
     "radiology": ["evolution"],
+    "equipe_soignante": ["demographics"],
+    "demographics": ["demographics"],
+    "summary": ["demographics", "evolution", "treatment"],
+    "rcp_decision": ["treatment", "evolution"],
     "full_text": [
         "ihc", "molecular", "chromosomal", "diagnosis",
         "demographics", "symptoms", "treatment", "evolution",
@@ -73,6 +83,18 @@ def _determine_groups_for_features(
     return result
 
 
+_GROUP_KEYWORDS: dict[str, list[str]] = {
+    "ihc": ["ihc", "immunohistochimie", "idh1", "p53", "atrx", "ki67", "gfap", "olig2", "h3k27"],
+    "molecular": ["moléculaire", "moleculaire", "mutation", "idh", "tert", "mgmt", "braf", "cdkn2a"],
+    "chromosomal": ["cgh", "chromosom", "1p", "19q", "amplification", "fusion", "délétion"],
+    "diagnosis": ["diagnostic", "histologique", "glioblastome", "astrocytome", "grade", "oms", "nécrose", "pec", "mitose"],
+    "demographics": ["référent", "referent", "équipe", "neurochirur", "neuro-onco", "radiothérap", "sexe", "profession", "né le", "née le", "naissance"],
+    "symptoms": ["symptôme", "symptome", "épilepsie", "epilepsie", "céphalée", "cephalee", "déficit", "deficit", "karnofsky", "ik "],
+    "treatment": ["chimiothérapie", "chimiotherapie", "temozolomide", "tmz", "radiothérapie", "radiotherapie", "chirurgie", "optune", "corticoïde", "gy"],
+    "evolution": ["évolution", "evolution", "progression", "récidive", "recidive", "décès", "deces", "dernière nouvelle", "latéralité"],
+}
+
+
 def _select_section_text(
     sections: dict[str, str],
     group_name: str,
@@ -81,7 +103,8 @@ def _select_section_text(
     """Select the best section text for a given feature group.
 
     Tries to find a section that maps to the group. Falls back to
-    ``full_text`` if no relevant section is found.
+    ``full_text`` with smart paragraph selection if no relevant section
+    is found.
     """
     # Try matching section → group
     for section_name, groups in _SECTION_TO_GROUPS.items():
@@ -90,11 +113,56 @@ def _select_section_text(
             if section_text.strip():
                 return section_text
 
-    # Fall back to full_text section if present
-    if "full_text" in sections:
-        return sections["full_text"]
+    # Fall back to full_text with smart paragraph selection
+    raw = sections.get("full_text", full_text)
+    return _select_relevant_paragraphs(raw, group_name)
 
-    return full_text
+
+def _select_relevant_paragraphs(text: str, group_name: str, max_chars: int = 8000) -> str:
+    """Select the most relevant paragraphs for a feature group from full text.
+
+    Splits text into paragraphs, scores each by keyword relevance to the
+    target group, and returns the top paragraphs (in document order) up
+    to *max_chars*.
+    """
+    if len(text) <= max_chars:
+        return text
+
+    # Split into paragraphs
+    paragraphs = re.split(r'\n\s*\n', text)
+    if len(paragraphs) <= 1:
+        paragraphs = text.split('\n')
+
+    keywords = _GROUP_KEYWORDS.get(group_name, [])
+    if not keywords:
+        return text[:max_chars]
+
+    # Score each paragraph
+    scored: list[tuple[int, int, str]] = []  # (score, original_index, text)
+    for i, para in enumerate(paragraphs):
+        para_lower = para.lower()
+        score = sum(1 for kw in keywords if kw in para_lower)
+        scored.append((score, i, para))
+
+    # Sort by score descending, then pick top ones respecting max_chars
+    scored.sort(key=lambda x: -x[0])
+
+    selected_indices: list[int] = []
+    total_chars = 0
+    for score, idx, para in scored:
+        if score == 0 and selected_indices:
+            break  # Don't add irrelevant paragraphs if we have some relevant ones
+        if total_chars + len(para) > max_chars:
+            if not selected_indices:
+                # Must include at least one paragraph
+                selected_indices.append(idx)
+            break
+        selected_indices.append(idx)
+        total_chars += len(para)
+
+    # Return in document order
+    selected_indices.sort()
+    return "\n\n".join(paragraphs[i] for i in selected_indices)
 
 
 def _parse_llm_response(
@@ -145,6 +213,18 @@ def _parse_llm_response(
         normalised = _normalise_llm_value(field_name, raw_value)
         if normalised is None:
             continue
+
+        # Reject pseudo-token values
+        if isinstance(normalised, str) and _PSEUDO_TOKEN_RE.search(normalised):
+            logger.debug("Field '%s': rejected pseudo-token value '%s'", field_name, normalised)
+            continue
+
+        # Reject unreasonable dates
+        field_def = ALL_FIELDS_BY_NAME.get(field_name)
+        if field_def and field_def.field_type == FieldType.DATE and isinstance(normalised, str):
+            if not _is_reasonable_date(normalised):
+                logger.debug("Field '%s': rejected unreasonable date '%s'", field_name, normalised)
+                continue
 
         results[field_name] = ExtractionValue(
             value=normalised,
@@ -202,6 +282,20 @@ def _normalise_llm_value(
         return normalisations[value_lower]
 
     return value
+
+
+def _is_reasonable_date(date_str: str) -> bool:
+    """Check if a date string (DD/MM/YYYY) is within reasonable bounds."""
+    import datetime
+    parts = date_str.split("/")
+    if len(parts) != 3:
+        return True  # Not a parseable date, let it through
+    try:
+        year = int(parts[2])
+        current_year = datetime.date.today().year
+        return 1900 <= year <= current_year + 1
+    except (ValueError, IndexError):
+        return True
 
 
 # ---------------------------------------------------------------------------
@@ -268,12 +362,12 @@ def run_llm_extraction(
         section_text = _select_section_text(sections, group_name, text)
 
         # Truncate very long texts to avoid exceeding model context
-        max_chars = 4000  # ~1000 tokens
+        max_chars = 8000  # ~2000 tokens
         if len(section_text) > max_chars:
             section_text = section_text[:max_chars] + "\n[... texte tronqué ...]"
 
         # Build the prompt
-        user_prompt = prompt_config.user_template.format(section_text=section_text)
+        user_prompt = prompt_config.user_template.replace("{section_text}", section_text)
 
         # Get the JSON schema for constrained decoding
         try:

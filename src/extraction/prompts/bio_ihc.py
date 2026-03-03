@@ -19,11 +19,10 @@ IHC_SYSTEM = """\
 Tu es un extracteur d'informations médicales spécialisé en neuropathologie. \
 Tu extrais les résultats d'immunohistochimie (IHC) à partir de comptes rendus \
 anatomopathologiques français. Tu ne FABRIQUES JAMAIS de données. \
-Si une information n'est pas mentionnée dans le texte, retourne null.\
+Si une information n'est pas mentionnée dans le texte, retourne null. /no_think\
 """
 
 IHC_PROMPT = """\
-/no_think
 Extrais les résultats d'immunohistochimie (IHC) du texte suivant.
 
 Pour chaque marqueur, retourne :
@@ -53,6 +52,21 @@ Distingue les résultats actuels des résultats historiques (antérieurs).
 - "expression conservée" → "positif" (pour les autres marqueurs)
 - "+", "positive" → "positif"
 - "-", "negative", "négative" → "negatif"
+
+### Exemples :
+
+Texte : "IHC : IDH1 R132H positif, ATRX perte d'expression, p53 positif diffus (>50%), GFAP positif, Olig2 négatif, Ki67 15-20%."
+Réponse :
+{"values": {"ihc_idh1": "positif", "ihc_atrx": "negatif", "ihc_p53": "positif",
+            "ihc_gfap": "positif", "ihc_olig2": "negatif", "ihc_ki67": "15-20",
+            "ihc_fgfr3": null, "ihc_braf": null, "ihc_hist_h3k27m": null,
+            "ihc_hist_h3k27me3": null, "ihc_egfr_hirsch": null, "ihc_mmr": null},
+ "_source": {"ihc_idh1": "IDH1 R132H positif", "ihc_atrx": "ATRX perte d'expression",
+             "ihc_p53": "p53 positif diffus (>50%)", "ihc_gfap": "GFAP positif",
+             "ihc_olig2": "Olig2 négatif", "ihc_ki67": "Ki67 15-20%"}}
+
+RAPPEL CRITIQUE : Il vaut TOUJOURS mieux retourner null qu'une valeur
+dont tu n'es pas sûr. Ne déduis pas, n'invente pas.
 
 ### Texte :
 {section_text}

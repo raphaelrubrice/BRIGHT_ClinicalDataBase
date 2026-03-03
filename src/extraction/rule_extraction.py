@@ -38,6 +38,86 @@ from src.extraction.negation import AssertionAnnotator
 
 _RE_FLAGS = re.IGNORECASE | re.UNICODE
 
+# Pseudonymised birthdate: "né(e) le YYYY-??-??"
+_PAT_PSEUDO_BIRTHDATE = re.compile(
+    r"(?:n[ée]e?\s+le\s+|date\s+de\s+naissance\s*[:\s]\s*)(\d{4})-\?\?-\?\?",
+    _RE_FLAGS,
+)
+
+# Context keywords for date-field assignment (replaces positional matching)
+_DATE_CONTEXT_KEYWORDS: dict[str, list[str]] = {
+    "date_de_naissance": ["né(e) le", "naissance", "DDN", "date de naissance", "né le", "née le"],
+    "chir_date": ["chirurgie", "opéré", "intervention", "opération", "exérèse", "biopsie", "opéré le", "opérée le"],
+    "date_chir": ["chirurgie", "opéré", "intervention", "opération", "exérèse", "biopsie", "opéré le", "opérée le"],
+    "chm_date_debut": ["début chimio", "chimiothérapie débutée", "TMZ depuis", "témozolomide depuis", "début de chimiothérapie"],
+    "chm_date_fin": ["fin chimio", "arrêt chimio", "dernière cure", "fin de chimiothérapie"],
+    "rx_date_debut": ["début radiothérapie", "RT débutée", "irradiation depuis", "début RT", "début de radiothérapie"],
+    "rx_date_fin": ["fin radiothérapie", "fin RT", "fin de radiothérapie", "fin d'irradiation"],
+    "date_1er_symptome": ["premier symptôme", "1er symptôme", "début des troubles", "apparition"],
+    "exam_radio_date_decouverte": ["découverte", "IRM du", "scanner du", "imagerie du"],
+    "date_progression": ["progression", "récidive", "rechute"],
+    "date_deces": ["décès", "décédé", "décédée"],
+    "dn_date": ["dernière nouvelle", "dernières nouvelles", "consultation du", "vu(e) le", "vu le", "vue le"],
+}
+
+
+def _assign_dates_by_context(
+    date_results: list[tuple[str, str, int, int]],
+    date_fields: list[str],
+    text: str,
+) -> dict[str, ExtractionValue]:
+    """Assign extracted dates to the correct date fields using keyword context.
+
+    For each extracted date, looks at 120 chars before and 30 chars after
+    the date position in *text* and matches against keyword patterns for each
+    date field. Unmatched dates are skipped (left for Tier 2 LLM).
+
+    Returns
+    -------
+    dict[str, ExtractionValue]
+        Mapping ``field_name → ExtractionValue`` for dates assigned by context.
+    """
+    results: dict[str, ExtractionValue] = {}
+    assigned_dates: set[int] = set()  # indices into date_results
+
+    for i, (norm, raw, start, end) in enumerate(date_results):
+        ctx_start = max(0, start - 120)
+        ctx_end = min(len(text), end + 30)
+        context = text[ctx_start:ctx_end].lower()
+
+        best_field: str | None = None
+        best_distance: int = 999999
+
+        for field_name in date_fields:
+            if field_name in results:
+                continue  # Already assigned
+            keywords = _DATE_CONTEXT_KEYWORDS.get(field_name, [])
+            for kw in keywords:
+                kw_lower = kw.lower()
+                pos = context.find(kw_lower)
+                if pos != -1:
+                    # Distance from keyword to the date position within context
+                    date_pos_in_ctx = start - ctx_start
+                    distance = abs(pos - date_pos_in_ctx)
+                    if distance < best_distance:
+                        best_distance = distance
+                        best_field = field_name
+
+        if best_field is not None:
+            results[best_field] = ExtractionValue(
+                value=norm,
+                source_span=raw,
+                source_span_start=start,
+                source_span_end=end,
+                extraction_tier="rule",
+                confidence=0.7,
+                vocab_valid=True,
+            )
+            assigned_dates.add(i)
+
+    return results
+
+
 # French month names / abbreviations → month number
 _FRENCH_MONTHS: dict[str, int] = {
     # Full names
@@ -943,6 +1023,10 @@ _SECTION_EXTRACTORS: dict[str, list[str]] = {
     "treatment": ["date", "binary", "numerical"],
     "clinical_exam": ["binary", "numerical"],
     "radiology": ["binary", "date"],
+    "equipe_soignante": ["date"],
+    "demographics": ["date"],
+    "summary": ["date", "binary", "numerical"],
+    "rcp_decision": ["date", "binary", "numerical"],
     "full_text": ["date", "ihc", "molecular", "chromosomal", "binary", "numerical",
                   "amplification", "fusion"],
 }
@@ -979,6 +1063,22 @@ def run_rule_extraction(
     feature_set = set(feature_subset)
     all_results: dict[str, ExtractionValue] = {}
 
+    # --- Phase 0.3: Pseudonymised birthdate extraction ---
+    if "date_de_naissance" in feature_set:
+        m = _PAT_PSEUDO_BIRTHDATE.search(text)
+        if m:
+            year = m.group(1)
+            all_results["date_de_naissance"] = ExtractionValue(
+                value=f"01/01/{year}",
+                source_span=m.group(0),
+                source_span_start=m.start(),
+                source_span_end=m.end(),
+                extraction_tier="rule",
+                confidence=0.5,
+                section="full_text",
+                vocab_valid=True,
+            )
+
     def _merge(new: dict[str, ExtractionValue], section_name: str) -> None:
         """Merge new extractions, keeping the first (highest-priority) result."""
         for fname, ev in new.items():
@@ -998,26 +1098,17 @@ def run_rule_extraction(
 
         if "date" in extractor_names:
             date_results = extract_dates(section_text)
-            # Dates are generic — we don't auto-assign to fields here.
-            # They'll be matched to specific date fields by the pipeline.
-            # For now, store the first date per relevant date field.
+            # Context-aware date assignment (Phase 0.1)
             date_fields_in_subset = [
                 f for f in feature_set
                 if f not in all_results and _is_date_field(f)
             ]
-            for i, dfname in enumerate(date_fields_in_subset):
-                if i < len(date_results):
-                    norm, raw, start, end = date_results[i]
-                    all_results[dfname] = ExtractionValue(
-                        value=norm,
-                        source_span=raw,
-                        source_span_start=start,
-                        source_span_end=end,
-                        extraction_tier="rule",
-                        confidence=0.7,
-                        section=section_name,
-                        vocab_valid=True,
-                    )
+            context_assigned = _assign_dates_by_context(
+                date_results, date_fields_in_subset, section_text
+            )
+            for fname, ev in context_assigned.items():
+                ev.section = section_name
+                all_results[fname] = ev
 
         if "ihc" in extractor_names:
             _merge(extract_ihc(section_text), section_name)

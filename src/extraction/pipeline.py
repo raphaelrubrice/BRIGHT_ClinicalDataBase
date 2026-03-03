@@ -50,7 +50,7 @@ class ExtractionPipeline:
     Parameters
     ----------
     ollama_model : str
-        Ollama model name (default ``"qwen3:4b-instruct"``).
+        Ollama model name (default ``"qwen3:8b"``).
     ollama_base_url : str
         Ollama server URL.
     ollama_timeout : int
@@ -64,7 +64,7 @@ class ExtractionPipeline:
 
     def __init__(
         self,
-        ollama_model: str = "qwen3:4b-instruct",
+        ollama_model: str = "qwen3:8b",
         ollama_base_url: str = "http://localhost:11434",
         ollama_timeout: int = 600,
         use_llm: bool = True,
@@ -215,6 +215,8 @@ class ExtractionPipeline:
         # Step 5: Determine remaining unextracted features
         # -----------------------------------------------------------------
         remaining = set(feature_subset) - set(tier1_results.keys())
+        # NIP comes from document metadata, not LLM extraction
+        remaining.discard("nip")
         result.add_log(
             f"Remaining after Tier 1: {len(remaining)} fields."
         )
@@ -269,6 +271,15 @@ class ExtractionPipeline:
         for fname, ev in tier2_results.items():
             if fname not in merged:
                 merged[fname] = ev
+
+        # NIP from document metadata (avoid LLM hallucination)
+        if patient_id and "nip" in set(feature_subset) and "nip" not in merged:
+            merged["nip"] = ExtractionValue(
+                value=patient_id,
+                extraction_tier="rule",
+                confidence=1.0,
+                vocab_valid=True,
+            )
 
         result.features = merged
         result.add_log(
