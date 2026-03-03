@@ -125,3 +125,76 @@ def compute_aggregate_metrics(all_results: list[dict[str, dict[str, int]]]) -> p
     if not df.empty:
         df = df.set_index("feature")
     return df
+
+
+# ---------------------------------------------------------------------------
+# Per-category aggregate metrics (Phase 5.1)
+# ---------------------------------------------------------------------------
+
+_FEATURE_CATEGORIES: dict[str, list[str]] = {
+    "demographics": ["nip", "date_de_naissance", "sexe", "activite_professionnelle", "antecedent_tumoral"],
+    "care_team": ["neuroncologue", "neurochirurgien", "radiotherapeute", "localisation_radiotherapie", "localisation_chir"],
+    "dates": ["chir_date", "date_chir", "chm_date_debut", "chm_date_fin", "rx_date_debut", "rx_date_fin",
+              "date_1er_symptome", "exam_radio_date_decouverte", "date_progression", "date_deces", "dn_date"],
+    "symptoms": ["epilepsie_1er_symptome", "ceph_hic_1er_symptome", "deficit_1er_symptome",
+                 "cognitif_1er_symptome", "autre_trouble_1er_symptome", "epilepsie", "ceph_hic",
+                 "deficit", "cognitif", "autre_trouble", "ik_clinique"],
+    "treatment": ["chimios", "chm_cycles", "type_chirurgie", "rx_dose", "anti_epileptiques",
+                  "essai_therapeutique", "corticoides", "optune"],
+    "bio_ihc": ["ihc_idh1", "ihc_p53", "ihc_atrx", "ihc_fgfr3", "ihc_braf",
+                "ihc_hist_h3k27m", "ihc_hist_h3k27me3", "ihc_egfr_hirsch",
+                "ihc_gfap", "ihc_olig2", "ihc_ki67", "ihc_mmr"],
+    "bio_molecular": ["mol_idh1", "mol_idh2", "mol_tert", "mol_CDKN2A", "mol_h3f3a",
+                      "mol_hist1h3b", "mol_braf", "mol_mgmt", "mol_fgfr1", "mol_egfr_mut",
+                      "mol_prkca", "mol_p53", "mol_pten", "mol_cic", "mol_fubp1", "mol_atrx"],
+    "bio_chromosomal": ["ch1p", "ch19q", "ch10p", "ch10q", "ch7p", "ch7q", "ch9p", "ch9q",
+                        "ampli_mdm2", "ampli_cdk4", "ampli_egfr", "ampli_met", "ampli_mdm4",
+                        "fusion_fgfr", "fusion_ntrk", "fusion_autre"],
+    "bio_diagnosis": ["diag_histologique", "diag_integre", "classification_oms", "grade",
+                      "histo_necrose", "histo_pec", "histo_mitoses"],
+}
+
+
+def compute_category_metrics(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute macro-average F1 per feature category.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Per-feature metrics DataFrame (as returned by ``compute_aggregate_metrics``).
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame indexed by category with columns: F1_mean, Precision_mean,
+        Recall_mean, num_features.
+    """
+    if df.empty:
+        return pd.DataFrame()
+
+    records = []
+    for category, features in _FEATURE_CATEGORIES.items():
+        present = [f for f in features if f in df.index]
+        if not present:
+            records.append({
+                "category": category,
+                "F1_mean": 0.0,
+                "Precision_mean": 0.0,
+                "Recall_mean": 0.0,
+                "num_features": 0,
+            })
+            continue
+
+        subset = df.loc[present]
+        records.append({
+            "category": category,
+            "F1_mean": subset["F1"].mean(),
+            "Precision_mean": subset["Precision"].mean(),
+            "Recall_mean": subset["Recall"].mean(),
+            "num_features": len(present),
+        })
+
+    cat_df = pd.DataFrame(records)
+    if not cat_df.empty:
+        cat_df = cat_df.set_index("category")
+    return cat_df
