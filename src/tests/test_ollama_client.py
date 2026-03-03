@@ -91,7 +91,7 @@ class TestOllamaClientInit:
         client = OllamaClient()
         assert client.model == "qwen3:4b-instruct"
         assert client.base_url == "http://localhost:11434"
-        assert client.timeout == 120
+        assert client.timeout == 600
         assert client.max_retries == 2
 
     def test_custom_values(self):

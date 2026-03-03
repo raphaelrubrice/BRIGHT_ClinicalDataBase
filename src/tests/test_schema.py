@@ -441,9 +441,10 @@ class TestFeatureRouting:
                 f"Consultation should extract CLINIQUE field {clin_name!r}"
             )
 
-    def test_consultation_no_bio(self):
+    def test_consultation_has_selected_bio(self):
         routing = FEATURE_ROUTING["consultation"]
-        assert routing["bio"] == []
+        # Consultation now extracts selected bio fields (diagnosis, IHC, molecular, histology)
+        assert len(routing["bio"]) > 0
 
     def test_molecular_report_subset(self):
         fields = get_extractable_fields("molecular_report")

@@ -563,8 +563,8 @@ class TestFeatureHelpers:
 
     def test_get_section_for_unmapped_field(self):
         """Fields only in preamble (not in SECTION_TO_FEATURES) return empty."""
-        sections = get_section_for_feature("localisation_radiotherapie")
-        # This field is in _PREAMBLE_FEATURES only
+        sections = get_section_for_feature("date_deces")
+        # date_deces is only in _PREAMBLE_FEATURES, not in any SECTION_TO_FEATURES
         assert sections == []
 
     def test_features_sorted_and_deduplicated(self):
