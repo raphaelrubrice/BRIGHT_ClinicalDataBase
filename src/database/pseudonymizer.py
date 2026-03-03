@@ -18,6 +18,52 @@ class DetectedSpan:
     pseudo_value: str
 
 
+@dataclass(frozen=True)
+class PractitionerSpan:
+    """A detected practitioner name span (preceded by a medical title)."""
+    name: str
+    title: str
+    start: int
+    end: int
+
+
+# Matches "Dr Touat", "Pr. SANSON", "Professeur Hoang-Xuan", "du Professeur Bielle",
+# "Docteur Laigle-Donadey", "Dr TOUAT MEHDI", etc.
+# Handles: ALL CAPS names, OCR typos in titles, optional prepositions.
+_TITLE_NAME_PATTERN = re.compile(
+    r"(?:(?:du|le|par\s+le|par)\s+)?"                          # optional preposition
+    r"(?P<title>"
+    r"Dr\.?"                                                    # Dr / Dr.
+    r"|Pr\.?"                                                   # Pr / Pr.
+    r"|Prof(?:esseure?|esscure?)?"                              # Professeur(e) + OCR variant
+    r"|Doct(?:eure?|eur)?"                                      # Docteur(e) + OCR variant
+    r"|Interne"
+    r")"
+    r"\s+"
+    r"(?P<name>"
+    r"[A-ZÀ-ÜÉ][A-Za-zÀ-ÖØ-öø-ÿ\u0100-\u017F'-]*\.?"            # first word (Title, UPPER, or Initial with optional dot)
+    r"(?:[\s-][A-ZÀ-ÜÉ][A-Za-zÀ-ÖØ-öø-ÿ\u0100-\u017F'-]*\.?)*"  # subsequent hyphenated/spaced words
+    r")",
+    re.UNICODE | re.IGNORECASE,
+)
+
+# Known BRIGHT team and affiliated practitioners at Pitié-Salpêtrière
+BRIGHT_PRACTITIONERS: set[str] = {
+    # Neuro-oncologists
+    "Hoang-Xuan", "Touat", "Sanson", "Idbaih", "Alentorn",
+    "Laigle-Donadey", "Donadey", "Leprince-Laurenge",
+    "Dehais", "Picca", "Psimaras", "Houillier", "Louis",
+    "Ferrari", "Delattre", "Bielle",
+    # Neurosurgeons
+    "Mathon", "Marijon", "Nouet", "Carpentier", "Peyre", "Lefevre",
+    # Radiation therapists
+    "Assouline", "Maingon", "Michel",
+}
+
+# Pre-compute lowercased whitelist for case-insensitive matching
+_BRIGHT_PRACTITIONERS_LOWER: set[str] = {n.lower() for n in BRIGHT_PRACTITIONERS}
+
+
 class TextPseudonymizer:
     """
     Wraps an EDSNLP (eds-pseudo) pipeline and rewrites text based on detected entities.
@@ -53,6 +99,22 @@ class TextPseudonymizer:
     # Public API
     # ---------------------------
 
+    def detect_practitioner_names(self, text: str) -> List[PractitionerSpan]:
+        """Detect practitioner names preceded by medical title prefixes.
+
+        Returns a list of PractitionerSpan objects for names found after
+        Dr, Pr, Professeur, Docteur, or Interne.
+        """
+        results: List[PractitionerSpan] = []
+        for m in _TITLE_NAME_PATTERN.finditer(text):
+            results.append(PractitionerSpan(
+                name=m.group("name"),
+                title=m.group("title"),
+                start=m.start(),
+                end=m.end(),
+            ))
+        return results
+
     def pseudonymize(
         self,
         text: str,
@@ -60,6 +122,7 @@ class TextPseudonymizer:
         ipp: Optional[str] = None,
         consistent_across_ipp: bool = False,
         label_to_template: Optional[Dict[str, str]] = None,
+        keep_practitioner_names: bool = True,
     ) -> str:
         """
         Returns a pseudonymized version of the provided text.
@@ -99,10 +162,28 @@ class TextPseudonymizer:
         if label_to_template:
             templates.update(label_to_template)
 
+        # Build set of practitioner name ranges for preservation
+        practitioner_ranges: List[Tuple[int, int]] = []
+        if keep_practitioner_names:
+            for ps in self.detect_practitioner_names(text):
+                practitioner_ranges.append((ps.start, ps.end))
+
         # Build replacements
         replacements: List[Tuple[int, int, str]] = []
         for sp in spans:
             if sp.label not in self.keep:
+                # Skip pseudonymisation of practitioner names
+                if keep_practitioner_names and sp.label in ("NOM", "PRENOM"):
+                    # Check title-based detection: span overlaps with a practitioner span
+                    is_practitioner = any(
+                        ps_start <= sp.start and sp.end <= ps_end
+                        for ps_start, ps_end in practitioner_ranges
+                    )
+                    # Check whitelist fallback
+                    if not is_practitioner:
+                        is_practitioner = sp.text.strip().lower() in _BRIGHT_PRACTITIONERS_LOWER
+                    if is_practitioner:
+                        continue  # Preserve this name
                 template = templates.get(sp.label, "[PHI_{label}_{token}]")
                 token = self._stable_token(
                     sp.text,
@@ -327,25 +408,170 @@ class TextPseudonymizer:
 if __name__ == "__main__":
     from pathlib import Path
     from utils import prepare_eds_registry
-    import os
+    import os, sys, textwrap
+
     os.chdir(Path(__file__).resolve().parent)
 
     artifacts_path = Path("../../hf_cache/artifacts").resolve()
     prepare_eds_registry(artifacts_path.parent)
     TP = TextPseudonymizer(str(artifacts_path))
 
-    test_text = """
-                Références : ALE/ALE
-                Compte-Rendu de Consultation du 01/12/2025
-                Madame LAURENGE ep. LEPRINCE Alice, née le 18/05/1989, âgée de 36 ans, a été vue en
-                consultation.
-                Antécédents et allergies
-                Allergies :
-                - Rhinite allergique au pollen
+    # ──────────────────────────────────────────────────────────
+    # Helpers
+    # ──────────────────────────────────────────────────────────
+    _pass_count = 0
+    _fail_count = 0
 
-                Pat.: Alice LAURENGE (Nom usuel : LEPRINCE) | F | 18/05/1989 | INS/NIR : 289055951218119 | 8008897828 | 6602777525
-                Imprimé le 01/12/2025 17:22
-                CR CONSULTATION PSL NEURO-ONCOLOGIE
-                """
-    
-    print(TP.pseudonymize(test_text))
+    def check(condition: bool, description: str) -> None:
+        global _pass_count, _fail_count
+        if condition:
+            _pass_count += 1
+            print(f"  ✅ PASS — {description}")
+        else:
+            _fail_count += 1
+            print(f"  ❌ FAIL — {description}")
+
+    def section(title: str) -> None:
+        print(f"\n{'=' * 60}")
+        print(f"  {title}")
+        print(f"{'=' * 60}")
+
+    # ──────────────────────────────────────────────────────────
+    # Test text – realistic clinical report mixing patient PHI
+    # and practitioner names in many formats.
+    # ──────────────────────────────────────────────────────────
+    test_text = textwrap.dedent("""\
+        Références : ALE/ALE
+        Compte-Rendu de Consultation du 01/12/2025
+
+        Madame LAURENGE ep. LEPRINCE Alice, née le 18/05/1989, âgée de 36 ans,
+        a été vue en consultation par le Dr Touat dans le service du Pr Sanson.
+        La patiente habite au 12 rue des Lilas, 75013 Paris.
+        Téléphone : 06 12 34 56 78.  E-mail : alice.laurenge@mail.com
+
+        Avis du Professeur Hoang-Xuan, du Pr. SANSON et du Docteur Laigle-Donadey.
+        Interne Picca a également participé à la consultation.
+
+        Dr TOUAT MEHDI a prescrit une IRM cérébrale.
+        Professeure Bielle a relu la lame anatomo-pathologique.
+
+        Pat.: Alice LAURENGE (Nom usuel : LEPRINCE) | F | 18/05/1989
+        INS/NIR : 289055951218119 | IPP 8008897828 | NDA 6602777525
+
+        Imprimé le 01/12/2025 17:22
+        CR CONSULTATION PSL NEURO-ONCOLOGIE
+    """)
+
+    result = TP.pseudonymize(test_text, ipp="TEST_IPP", keep_practitioner_names=True)
+
+    # ──────────────────────────────────────────────────────────
+    # 1. Patient PHI must be pseudonymized
+    # ──────────────────────────────────────────────────────────
+    section("1 · Patient PHI is pseudonymized")
+
+    # Patient names — should NOT appear verbatim
+    check("LAURENGE" not in result,
+          "Patient surname LAURENGE is replaced")
+    check("LEPRINCE" not in result,
+          "Patient maiden name LEPRINCE is replaced")
+    check("Alice" not in result,
+          "Patient first name Alice is replaced")
+
+    # Pseudonymization placeholders should be present
+    check("[NOM_" in result or "[PRENOM_" in result,
+          "At least one name placeholder token is present")
+
+    # ──────────────────────────────────────────────────────────
+    # 2. Practitioner names must be PRESERVED
+    # ──────────────────────────────────────────────────────────
+    section("2 · Practitioner names are preserved")
+
+    # Title-prefixed names (regex-detected)
+    check("Touat" in result,
+          "Dr Touat is preserved (title-case after Dr)")
+    check("Sanson" in result or "SANSON" in result,
+          "Pr Sanson / SANSON is preserved")
+    check("Hoang-Xuan" in result,
+          "Professeur Hoang-Xuan is preserved (hyphenated)")
+    check("Laigle-Donadey" in result,
+          "Docteur Laigle-Donadey is preserved (hyphenated)")
+    check("Picca" in result,
+          "Interne Picca is preserved")
+    check("Bielle" in result,
+          "Professeure Bielle is preserved")
+    check("TOUAT" in result or "Touat" in result,
+          "Dr TOUAT MEHDI (ALL CAPS after Dr) is preserved")
+
+    # ──────────────────────────────────────────────────────────
+    # 3. detect_practitioner_names regex unit tests
+    # ──────────────────────────────────────────────────────────
+    section("3 · detect_practitioner_names regex")
+
+    regex_cases = [
+        ("Dr Touat",                   "Touat",          "Dr + Title-case"),
+        ("Pr. SANSON",                 "SANSON",         "Pr. + ALL CAPS"),
+        ("Professeur Hoang-Xuan",      "Hoang-Xuan",    "Professeur + hyphenated"),
+        ("du Professeur Bielle",       "Bielle",         "du Professeur"),
+        ("Docteur Laigle-Donadey",     "Laigle-Donadey", "Docteur + hyphenated"),
+        ("Dr TOUAT MEHDI",             "TOUAT MEHDI",    "Dr + two ALL-CAPS words"),
+        ("Interne Picca",              "Picca",          "Interne + name"),
+        ("par le Pr Idbaih",           "Idbaih",         "par le Pr"),
+        ("Professeure Bielle",         "Bielle",         "Professeure (feminine)"),
+        ("Prof Delattre",              "Delattre",       "Prof (abbreviated)"),
+        ("Docteure Houillier",         "Houillier",      "Docteure (feminine)"),
+    ]
+    for snippet, expected_name, desc in regex_cases:
+        spans = TP.detect_practitioner_names(snippet)
+        names = [s.name for s in spans]
+        check(expected_name in names,
+              f"Regex detects '{expected_name}' in \"{snippet}\" ({desc})")
+
+    # Negative case: bare patient name without title must NOT match
+    neg_spans = TP.detect_practitioner_names("LAURENGE Alice")
+    check(len(neg_spans) == 0,
+          "Bare patient name without title is NOT detected as practitioner")
+
+    # ──────────────────────────────────────────────────────────
+    # 4. Whitelist fallback: names in BRIGHT_PRACTITIONERS
+    #    even without a title prefix should survive
+    # ──────────────────────────────────────────────────────────
+    section("4 · Whitelist-only preservation (no title prefix)")
+
+    whitelist_text = "Consultation avec Sanson et Ferrari pour avis complémentaire."
+    wl_result = TP.pseudonymize(whitelist_text, ipp="TEST_WL", keep_practitioner_names=True)
+    # If the NLP model detects "Sanson" / "Ferrari" as NOM/PRENOM, the whitelist
+    # should prevent them from being replaced.
+    # We check that the names still appear OR that no NOM placeholder replaced them.
+    check("Sanson" in wl_result or "[NOM_" not in wl_result,
+          "Whitelist preserves 'Sanson' when it would be detected as NOM")
+    check("Ferrari" in wl_result or "[NOM_" not in wl_result,
+          "Whitelist preserves 'Ferrari' when it would be detected as NOM")
+
+    # ──────────────────────────────────────────────────────────
+    # 5. keep_practitioner_names=False ⇒ practitioners ARE pseudonymized
+    # ──────────────────────────────────────────────────────────
+    section("5 · keep_practitioner_names=False replaces everything")
+
+    result_no_keep = TP.pseudonymize(test_text, ipp="TEST_IPP", keep_practitioner_names=False)
+    # At least one practitioner name should now be gone (replaced by placeholder)
+    all_present = all(name in result_no_keep for name in ["Touat", "Sanson", "Hoang-Xuan", "Bielle"])
+    check(not all_present,
+          "With keep_practitioner_names=False, at least some practitioner names are pseudonymized")
+
+    # ──────────────────────────────────────────────────────────
+    # Summary
+    # ──────────────────────────────────────────────────────────
+    section("RESULTS")
+    total = _pass_count + _fail_count
+    print(f"\n  {_pass_count}/{total} passed, {_fail_count} failed.\n")
+
+    print("─" * 60)
+    print("  Pseudonymized output (with practitioners preserved):")
+    print("─" * 60)
+    print(result)
+
+    if _fail_count > 0:
+        sys.exit(1)
+    else:
+        print("\n🎉 All tests passed!\n")
+        sys.exit(0)

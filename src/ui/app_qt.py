@@ -1026,6 +1026,7 @@ class MainWindow(QMainWindow):
                         pseudo = self.pseudonymizer.pseudonymize(
                             item["document"],
                             ipp=item["ipp"],
+                            keep_practitioner_names=True,
                         )
 
                         pending_rows.append(

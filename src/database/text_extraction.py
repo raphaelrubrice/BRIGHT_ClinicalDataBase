@@ -157,7 +157,7 @@ def _ocr_with_surya(pdf_path: Path) -> str:
     doc = fitz.open(str(pdf_path))
     images = []
     for page in doc:
-        pix = page.get_pixmap(dpi=100)
+        pix = page.get_pixmap(dpi=150)
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         images.append(img)
     doc.close()
@@ -214,7 +214,7 @@ def _ocr_with_easyocr(pdf_path: Path) -> str:
     doc = fitz.open(str(pdf_path))
     page_texts = []
     for page in doc:
-        pix = page.get_pixmap(dpi=100)
+        pix = page.get_pixmap(dpi=150)
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         img_np = np.array(img)
         results = reader.readtext(img_np, detail=0, paragraph=True)

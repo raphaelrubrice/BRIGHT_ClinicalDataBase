@@ -5,6 +5,7 @@ from typing import Optional
 
 import re
 import pandas as pd
+import numpy as np
 import logging
 
 logger = logging.getLogger(__name__)
@@ -137,11 +138,11 @@ _LLM_PROMPT = """\
 You are a medical document date extractor. Your task is to extract the **consultation date** from the clinical report below (English or French).
 
 ### Rules:
-1. The consultation date is the date the report was written (i.e. when the patient was seen by the doctor).
+1. The consultation date is the date the report was written (i.e. when the sample was received OR when the patient was seen by the doctor).
 2. **IGNORE:** Birth dates, discharge dates, print dates, lab result dates, treatment dates etc..
 3. **LOCATION:** Look primarily at the very beginning (header) or very end (footer).
 4. **FORMAT:** Return ONLY the date as DD/MM/YYYY.
-5. **FAILURE:** If no consultation date can be robustly found, return explicitly: Not found
+5. **FAILURE:** If no consultation/sample reception date can be robustly found, return explicitly: Not found
 
 ### Constraints:
 - Do not provide any preamble or explanation.
@@ -227,6 +228,14 @@ _MONTHS_MAP = {
     "fevrier": 2, "aout": 8, "decembre": 12,
 }
 
+def get_group(re_match):
+    for i in range(len(re_match.groups())):
+        try:
+            _parse_raw_date(re_match.group(i))
+            return re_match.group(i)
+        except Exception:
+            continue
+    return None
 
 def _extract_consult_date_regex(text: str) -> Optional[str]:
     """
@@ -234,16 +243,16 @@ def _extract_consult_date_regex(text: str) -> Optional[str]:
     Returns the raw date substring on success, or ``None`` on failure.
     """
     pattern =(
-        r"(?i:((consultation.+du(|.))|(Paris(,|) le )))"
+        r"(?i:((consultation.+du(|.))|(Paris(,|) le )|(Date( |)de( |)r(é|e)ception( |)(:| |)( |))))"
         r"(((([0-9]{4})|([0-9]{2}))\/[0-9]{2}\/(([0-9]{4})|([0-9]{2})))"
         r"|([0-9]{2} \D+ [0-9]{4}))"
     )
     match = re.search(pattern, text, re.MULTILINE)
     if match is None:
         return None
-    if match.group(6) is not None:
-        return match.group(6)
-    return match.group(5)
+    if match.group(13) not in ["", None]:
+        return match.group(13)
+    return get_group(match)
 
 
 def _parse_raw_date(raw_date: str) -> list[int]:
@@ -262,8 +271,13 @@ def _parse_raw_date(raw_date: str) -> list[int]:
         if month_str not in _MONTHS_MAP:
             raise ValueError(f"Could not map month name '{parts[1]}' to a number.")
         num_list = [day, _MONTHS_MAP[month_str], year]
+    
+    if np.argmax(num_list) == 2:
+        num_list = [num_list[2], num_list[1], num_list[0]]
 
-    return sorted(num_list, reverse=True)
+    if num_list[1] > 12:
+        num_list = [num_list[0], num_list[2], num_list[1]]
+    return num_list
 
 
 def _format_date(num_list: list[int], return_num: bool):
@@ -408,7 +422,7 @@ if __name__ == "__main__":
 Compte-Rendu de CONSULTATION ONCO-SOMMEILDU01/12/2025
 Madame LAURENGE ep. LEPRINCE Alice, née le 18/05/1989, âgée de 36 ans, a été vue en
 consultation.""", """Références : ALE/ALE
-Paris le 2024/12/20
+Date de réception : 08/01/2024
 Madame LAURENGE ep. LEPRINCE Alice, née le 18/05/1989, âgée de 36 ans, a été vue en
 consultation.""", """Références : ALE/ALE
 Paris, le 11 Décembre 2025
