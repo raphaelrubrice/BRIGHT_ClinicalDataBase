@@ -33,8 +33,8 @@ DEFAULT_OUTPUT_DIR = REPO_ROOT / "demo_output"
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Full demo pipeline: extraction, benchmark & timeline.")
-    parser.add_argument("--model", type=str, default="qwen3:0.6b",
-                        help="Ollama model to use (default: qwen3:0.6b)")
+    parser.add_argument("--model", type=str, default="qwen3:8b",
+                        help="Ollama model to use (default: qwen3:8b)")
     parser.add_argument("--timeout", type=int, default=None,
                         help="Request timeout in seconds for the extraction pipeline")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH,
