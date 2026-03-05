@@ -23,7 +23,9 @@ from src.extraction.llm_extraction import (
     _normalise_llm_value,
     _normalise_whitespace,
     _parse_llm_response,
+    _RULE_ONLY_FIELDS,
     _select_section_text,
+    extract_diag_integre,
     run_llm_extraction,
     validate_source_spans,
 )
@@ -496,3 +498,155 @@ class TestNormaliseWhitespace:
 
     def test_already_normalised(self):
         assert _normalise_whitespace("hello world") == "hello world"
+
+
+# ---------------------------------------------------------------------------
+# Phase D1 — LLM pruning: rule-only fields excluded
+# ---------------------------------------------------------------------------
+
+class TestLLMPruning:
+    """Phase D1: rule-only fields are never sent to the LLM."""
+
+    def test_rule_only_fields_include_phase_a(self):
+        """All Phase A fields must be in _RULE_ONLY_FIELDS."""
+        for field in ["sexe", "tumeur_lateralite", "evol_clinique",
+                       "type_chirurgie", "classification_oms"]:
+            assert field in _RULE_ONLY_FIELDS, f"{field} missing from _RULE_ONLY_FIELDS"
+
+    def test_rule_only_fields_include_phase_b(self):
+        for field in ["chimios", "tumeur_position"]:
+            assert field in _RULE_ONLY_FIELDS
+
+    def test_rule_only_fields_include_already_rule_based(self):
+        for field in ["ik_clinique", "rx_dose", "chm_cycles",
+                       "anti_epileptiques", "progress_clinique",
+                       "progress_radiologique"]:
+            assert field in _RULE_ONLY_FIELDS
+
+    def test_sexe_excluded_from_remaining(self, mock_client):
+        """sexe should never reach the LLM even when not already extracted."""
+        feature_subset = ["sexe", "diag_integre"]
+        already_extracted = {}
+        # Mock client to track calls
+        mock_client.generate.return_value = _make_ollama_response(
+            parsed_json={"values": {}, "_source": {}}
+        )
+        result = run_llm_extraction(
+            text="Some text",
+            sections={"full_text": "Some text"},
+            feature_subset=feature_subset,
+            already_extracted=already_extracted,
+            client=mock_client,
+        )
+        # sexe should not appear in any LLM results
+        assert "sexe" not in result
+
+    def test_only_rule_only_fields_skips_llm(self, mock_client):
+        """If all requested fields are rule-only, LLM should not be called."""
+        feature_subset = ["sexe", "tumeur_lateralite", "type_chirurgie"]
+        already_extracted = {}
+        result = run_llm_extraction(
+            text="Some text",
+            sections={"full_text": "Some text"},
+            feature_subset=feature_subset,
+            already_extracted=already_extracted,
+            client=mock_client,
+        )
+        assert result == {}
+        mock_client.generate.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Phase D2 — Constrained diag_integre extraction
+# ---------------------------------------------------------------------------
+
+class TestDiagIntegreConstrained:
+    """Phase D2: constrained diag_integre LLM call."""
+
+    def test_valid_who2021_response(self, mock_client):
+        """Valid WHO 2021 label should be accepted."""
+        mock_client.generate.return_value = _make_ollama_response(
+            parsed_json={
+                "values": {"diag_integre": "Glioblastome, IDH wild-type, grade 4"},
+                "_source": {"diag_integre": "glioblastome IDH wild-type"},
+            }
+        )
+        already = {
+            "mol_idh1": _make_extraction_value("wt"),
+            "grade": _make_extraction_value("4"),
+        }
+        result = extract_diag_integre(
+            text="Some histological text",
+            sections={"conclusion": "Some histological text"},
+            already_extracted=already,
+            client=mock_client,
+        )
+        assert "diag_integre" in result
+        assert result["diag_integre"].value == "Glioblastome, IDH wild-type, grade 4"
+        assert result["diag_integre"].flagged is not True
+
+    def test_malformed_response_flagged(self, mock_client):
+        """Malformed LLM response should produce flagged=True."""
+        mock_client.generate.return_value = _make_ollama_response(
+            parsed_json={"garbage": "data"},
+        )
+        result = extract_diag_integre(
+            text="Some text",
+            sections={"full_text": "Some text"},
+            already_extracted={},
+            client=mock_client,
+        )
+        assert "diag_integre" in result
+        assert result["diag_integre"].flagged is True
+        assert result["diag_integre"].value is None
+
+    def test_timeout_returns_none_no_crash(self, mock_client):
+        """LLM timeout should return None with flagged=True, no exception."""
+        mock_client.generate.side_effect = TimeoutError("LLM timed out")
+        result = extract_diag_integre(
+            text="Some text",
+            sections={"full_text": "Some text"},
+            already_extracted={},
+            client=mock_client,
+        )
+        assert "diag_integre" in result
+        assert result["diag_integre"].value is None
+        assert result["diag_integre"].flagged is True
+
+    def test_null_value_returns_empty(self, mock_client):
+        """LLM returning null for diag_integre should return empty dict."""
+        mock_client.generate.return_value = _make_ollama_response(
+            parsed_json={
+                "values": {"diag_integre": None},
+                "_source": {},
+            }
+        )
+        result = extract_diag_integre(
+            text="Some text",
+            sections={"full_text": "Some text"},
+            already_extracted={},
+            client=mock_client,
+        )
+        assert result == {}
+
+    def test_context_includes_pre_extracted_values(self, mock_client):
+        """Pre-extracted values should appear in the LLM prompt."""
+        mock_client.generate.return_value = _make_ollama_response(
+            parsed_json={"values": {"diag_integre": "test"}, "_source": {}}
+        )
+        already = {
+            "mol_idh1": _make_extraction_value("wt"),
+            "mol_mgmt": _make_extraction_value("methyle"),
+            "grade": _make_extraction_value("4"),
+        }
+        extract_diag_integre(
+            text="Some text",
+            sections={"full_text": "Some text"},
+            already_extracted=already,
+            client=mock_client,
+        )
+        # Verify the prompt contains pre-extracted values
+        call_args = mock_client.generate.call_args
+        prompt = call_args.kwargs.get("prompt", call_args[1].get("prompt", ""))
+        assert "mol_idh1: wt" in prompt
+        assert "mol_mgmt: methyle" in prompt

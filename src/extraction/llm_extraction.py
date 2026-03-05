@@ -60,6 +60,25 @@ _SECTION_TO_GROUPS: dict[str, list[str]] = {
 }
 
 
+# Fields that are fully rule-based and should NEVER be sent to the LLM.
+# This provides an explicit safety net beyond the "already_extracted" filter,
+# ensuring these fields are never included in an LLM prompt even if the rule
+# extractor returned None (we prefer None over a hallucinated value).
+_RULE_ONLY_FIELDS: set[str] = {
+    # Phase A
+    "sexe", "tumeur_lateralite", "evol_clinique", "type_chirurgie",
+    "classification_oms",
+    # Phase B
+    "chimios", "tumeur_position",
+    # Already rule-based (binary/numerical)
+    "anti_epileptiques", "progress_clinique", "progress_radiologique",
+    "neuroncologue", "neurochirurgien", "radiotherapeute",
+    "ik_clinique", "rx_dose", "chm_cycles",
+    # Phase C
+    "diag_histologique",
+}
+
+
 # ---------------------------------------------------------------------------
 # Core extraction logic
 # ---------------------------------------------------------------------------
@@ -330,10 +349,10 @@ def run_llm_extraction(
         Mapping ``field_name → ExtractionValue`` for newly LLM-extracted
         fields. Does **not** include fields already in *already_extracted*.
     """
-    # Determine which fields still need extraction
-    remaining = set(feature_subset) - set(already_extracted.keys())
+    # Determine which fields still need extraction (exclude rule-only fields)
+    remaining = set(feature_subset) - set(already_extracted.keys()) - _RULE_ONLY_FIELDS
     if not remaining:
-        logger.info("All features already extracted by Tier 1, skipping LLM.")
+        logger.info("All features already extracted by Tier 1 or rule-only, skipping LLM.")
         return {}
 
     # Group remaining fields by feature group
@@ -410,6 +429,151 @@ def run_llm_extraction(
         )
 
     return all_results
+
+
+# ---------------------------------------------------------------------------
+# Phase D2: Constrained diag_integre extraction
+# ---------------------------------------------------------------------------
+
+_DIAG_INTEGRE_SYSTEM = """\
+Tu es un neuropathologiste. À partir des résultats IHC et moléculaires \
+fournis, formule le diagnostic intégré selon la classification OMS 2021 \
+des tumeurs du SNC. Réponds UNIQUEMENT avec le diagnostic intégré. \
+Si les données sont insuffisantes, retourne null. /no_think\
+"""
+
+_DIAG_INTEGRE_PROMPT = """\
+Voici les résultats déjà extraits pour ce patient :
+
+{extracted_context}
+
+En te basant sur ces résultats et le texte source ci-dessous, \
+formule le diagnostic intégré selon la classification OMS 2021.
+
+Format de réponse attendu :
+{{"values": {{"diag_integre": "<diagnostic intégré>"}}, \
+"_source": {{"diag_integre": "<passage du texte source>"}}}}
+
+Si les données sont insuffisantes pour formuler un diagnostic intégré, \
+retourne : {{"values": {{"diag_integre": null}}, "_source": {{}}}}
+
+### Texte source :
+{section_text}
+"""
+
+# Fields whose pre-extracted values provide context for diag_integre
+_DIAG_INTEGRE_CONTEXT_FIELDS = [
+    "diag_histologique", "grade", "classification_oms",
+    "mol_idh1", "mol_idh2", "mol_tert", "mol_CDKN2A",
+    "mol_h3f3a", "mol_hist1h3b", "mol_braf", "mol_mgmt",
+    "mol_atrx", "mol_egfr_mut", "mol_pten",
+    "ch1p", "ch19q", "ch10q", "ch7p",
+    "ihc_idh1", "ihc_p53", "ihc_atrx",
+    "ihc_hist_h3k27m", "ihc_hist_h3k27me3",
+    "ampli_egfr", "ampli_cdk4", "ampli_mdm2",
+]
+
+
+def _build_diag_integre_context(
+    already_extracted: dict[str, ExtractionValue],
+) -> str:
+    """Build a structured context string from pre-extracted values."""
+    lines = []
+    for field in _DIAG_INTEGRE_CONTEXT_FIELDS:
+        ev = already_extracted.get(field)
+        if ev is not None and ev.value is not None:
+            lines.append(f"- {field}: {ev.value}")
+    return "\n".join(lines) if lines else "(aucun résultat pré-extrait)"
+
+
+def extract_diag_integre(
+    text: str,
+    sections: dict[str, str],
+    already_extracted: dict[str, ExtractionValue],
+    client: "OllamaClient",
+) -> dict[str, ExtractionValue]:
+    """Extract diag_integre using a constrained LLM call.
+
+    Uses pre-extracted IHC/molecular values as structured context so the
+    LLM only needs to assemble the WHO 2021 integrated diagnosis label.
+    Returns at most one field: ``diag_integre``.
+    """
+    context = _build_diag_integre_context(already_extracted)
+
+    # Select best section text
+    section_text = _select_section_text(sections, "diagnosis", text)
+    max_chars = 4000
+    if len(section_text) > max_chars:
+        section_text = section_text[:max_chars] + "\n[... tronqué ...]"
+
+    user_prompt = (
+        _DIAG_INTEGRE_PROMPT
+        .replace("{extracted_context}", context)
+        .replace("{section_text}", section_text)
+    )
+
+    try:
+        response = client.generate(
+            prompt=user_prompt,
+            system=_DIAG_INTEGRE_SYSTEM,
+            json_schema=None,
+            temperature=0.0,
+        )
+    except Exception as exc:
+        logger.error("diag_integre LLM call failed: %s", exc)
+        return {
+            "diag_integre": ExtractionValue(
+                value=None,
+                source_span=None,
+                extraction_tier="llm",
+                confidence=0.0,
+                flagged=True,
+            )
+        }
+
+    # Parse response
+    parsed = response.parsed_json
+    if not parsed or "values" not in parsed:
+        logger.warning("diag_integre: malformed LLM response")
+        return {
+            "diag_integre": ExtractionValue(
+                value=None,
+                source_span=None,
+                extraction_tier="llm",
+                confidence=0.0,
+                flagged=True,
+            )
+        }
+
+    raw_value = parsed["values"].get("diag_integre")
+    if raw_value is None:
+        return {}
+
+    # Validate: should be a non-empty string ≤ 200 chars
+    if not isinstance(raw_value, str) or not raw_value.strip() or len(raw_value) > 200:
+        return {
+            "diag_integre": ExtractionValue(
+                value=str(raw_value)[:200] if raw_value else None,
+                source_span=parsed.get("_source", {}).get("diag_integre"),
+                extraction_tier="llm",
+                confidence=0.3,
+                flagged=True,
+            )
+        }
+
+    source_span = None
+    if "_source" in parsed and isinstance(parsed["_source"], dict):
+        source_span = parsed["_source"].get("diag_integre")
+
+    return {
+        "diag_integre": ExtractionValue(
+            value=raw_value.strip(),
+            source_span=source_span,
+            extraction_tier="llm",
+            confidence=0.8,
+            vocab_valid=True,
+        )
+    }
 
 
 # ---------------------------------------------------------------------------
