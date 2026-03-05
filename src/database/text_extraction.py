@@ -3,6 +3,8 @@ import re
 from pathlib import Path
 from typing import Optional
 
+from src.extraction.text_normalisation import normalise_text, normalise_further
+
 
 def make_extractor():
     from edspdf import Pipeline
@@ -24,11 +26,21 @@ def make_extractor():
 
 
 def normalize_extracted_text(text: str) -> str:
-    # 0) unify newlines
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    """Normalise raw extracted text for downstream processing.
 
-    # 1) normalize weird spaces
-    text = text.replace("\u00A0", " ").replace("\u2007", " ").replace("\u202F", " ")
+    Steps:
+    0. NFC normalisation + typographic cleanup (via normalise_text)
+    1. Unify newlines and normalise whitespace
+    2. De-space character-spaced segments (OCR artefact)
+    3. Recover missing spaces at digit/letter boundaries
+    4. Collapse excessive blank lines
+    """
+    # 0) NFC normalisation, strip control chars, accents, fix typographic quotes/dashes
+    text = normalise_text(text)
+    text = normalise_further(text)
+
+    # 1) unify newlines and normalise spaces
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"[ \t\f\v]+", " ", text)
     text = re.sub(r"\n[ \t]+", "\n", text)
 

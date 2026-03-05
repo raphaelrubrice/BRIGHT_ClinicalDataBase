@@ -5,6 +5,7 @@ matplotlib
 portalocker
 pypdf
 edspdf
+rapidfuzz
 
 huggingface_hub
 transformers
