@@ -65,11 +65,11 @@ _SECTION_TO_GROUPS: dict[str, list[str]] = {
 # ensuring these fields are never included in an LLM prompt even if the rule
 # extractor returned None (we prefer None over a hallucinated value).
 
+# Fields that require LLM extraction due to contextual complexity
+# In Pipeline V3, this is drastically reduced to just these two fields.
 _LLM_FIELDS: set[str] = {
     "diag_integre",
-    "localisation_chir",
-    "localisation_radiotherapie",
-    "infos_deces",
+    "ik_clinique",
 }
 
 _RULE_ONLY_FIELDS: set[str] = set(ALL_FIELDS_BY_NAME.keys()) - _LLM_FIELDS

@@ -271,6 +271,7 @@ class TestRunLLMExtraction:
         assert result == {}
         mock_client.generate.assert_not_called()
 
+    @patch("src.extraction.llm_extraction._RULE_ONLY_FIELDS", set())
     def test_only_extracts_remaining_fields(self, mock_client):
         already = {"localisation_chir": _make_extraction_value("Paris")}
 
@@ -325,6 +326,7 @@ class TestRunLLMExtraction:
 
         assert result == {}
 
+    @patch("src.extraction.llm_extraction._RULE_ONLY_FIELDS", set())
     def test_multiple_groups(self, mock_client):
         """Test extraction across multiple feature groups."""
         call_count = 0
@@ -518,7 +520,7 @@ class TestLLMPruning:
             assert field in _RULE_ONLY_FIELDS
 
     def test_rule_only_fields_include_already_rule_based(self):
-        for field in ["ik_clinique", "rx_dose", "chm_cycles",
+        for field in ["rx_dose", "chm_cycles",
                        "anti_epileptiques", "progress_clinique",
                        "progress_radiologique"]:
             assert field in _RULE_ONLY_FIELDS

@@ -61,7 +61,8 @@ def compute_per_feature_metrics(
             "TN": tn,
             "FP_hallucination": fp_hallucination,
             "FN_omission": fn_omission,
-            "alteration": alteration
+                "alteration": alteration,
+            "extraction_tier": predicted[feature].extraction_tier if feature in predicted and predicted[feature] else "unknown"
         }
         
     return results
@@ -79,9 +80,13 @@ def compute_aggregate_metrics(all_results: list[dict[str, dict[str, int]]]) -> p
     for doc_result in all_results:
         for feature, counts in doc_result.items():
             if feature not in aggregated:
-                aggregated[feature] = {"TP": 0, "TN": 0, "FP_hallucination": 0, "FN_omission": 0, "alteration": 0}
+                aggregated[feature] = {"TP": 0, "TN": 0, "FP_hallucination": 0, "FN_omission": 0, "alteration": 0, "tiers": []}
             for k, v in counts.items():
-                aggregated[feature][k] += v
+                if k == "extraction_tier":
+                    if v != "unknown":
+                        aggregated[feature]["tiers"].append(v)
+                else:
+                    aggregated[feature][k] += v
                 
     records = []
     for feature, counts in aggregated.items():
@@ -90,6 +95,8 @@ def compute_aggregate_metrics(all_results: list[dict[str, dict[str, int]]]) -> p
         fp_h = counts["FP_hallucination"]
         fn_o = counts["FN_omission"]
         alt = counts["alteration"]
+        tiers = counts["tiers"]
+        predominant_tier = max(set(tiers), key=tiers.count) if tiers else "unknown"
         
         fp_total = fp_h + alt
         fn_total = fn_o + alt
@@ -118,7 +125,8 @@ def compute_aggregate_metrics(all_results: list[dict[str, dict[str, int]]]) -> p
             "F1": f1,
             "Hallucination_Rate": hallucination_rate,
             "Alteration_Rate": alteration_rate,
-            "Omission_Rate": omission_rate
+            "Omission_Rate": omission_rate,
+            "Predominant_Tier": predominant_tier
         })
         
     df = pd.DataFrame(records)

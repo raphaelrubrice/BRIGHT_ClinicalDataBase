@@ -43,6 +43,10 @@ def parse_args() -> argparse.Namespace:
                         help="Path to clinical annotations CSV (REQ_CLINIQUE)")
     parser.add_argument("--bio-annotations", type=Path, default=DEFAULT_BIO_ANN_PATH,
                         help="Path to biological annotations CSV (REQ_BIO)")
+    parser.add_argument("--pipeline-version", type=str, choices=["v2", "v3"], default="v3",
+                        help="Pipeline version to run (default: v3)")
+    parser.add_argument("--use-gliner", action=argparse.BooleanOptionalAction, default=True,
+                        help="Enable or disable GLiNER extraction for v3 (default: enabled)")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_DIR,
                         help="Path to output directory (created if missing)")
     return parser.parse_args()
@@ -188,10 +192,20 @@ def main():
     # ------------------------------------------------------------------
     # 4. Initialise pipeline
     # ------------------------------------------------------------------
-    logger.info("Initializing ExtractionPipeline...")
+    logger.info("Initializing ExtractionPipeline (version: %s)...", args.pipeline_version)
     pipeline_kwargs = {"ollama_model": args.model}
     if args.timeout is not None:
-        pipeline_kwargs["timeout"] = args.timeout
+        pipeline_kwargs["ollama_timeout"] = args.timeout
+    
+    if args.pipeline_version == "v2":
+        pipeline_kwargs["use_llm"] = True
+        pipeline_kwargs["use_gliner"] = False
+        pipeline_kwargs["use_eds"] = False # using rule_extraction.py
+    else:
+        pipeline_kwargs["use_llm"] = True
+        pipeline_kwargs["use_gliner"] = args.use_gliner
+        pipeline_kwargs["use_eds"] = True
+        
     pipeline = ExtractionPipeline(**pipeline_kwargs)
 
     # ------------------------------------------------------------------

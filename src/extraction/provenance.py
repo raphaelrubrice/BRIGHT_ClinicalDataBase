@@ -68,6 +68,7 @@ class ExtractionResult:
     classification_is_ambiguous: bool = False
     tier1_count: int = 0
     tier2_count: int = 0
+    gliner_count: int = 0
     total_extraction_time_ms: float = 0.0
 
     # -- Convenience helpers -------------------------------------------------
@@ -101,6 +102,7 @@ class ExtractionResult:
             "total_features": len(self.features),
             "tier1_count": self.tier1_count,
             "tier2_count": self.tier2_count,
+            "gliner_count": self.gliner_count,
             "flagged_count": len(self.flagged_for_review),
             "sections": self.sections_detected,
             "extraction_time_ms": round(self.total_extraction_time_ms, 1),

@@ -102,7 +102,7 @@ class ExtractionValue(BaseModel):
     source_span: Optional[str] = None  # exact text from document
     source_span_start: Optional[int] = None  # character offset
     source_span_end: Optional[int] = None
-    extraction_tier: Literal["rule", "llm", "manual"] = "rule"
+    extraction_tier: Literal["rule", "llm", "gliner", "manual"] = "rule"
     confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     section: Optional[str] = None  # which document section
     vocab_valid: bool = True  # passed controlled vocabulary check

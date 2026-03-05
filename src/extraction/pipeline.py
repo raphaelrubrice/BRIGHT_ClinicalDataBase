@@ -17,9 +17,10 @@ from typing import Optional
 
 from .document_classifier import DocumentClassifier
 from .llm_extraction import run_llm_extraction, validate_source_spans
-from .negation import AssertionAnnotator
 from .ollama_client import OllamaClient, OllamaError
 from .provenance import ExtractionResult
+from .eds_extractor import EDSExtractor
+from .gliner_extractor import GlinerExtractor
 from .rule_extraction import run_rule_extraction
 from .schema import (
     ExtractionValue,
@@ -69,25 +70,24 @@ class ExtractionPipeline:
         ollama_timeout: int = 600,
         use_llm: bool = True,
         use_negation: bool = True,
+        use_eds: bool = True,
+        use_gliner: bool = True,
+        gliner_model: str = "urchade/gliner_multi-v2.1",
     ):
         self.use_llm = use_llm
         self.use_negation = use_negation
+        self.use_eds = use_eds
+        self.use_gliner = use_gliner
 
         # Sub-components
         self.classifier = DocumentClassifier()
         self.section_detector = SectionDetector()
 
-        # Assertion annotator (negation / hypothesis / history)
-        self._annotator: Optional[AssertionAnnotator] = None
-        if use_negation:
-            try:
-                self._annotator = AssertionAnnotator()
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "Failed to initialise AssertionAnnotator: %s. "
-                    "Negation detection will be disabled.",
-                    exc,
-                )
+        self._eds_extractor = EDSExtractor() if use_eds else None
+        
+        self._gliner_extractor = None
+        if use_gliner: 
+            self._gliner_extractor = GlinerExtractor(model_name=gliner_model)
 
         # Ollama client (initialised lazily to avoid startup overhead)
         self._ollama_client: Optional[OllamaClient] = None
@@ -194,48 +194,84 @@ class ExtractionPipeline:
         )
 
         # -----------------------------------------------------------------
-        # Step 4: Tier 1 — Rule-based extraction
+        # Step 4: Tier 1 — Rule-based extraction (EDS-NLP)
         # -----------------------------------------------------------------
         t_tier1_start = time.perf_counter()
-        tier1_results = run_rule_extraction(
-            text=text,
-            sections=sections,
-            feature_subset=feature_subset,
-            annotator=self._annotator,
-        )
+        if self.use_eds and self._eds_extractor:
+            tier1_results = self._eds_extractor.extract(
+                text=text,
+                sections=sections,
+                feature_subset=feature_subset,
+            )
+            result.add_log("Tier 1 using EDS-NLP.")
+        else:
+            tier1_results = run_rule_extraction(
+                text=text,
+                sections=sections,
+                feature_subset=feature_subset,
+            )
+            result.add_log("Tier 1 using Regex (legacy logic).")
         t_tier1_elapsed = (time.perf_counter() - t_tier1_start) * 1000
 
         result.tier1_count = len(tier1_results)
         result.add_log(
-            f"Tier 1 (rule-based): extracted {len(tier1_results)} fields "
+            f"Tier 1 (EDS-NLP): extracted {len(tier1_results)} fields "
             f"in {t_tier1_elapsed:.0f}ms."
         )
 
         # -----------------------------------------------------------------
         # Step 5: Determine remaining unextracted features
         # -----------------------------------------------------------------
-        remaining = set(feature_subset) - set(tier1_results.keys())
+        remaining_after_tier1 = set(feature_subset) - set(tier1_results.keys())
         # NIP comes from document metadata, not LLM extraction
-        remaining.discard("nip")
+        remaining_after_tier1.discard("nip")
         result.add_log(
-            f"Remaining after Tier 1: {len(remaining)} fields."
+            f"Remaining after Tier 1: {len(remaining_after_tier1)} fields."
         )
+
+        # -----------------------------------------------------------------
+        # Step 5.5: Tier 1.5 — GLiNER extractor for Narrative Fields
+        # -----------------------------------------------------------------
+        tier15_results: dict[str, ExtractionValue] = {}
+        if remaining_after_tier1 and self._gliner_extractor:
+            t_tier15_start = time.perf_counter()
+            try:
+                tier15_results = self._gliner_extractor.extract(
+                    text=text,
+                    sections=sections,
+                    feature_subset=list(remaining_after_tier1),
+                )
+            except Exception as exc:
+                result.add_log(f"Tier 1.5 GLiNER extraction failed: {exc}")
+                logger.error("Tier 1.5 GLiNER extraction failed: %s", exc)
+                
+            t_tier15_elapsed = (time.perf_counter() - t_tier15_start) * 1000
+            result.add_log(
+                f"Tier 1.5 (GLiNER): extracted {len(tier15_results)} fields "
+                f"in {t_tier15_elapsed:.0f}ms."
+            )
+            
+        remaining_after_tier15 = remaining_after_tier1 - set(tier15_results.keys())
 
         # -----------------------------------------------------------------
         # Step 6: Tier 2 — LLM extraction (for remaining features)
         # -----------------------------------------------------------------
         tier2_results: dict[str, ExtractionValue] = {}
 
-        if remaining and self.use_llm:
+        if remaining_after_tier15 and self.use_llm:
             client = self._get_ollama_client()
             if client is not None:
                 t_tier2_start = time.perf_counter()
+                
+                # Combine extracted so LLM has full context
+                already_extracted = {**tier1_results, **tier15_results}
+                
                 try:
                     tier2_results = run_llm_extraction(
                         text=text,
                         sections=sections,
-                        feature_subset=list(remaining),
-                        already_extracted=tier1_results,
+                        feature_subset=list(remaining_after_tier15),
+                        already_extracted=already_extracted,
                         client=client,
                     )
                 except Exception as exc:  # noqa: BLE001
@@ -254,20 +290,25 @@ class ExtractionPipeline:
                 result.add_log(
                     "Tier 2 (LLM) skipped: Ollama client unavailable."
                 )
-        elif not remaining:
-            result.add_log("Tier 2 (LLM) skipped: all features extracted by Tier 1.")
+        elif not remaining_after_tier15:
+            result.add_log("Tier 2 (LLM) skipped: all features extracted by Tier 1 and Tier 1.5.")
         else:
             result.add_log("Tier 2 (LLM) skipped: LLM extraction disabled.")
 
         # -----------------------------------------------------------------
-        # Step 7: Merge Tier 1 + Tier 2 (Tier 1 takes precedence)
+        # Step 7: Merge Tier 1 + Tier 1.5 + Tier 2 (Order of Precedence)
         # -----------------------------------------------------------------
         merged: dict[str, ExtractionValue] = {}
 
         # Tier 1 always wins on conflicts
         merged.update(tier1_results)
 
-        # Add Tier 2 results only for fields not in Tier 1
+        # Add Tier 1.5 results only for fields not in Tier 1
+        for fname, ev in tier15_results.items():
+            if fname not in merged:
+                merged[fname] = ev
+
+        # Add Tier 2 results only for fields not in Tier 1 or 1.5
         for fname, ev in tier2_results.items():
             if fname not in merged:
                 merged[fname] = ev

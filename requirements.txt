@@ -20,6 +20,8 @@ easyocr
 ollama
 edsnlp>=0.17.0
 pydantic>=2.0
+gliner
+onnxruntime
 
 # Testing
 pydantic

@@ -99,6 +99,10 @@ def run_benchmark(
 
     all_metrics: list[dict] = []
     error_analysis: list[dict] = []
+    
+    tier1_total = 0
+    tier2_total = 0
+    gliner_total = 0
 
     for doc in docs:
         doc_id = doc.get("document_id", "")
@@ -106,6 +110,10 @@ def run_benchmark(
         text = doc.get("raw_text", "")
 
         result = pipeline.extract_document(text, document_id=doc_id, patient_id=patient_id)
+        
+        tier1_total += result.tier1_count
+        tier2_total += result.tier2_count
+        gliner_total += result.gliner_count
 
         gt_annotations = doc.get("annotations", {})
 
@@ -163,5 +171,12 @@ def run_benchmark(
         pd.DataFrame(error_analysis).to_csv(output_path / "error_analysis.csv", index=False)
     else:
         pd.DataFrame(columns=error_cols).to_csv(output_path / "error_analysis.csv", index=False)
+
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Extraction provenance summary across all benchmark documents:")
+    logger.info("  Tier 1 (Rule/EDS): %d", tier1_total)
+    logger.info("  Tier GLiNER      : %d", gliner_total)
+    logger.info("  Tier 2 (LLM)     : %d", tier2_total)
 
     return df_metrics
