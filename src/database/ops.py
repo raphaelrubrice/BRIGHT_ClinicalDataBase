@@ -243,9 +243,9 @@ def _extract_consult_date_regex(text: str) -> Optional[str]:
     Returns the raw date substring on success, or ``None`` on failure.
     """
     pattern =(
-        r"(?i:((consultation.+du(|.))|(Paris(,|) le )|(Date( |)de( |)r(é|e)ception( |)(:| |)( |))))"
+        r"(?i:((consultation.+du(|.))|(Paris(,| +,|) +le +)|(Date( +|)de( +|)r(é|e)ception( +|)(:| +|)( +|))))"
         r"(((([0-9]{4})|([0-9]{2}))\/[0-9]{2}\/(([0-9]{4})|([0-9]{2})))"
-        r"|([0-9]{2} \D+ [0-9]{4}))"
+        r"|([0-9]{2} +\D+ +[0-9]{4}))"
     )
     match = re.search(pattern, text, re.MULTILINE)
     if match is None:
