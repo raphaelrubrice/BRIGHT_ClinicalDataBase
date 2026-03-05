@@ -55,7 +55,7 @@ class GlinerExtractor:
     def __init__(
         self,
         model_name: str = "urchade/gliner_multi-v2.1",
-        chunk_size: int = 384,
+        chunk_size: int = 200,
         chunk_overlap: int = 50,
         confidence_threshold: float = 0.5,
     ):
@@ -89,31 +89,54 @@ class GlinerExtractor:
             raise
 
     def _chunk_text(self, text: str, sections: dict[str, str]) -> list[str]:
-        """Split text into manageable chunks.
+        """Split text into manageable chunks safely below the token limit.
         
-        Uses sections first. If a section is too long, splits it further.
+        Splits by sentences first, grouping them up to `_chunk_size` words.
+        If a single sentence is extremely long, falls back to word chunking.
         """
+        import re
+        
+        def split_into_chunks(text_to_split: str) -> list[str]:
+            # Split into pseudo-sentences (by period/newline)
+            sentences = [s.strip() for s in re.split(r'(?<=[.!?\n])\s+', text_to_split) if s.strip()]
+            
+            local_chunks = []
+            current_chunk = []
+            current_word_count = 0
+            
+            for sentence in sentences:
+                words_in_sentence = len(sentence.split())
+                
+                if current_word_count + words_in_sentence > self._chunk_size and current_chunk:
+                    local_chunks.append(" ".join(current_chunk))
+                    current_chunk = []
+                    current_word_count = 0
+                
+                # If a single sentence is larger than chunk size, split it by words
+                if words_in_sentence > self._chunk_size:
+                    words = sentence.split()
+                    for i in range(0, len(words), self._chunk_size - self._chunk_overlap):
+                        local_chunks.append(" ".join(words[i:i + self._chunk_size]))
+                else:
+                    current_chunk.append(sentence)
+                    current_word_count += words_in_sentence
+                    
+            if current_chunk:
+                local_chunks.append(" ".join(current_chunk))
+                
+            return local_chunks
+
         chunks = []
         
         # Simple fallback if no sections provided
         if not sections:
-            # Naive word-based chunking
-            words = text.split()
-            for i in range(0, len(words), self._chunk_size - self._chunk_overlap):
-                chunks.append(" ".join(words[i:i + self._chunk_size]))
-            return chunks
+            return split_into_chunks(text)
 
         # Section-based chunking
         for sec_name, sec_text in sections.items():
             if not sec_text.strip():
                 continue
-                
-            words = sec_text.split()
-            if len(words) <= self._chunk_size:
-                chunks.append(sec_text)
-            else:
-                for i in range(0, len(words), self._chunk_size - self._chunk_overlap):
-                    chunks.append(" ".join(words[i:i + self._chunk_size]))
+            chunks.extend(split_into_chunks(sec_text))
 
         return chunks
 
