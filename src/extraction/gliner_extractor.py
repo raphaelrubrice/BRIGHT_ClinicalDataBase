@@ -73,10 +73,17 @@ class GlinerExtractor:
         try:
             from gliner import GLiNER
             # Load the model with ONNX optimization if available
-            self._model = GLiNER.from_pretrained(
-                self._model_name, load_onnx_model=True
-            )
-            logger.info("GLiNER model loaded successfully.")
+            try:
+                self._model = GLiNER.from_pretrained(
+                    self._model_name, load_onnx_model=True
+                )
+                logger.info("GLiNER model loaded successfully with ONNX.")
+            except Exception as e:
+                logger.warning(f"Failed to load ONNX model ({e}). Retrying without ONNX.")
+                self._model = GLiNER.from_pretrained(
+                    self._model_name, load_onnx_model=False
+                )
+                logger.info("GLiNER model loaded successfully with PyTorch backend.")
         except ImportError:
             logger.error("Failed to import gliner. Make sure it is installed.")
             raise

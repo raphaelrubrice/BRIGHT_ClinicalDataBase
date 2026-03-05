@@ -12,6 +12,8 @@ from src.extraction.rule_extraction import (
     _LATERALITY_NORM,
     extract_dates,
     _assign_dates_by_context,
+    _DIAGNOSIS_VOCAB,
+    _DRUG_SYNONYMS,
 )
 from src.extraction.text_normalisation import normalise as _norm
 
@@ -41,6 +43,12 @@ TERM_DICT: dict[str, list[str]] = {
     "tumeur_lateralite": ["gauche", "droit", "droite", "bilateral", "bilaterale", "bilatéral", "bilatérale", "median", "mediane", "médian", "médiane"],
     "evol_clinique": ["initial", "p1", "p2", "p3", "p4", "p5", "terminal"],
 }
+
+for _canon, _syns in _DIAGNOSIS_VOCAB.items():
+    TERM_DICT.setdefault("diag_histologique", []).extend(_syns)
+
+for _canon, _syns in _DRUG_SYNONYMS.items():
+    TERM_DICT.setdefault("chimios", []).extend(_syns)
 
 REGEX_DICT: dict[str, list[str]] = {
     # Demographics
@@ -87,7 +95,7 @@ _IHC_VALUE_CODA = (
     _OPT_SEP +
     r"(?:"
     r"positif[s]?|n[ée]gatif(?:ve)?|positive?|n[ée]gative?"
-    r"|maintenu[e]?|perte\s+d['']expression|absence\s+d['']expression"
+    r"|maintenu[e]?|perte\s+d['’]?\s*expression|absence\s+d['’]?\s*expression"
     r"|conserv[ée]e?|expression\s+(?:conserv[ée]e?|maintenue)"
     r"|surexprim[ée]|surexpression|exprim[ée]|pr[ée]sent"
     r"|absent|perte|perdu"
@@ -288,6 +296,9 @@ class EDSExtractor:
     def extract(self, text: str, sections: dict[str, str], feature_subset: list[str]) -> dict[str, ExtractionValue]:
         doc = self._nlp(text)
         results = {}
+        chimios_found = []
+        chimio_span_start = -1
+        chimio_span_end = -1
 
         for ent in doc.ents:
             field_name = ent.label_
@@ -349,6 +360,31 @@ class EDSExtractor:
                 # Categorical
                 emits = [("evol_clinique", ent.text.lower() if ent.text.lower() in ["initial", "terminal"] else ent.text.upper())]
             
+            elif field_name == "diag_histologique":
+                t = ent.text.lower()
+                canon = t
+                for k, syns in _DIAGNOSIS_VOCAB.items():
+                    if t in [s.lower() for s in syns]:
+                        canon = k
+                        break
+                emits = [("diag_histologique", canon)]
+            
+            elif field_name == "chimios":
+                t = ent.text.lower()
+                canon = t
+                for k, syns in _DRUG_SYNONYMS.items():
+                    if t in [s.lower() for s in syns]:
+                        canon = k
+                        break
+                if canon not in chimios_found:
+                    chimios_found.append(canon)
+                    if chimio_span_start == -1 or ent.start_char < chimio_span_start:
+                        chimio_span_start = ent.start_char
+                    if ent.end_char > chimio_span_end:
+                        chimio_span_end = ent.end_char
+                # Do not emit normally, handled after loop
+                continue
+
             elif field_name in [
                 "date_de_naissance", "chir_date", "date_chir", "chm_date_debut", "chm_date_fin",
                 "rx_date_debut", "rx_date_fin", "date_1er_symptome", "exam_radio_date_decouverte",
@@ -403,5 +439,16 @@ class EDSExtractor:
                     confidence=0.9,
                     vocab_valid=True,
                 )
+
+        if "chimios" in feature_subset and chimios_found:
+            results["chimios"] = ExtractionValue(
+                value=" + ".join(chimios_found),
+                source_span=text[chimio_span_start:chimio_span_end],
+                source_span_start=chimio_span_start,
+                source_span_end=chimio_span_end,
+                extraction_tier="rule",
+                confidence=0.85,
+                vocab_valid=True,
+            )
 
         return results
