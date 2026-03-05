@@ -3,8 +3,8 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from src.extraction.text_normalisation import normalise_text, normalise_further
-
+from src.extraction.text_normalisation import normalise_text
+from src.extraction.text_normalisation import normalise as normalise_further
 
 def make_extractor():
     from edspdf import Pipeline

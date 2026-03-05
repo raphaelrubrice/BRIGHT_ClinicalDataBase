@@ -722,7 +722,7 @@ def _build_group_schema(field_names: list[str]) -> dict[str, Any]:
     return schema
 
 
-def get_json_schema(feature_group: str) -> dict[str, Any]:
+def get_json_schema(feature_group: str, subset: Optional[list[str]] = None) -> dict[str, Any]:
     """Return a JSON Schema dict for the given feature group.
 
     Parameters
@@ -731,6 +731,8 @@ def get_json_schema(feature_group: str) -> dict[str, Any]:
         One of the keys in ``FEATURE_GROUPS``:
         ``ihc``, ``molecular``, ``chromosomal``, ``diagnosis``,
         ``demographics``, ``symptoms``, ``treatment``, ``evolution``.
+    subset : list[str], optional
+        List of field names to restrict the schema to.
 
     Returns
     -------
@@ -748,7 +750,10 @@ def get_json_schema(feature_group: str) -> dict[str, Any]:
             f"Unknown feature group: {feature_group!r}. "
             f"Available: {sorted(FEATURE_GROUPS)}"
         )
-    return _build_group_schema(FEATURE_GROUPS[feature_group])
+    fields = FEATURE_GROUPS[feature_group]
+    if subset is not None:
+        fields = [f for f in fields if f in subset]
+    return _build_group_schema(fields)
 
 
 def get_all_json_schemas() -> dict[str, dict[str, Any]]:

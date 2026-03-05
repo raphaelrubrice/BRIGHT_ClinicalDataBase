@@ -64,19 +64,15 @@ _SECTION_TO_GROUPS: dict[str, list[str]] = {
 # This provides an explicit safety net beyond the "already_extracted" filter,
 # ensuring these fields are never included in an LLM prompt even if the rule
 # extractor returned None (we prefer None over a hallucinated value).
-_RULE_ONLY_FIELDS: set[str] = {
-    # Phase A
-    "sexe", "tumeur_lateralite", "evol_clinique", "type_chirurgie",
-    "classification_oms",
-    # Phase B
-    "chimios", "tumeur_position",
-    # Already rule-based (binary/numerical)
-    "anti_epileptiques", "progress_clinique", "progress_radiologique",
-    "neuroncologue", "neurochirurgien", "radiotherapeute",
-    "ik_clinique", "rx_dose", "chm_cycles",
-    # Phase C
-    "diag_histologique",
+
+_LLM_FIELDS: set[str] = {
+    "diag_integre",
+    "localisation_chir",
+    "localisation_radiotherapie",
+    "infos_deces",
 }
+
+_RULE_ONLY_FIELDS: set[str] = set(ALL_FIELDS_BY_NAME.keys()) - _LLM_FIELDS
 
 
 # ---------------------------------------------------------------------------
@@ -349,17 +345,27 @@ def run_llm_extraction(
         Mapping ``field_name → ExtractionValue`` for newly LLM-extracted
         fields. Does **not** include fields already in *already_extracted*.
     """
-    # Determine which fields still need extraction (exclude rule-only fields)
     remaining = set(feature_subset) - set(already_extracted.keys()) - _RULE_ONLY_FIELDS
     if not remaining:
         logger.info("All features already extracted by Tier 1 or rule-only, skipping LLM.")
         return {}
 
+    all_results: dict[str, ExtractionValue] = {}
+
+    if "diag_integre" in remaining:
+        logger.info("Extracting diag_integre via constrained LLM call.")
+        diag_res = extract_diag_integre(text, sections, already_extracted, client)
+        all_results.update(diag_res)
+        remaining.remove("diag_integre")
+
+    if not remaining:
+        return all_results
+
     # Group remaining fields by feature group
     groups_needed = _determine_groups_for_features(remaining)
     if not groups_needed:
         logger.info("No feature groups applicable to remaining fields.")
-        return {}
+        return all_results
 
     logger.info(
         "LLM extraction: %d remaining fields across %d groups: %s",
@@ -367,8 +373,6 @@ def run_llm_extraction(
         len(groups_needed),
         sorted(groups_needed.keys()),
     )
-
-    all_results: dict[str, ExtractionValue] = {}
 
     for group_name, fields_in_group in groups_needed.items():
         try:
@@ -390,7 +394,7 @@ def run_llm_extraction(
 
         # Get the JSON schema for constrained decoding
         try:
-            json_schema = get_json_schema(group_name)
+            json_schema = get_json_schema(group_name, subset=fields_in_group)
         except KeyError:
             json_schema = None
 

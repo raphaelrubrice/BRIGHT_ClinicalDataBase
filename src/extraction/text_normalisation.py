@@ -103,7 +103,7 @@ def normalise_text(text: str) -> str:
 _WHITESPACE_RE = re.compile(r"\s+")
 
 
-def normalise_further(text: str) -> str:
+def normalise(text: str) -> str:
     """Strip accents, lowercase, and collapse whitespace.
 
     Used to create a normalised copy of text for pattern matching.

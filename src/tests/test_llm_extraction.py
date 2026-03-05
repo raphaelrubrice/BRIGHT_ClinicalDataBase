@@ -272,28 +272,28 @@ class TestRunLLMExtraction:
         mock_client.generate.assert_not_called()
 
     def test_only_extracts_remaining_fields(self, mock_client):
-        already = {"ihc_idh1": _make_extraction_value("positif")}
+        already = {"localisation_chir": _make_extraction_value("Paris")}
 
         mock_client.generate.return_value = _make_ollama_response(
             parsed_json={
-                "values": {"ihc_p53": "negatif", "ihc_atrx": "maintenu"},
-                "_source": {"ihc_p53": "p53 négatif"},
+                "values": {"localisation_radiotherapie": "Marseille", "another_unknown_field": "fake"},
+                "_source": {"localisation_radiotherapie": "Radio Marseille"},
             }
         )
 
         result = run_llm_extraction(
-            text="IDH1 positif. p53 négatif. ATRX maintenu.",
-            sections={"ihc": "IDH1 positif. p53 négatif. ATRX maintenu."},
-            feature_subset=["ihc_idh1", "ihc_p53", "ihc_atrx"],
+            text="Chir: Paris. Radio: Marseille.",
+            sections={"demographics": "Chir: Paris. Radio: Marseille."},
+            feature_subset=["localisation_chir", "localisation_radiotherapie", "another_unknown_field"],
             already_extracted=already,
             client=mock_client,
         )
 
-        # ihc_idh1 was already extracted — should not be in results
-        assert "ihc_idh1" not in result
-        # ihc_p53 and ihc_atrx should be extracted
-        assert "ihc_p53" in result
-        assert result["ihc_p53"].value == "negatif"
+        # localisation_chir was already extracted — should not be in results
+        assert "localisation_chir" not in result
+        # localisation_radiotherapie should be extracted
+        assert "localisation_radiotherapie" in result
+        assert result["localisation_radiotherapie"].value == "Marseille"
 
     def test_handles_ollama_error_gracefully(self, mock_client):
         mock_client.generate.side_effect = OllamaConnectionError("down")
@@ -334,27 +334,27 @@ class TestRunLLMExtraction:
             call_count += 1
             if call_count == 1:
                 return _make_ollama_response(parsed_json={
-                    "values": {"ihc_idh1": "positif"},
-                    "_source": {"ihc_idh1": "IDH1 positif"},
+                    "values": {"localisation_chir": "Paris"},
+                    "_source": {"localisation_chir": "Paris"},
                 })
             else:
                 return _make_ollama_response(parsed_json={
-                    "values": {"mol_tert": "mute"},
-                    "_source": {"mol_tert": "TERT muté"},
+                    "values": {"infos_deces": "deces"},
+                    "_source": {"infos_deces": "deces"},
                 })
 
         mock_client.generate.side_effect = mock_generate
 
         result = run_llm_extraction(
-            text="IDH1 positif. TERT muté.",
-            sections={"full_text": "IDH1 positif. TERT muté."},
-            feature_subset=["ihc_idh1", "mol_tert"],
+            text="Paris. deces.",
+            sections={"full_text": "Paris. deces."},
+            feature_subset=["localisation_chir", "infos_deces"],
             already_extracted={},
             client=mock_client,
         )
 
-        assert "ihc_idh1" in result
-        assert "mol_tert" in result
+        assert "localisation_chir" in result
+        assert "infos_deces" in result
 
 
 # ---------------------------------------------------------------------------
