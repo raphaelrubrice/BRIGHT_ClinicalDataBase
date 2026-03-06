@@ -16,6 +16,7 @@ from typing import Any, NamedTuple
 from .clinique_demographics import DEMOGRAPHICS_FIELDS, DEMOGRAPHICS_PROMPT, DEMOGRAPHICS_SYSTEM
 from .clinique_evolution import EVOLUTION_FIELDS, EVOLUTION_PROMPT, EVOLUTION_SYSTEM
 from .clinique_symptoms import SYMPTOMS_FIELDS, SYMPTOMS_PROMPT, SYMPTOMS_SYSTEM
+from .clinique_care_team import CARE_TEAM_FIELDS, CARE_TEAM_PROMPT, CARE_TEAM_SYSTEM
 
 
 class PromptConfig(NamedTuple):
@@ -40,6 +41,11 @@ PROMPT_REGISTRY: dict[str, PromptConfig] = {
         system=SYMPTOMS_SYSTEM,
         user_template=SYMPTOMS_PROMPT,
         fields=SYMPTOMS_FIELDS,
+    ),
+    "care_team": PromptConfig(
+        system=CARE_TEAM_SYSTEM,
+        user_template=CARE_TEAM_PROMPT,
+        fields=CARE_TEAM_FIELDS,
     ),
 }
 

@@ -7,7 +7,7 @@ SYMPTOMS_FIELDS: list[str] = [
 SYMPTOMS_SYSTEM = """\
 Tu es un extracteur d'informations médicales. Tu extrais l'indice de Karnofsky \
 à partir de comptes rendus de neuro-oncologie français. Tu ne FABRIQUES JAMAIS de données. \
-Si l'indice n'est pas mentionné, retourne null. /no_think\
+Si l'indice n'est pas mentionné, retourne null.\
 """
 
 SYMPTOMS_PROMPT = """\

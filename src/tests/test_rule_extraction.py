@@ -400,32 +400,32 @@ class TestNumericalExtraction:
     def test_karnofsky_score(self):
         results = extract_numerical("IK à 80%")
         assert "ik_clinique" in results
-        assert results["ik_clinique"].value == 80
+        assert results["ik_clinique"].value == '80'
 
     def test_karnofsky_kps(self):
         results = extract_numerical("KPS : 90")
         assert "ik_clinique" in results
-        assert results["ik_clinique"].value == 90
+        assert results["ik_clinique"].value == '90'
 
     def test_mitoses_count(self):
         results = extract_numerical("12 mitoses / 10 HPF")
         assert "histo_mitoses" in results
-        assert results["histo_mitoses"].value == 12
+        assert results["histo_mitoses"].value == '12'
 
     def test_grade_arabic(self):
         results = extract_numerical("grade 4")
         assert "grade" in results
-        assert results["grade"].value == 4
+        assert results["grade"].value == '4'
 
     def test_grade_roman(self):
         results = extract_numerical("Grade IV")
         assert "grade" in results
-        assert results["grade"].value == 4
+        assert results["grade"].value == '4'
 
     def test_grade_2(self):
         results = extract_numerical("Grade II")
         assert "grade" in results
-        assert results["grade"].value == 2
+        assert results["grade"].value == '2'
 
     def test_dose_gy(self):
         results = extract_numerical("60 Gy en 30 fractions")
@@ -435,7 +435,7 @@ class TestNumericalExtraction:
     def test_chemo_cycles(self):
         results = extract_numerical("6 cycles de témozolomide")
         assert "chm_cycles" in results
-        assert results["chm_cycles"].value == 6
+        assert results["chm_cycles"].value == '6'
 
     # --- Negative examples ---
 
@@ -612,7 +612,7 @@ class TestRunRuleExtraction:
         assert results["mol_mgmt"].value == "methyle"
 
         assert "grade" in results
-        assert results["grade"].value == 4
+        assert results["grade"].value == '4'
 
     def test_full_text_fallback(self):
         """When no sections, extractors run on full text."""
@@ -676,7 +676,7 @@ class TestRunRuleExtraction:
         assert results["epilepsie"].value == "oui"
 
         assert "ik_clinique" in results
-        assert results["ik_clinique"].value == 80
+        assert results["ik_clinique"].value == '80'
 
         assert "corticoides" in results
         assert results["corticoides"].value == "oui"

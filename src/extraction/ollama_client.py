@@ -420,8 +420,14 @@ class OllamaClient:
             try:
                 parsed_json = json.loads(content)
             except (json.JSONDecodeError, TypeError):
-                # Content may not be JSON — that's fine for non-formatted requests
-                pass
+                # Fallback: extract {...} block using regex
+                import re
+                m = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', content)
+                if m:
+                    try:
+                        parsed_json = json.loads(m.group(0))
+                    except (json.JSONDecodeError, TypeError):
+                        pass
 
         return OllamaResponse(
             content=content,

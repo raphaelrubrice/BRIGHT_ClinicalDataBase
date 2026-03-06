@@ -15,15 +15,15 @@ def test_gliner_extractor():
             results = []
             if "crise d'épilepsie" in text:
                 results.append({
-                    "text": "crise d'épilepsie", "label": "crise d'epilepsie ou convulsion inaugurale", "score": 0.99
+                    "text": "crise d'épilepsie", "label": "epilepsy at onset", "score": 0.99
                 })
             if "boulanger" in text:
                 results.append({
-                    "text": "boulanger", "label": "profession ou activite professionnelle", "score": 0.95
+                    "text": "boulanger", "label": "patient profession", "score": 0.95
                 })
             if "lobe temporal droit" in text:
                 results.append({
-                    "text": "lobe temporal droit", "label": "localisation anatomique de la tumeur", "score": 0.98
+                    "text": "lobe temporal droit", "label": "tumor anatomical location", "score": 0.98
                 })
             return results
 
@@ -32,7 +32,7 @@ def test_gliner_extractor():
     
     res = extractor.extract(text, {}, fields)
     
-    assert "epilepsie_1er_symptome" in res and res["epilepsie_1er_symptome"].value == "crise d'épilepsie"
+    assert "epilepsie_1er_symptome" in res and res["epilepsie_1er_symptome"].value == "oui"
     assert "activite_professionnelle" in res and res["activite_professionnelle"].value == "boulanger"
     assert "tumeur_position" in res and res["tumeur_position"].value == "lobe temporal droit"
 

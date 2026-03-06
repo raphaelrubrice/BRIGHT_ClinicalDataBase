@@ -569,7 +569,7 @@ class TestDiagIntegreConstrained:
         """Valid WHO 2021 label should be accepted."""
         mock_client.generate.return_value = _make_ollama_response(
             parsed_json={
-                "values": {"diag_integre": "Glioblastome, IDH wild-type, grade 4"},
+                "values": {"diag_integre": "Glioblastome, IDH-wildtype"},
                 "_source": {"diag_integre": "glioblastome IDH wild-type"},
             }
         )
@@ -584,8 +584,27 @@ class TestDiagIntegreConstrained:
             client=mock_client,
         )
         assert "diag_integre" in result
-        assert result["diag_integre"].value == "Glioblastome, IDH wild-type, grade 4"
+        assert result["diag_integre"].value == "Glioblastome, IDH-wildtype"
         assert result["diag_integre"].flagged is not True
+
+    def test_fuzzy_matched_response(self, mock_client):
+        """Fuzzy match against WHO 2021 label should be mapped/valid."""
+        mock_client.generate.return_value = _make_ollama_response(
+            parsed_json={
+                "values": {"diag_integre": "Glioblastome IDH-wildtype"},
+                "_source": {"diag_integre": "glioblastome IDH wild-type"},
+            }
+        )
+        already = {}
+        result = extract_diag_integre(
+            text="Some histological text",
+            sections={"conclusion": "Some histological text"},
+            already_extracted=already,
+            client=mock_client,
+        )
+        assert "diag_integre" in result
+        assert result["diag_integre"].value == "Glioblastome IDH-wildtype"
+        assert result["diag_integre"].vocab_valid is True
 
     def test_malformed_response_flagged(self, mock_client):
         """Malformed LLM response should produce flagged=True."""

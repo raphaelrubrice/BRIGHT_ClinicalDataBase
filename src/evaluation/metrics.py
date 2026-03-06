@@ -1,24 +1,47 @@
 import re
 from typing import Any
 import pandas as pd
+from rapidfuzz import fuzz
 from src.extraction.schema import ExtractionValue
 
 _FRENCH_MONTHS = {
-    "janv": 1, "fev": 2, "févr": 2, "mars": 3, "avr": 4, "mai": 5, "juin": 6,
-    "juil": 7, "aout": 8, "août": 8, "sept": 9, "oct": 10, "nov": 11, "dec": 12, "déc": 12,
+    "janv": 1, "janvier": 1, "fev": 2, "févr": 2, "fevrier": 2, "février": 2, "mars": 3, "avr": 4, "avril": 4,
+    "mai": 5, "juin": 6, "juil": 7, "juillet": 7, "aout": 8, "août": 8, "sept": 9, "septembre": 9,
+    "oct": 10, "octobre": 10, "nov": 11, "novembre": 11, "dec": 12, "déc": 12, "decembre": 12, "décembre": 12,
 }
+
+_FUZZY_THRESHOLD = 85
+_FUZZY_ELIGIBLE_FIELDS = {
+    "diag_histologique", "diag_integre", "tumeur_position",
+    "activite_professionnelle", "chimios", "localisation_chir",
+    "localisation_radiotherapie", "neuroncologue", "neurochirurgien",
+    "radiotherapeute", "infos_deces", "autre_trouble",
+}
+
+_ALTERATION_WEIGHT = 0.5
 
 def _try_parse_date(s: str) -> str | None:
     """Attempt to parse a date string to YYYY-MM-DD canonical form."""
     s = s.strip().lower()
-    # DD/MM/YYYY
-    m = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})$', s)
+    # DD/MM/YYYY or DD.MM.YYYY or DD-MM-YYYY
+    m = re.match(r'^(\d{1,2})[/\.-](\d{1,2})[/\.-](\d{4})$', s)
     if m:
         return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
     # YYYY-MM-DD
     m = re.match(r'^(\d{4})-(\d{1,2})-(\d{1,2})$', s)
     if m:
         return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    
+    # "12 mars 2021"
+    m = re.match(r'^(\d{1,2})\s+([a-zéû]+)\s+(\d{4})$', s)
+    if m and m.group(2) in _FRENCH_MONTHS:
+        return f"{m.group(3)}-{_FRENCH_MONTHS[m.group(2)]:02d}-{int(m.group(1)):02d}"
+        
+    # "mars 2021"
+    m = re.match(r'^([a-zéû]+)\s+(\d{4})$', s)
+    if m and m.group(1) in _FRENCH_MONTHS:
+        return f"{m.group(2)}-{_FRENCH_MONTHS[m.group(1)]:02d}"
+
     # month_abbrev-YY (e.g., "avr-10" → 2010-04)
     m = re.match(r'^([a-zéû]+)-(\d{2})$', s)
     if m and m.group(1) in _FRENCH_MONTHS:
@@ -66,10 +89,22 @@ def compute_per_feature_metrics(
         def normalize(v):
             if v is None:
                 return None
+            if isinstance(v, bool):
+                return "oui" if v else "non"
+            if isinstance(v, (int, float)):
+                if v == int(v):
+                    return str(int(v))
+                return str(v)
             if isinstance(v, str):
                 s = v.strip().lower()
-                if s == "na":
+                if s in ("", "na", "n/a", "null", "none"):
                     return None
+                try:
+                    f = float(s)
+                    if f == int(f):
+                        return str(int(f))
+                except ValueError:
+                    pass
                 return s
             return str(v).strip().lower()
             
@@ -94,6 +129,10 @@ def compute_per_feature_metrics(
                 tp = 1
             else:
                 tn = 1
+        elif (feature in _FUZZY_ELIGIBLE_FIELDS
+              and isinstance(p_val_norm, str) and isinstance(g_val_norm, str)
+              and fuzz.ratio(p_val_norm, g_val_norm) >= _FUZZY_THRESHOLD):
+            tp = 1
         else:
             if g_val_norm is None:
                 fp_hallucination = 1
@@ -144,8 +183,8 @@ def compute_aggregate_metrics(all_results: list[dict[str, dict[str, int]]]) -> p
         tiers = counts["tiers"]
         predominant_tier = max(set(tiers), key=tiers.count) if tiers else "unknown"
         
-        fp_total = fp_h + alt
-        fn_total = fn_o + alt
+        fp_total = fp_h + _ALTERATION_WEIGHT * alt
+        fn_total = fn_o + _ALTERATION_WEIGHT * alt
         
         precision = tp / (tp + fp_total) if (tp + fp_total) > 0 else 0.0
         recall = tp / (tp + fn_total) if (tp + fn_total) > 0 else 0.0
@@ -228,14 +267,17 @@ def compute_category_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
     records = []
     for category, features in _FEATURE_CATEGORIES.items():
-        present = [f for f in features if f in df.index]
+        present = [f for f in features if f in df.index and df.loc[f, "Predominant_Tier"] != "unknown"]
+        num_total_features = len(features)
+        
         if not present:
             records.append({
                 "category": category,
                 "F1_mean": 0.0,
                 "Precision_mean": 0.0,
                 "Recall_mean": 0.0,
-                "num_features": 0,
+                "num_features_attempted": 0,
+                "num_features_total": num_total_features,
             })
             continue
 
@@ -245,10 +287,38 @@ def compute_category_metrics(df: pd.DataFrame) -> pd.DataFrame:
             "F1_mean": subset["F1"].mean(),
             "Precision_mean": subset["Precision"].mean(),
             "Recall_mean": subset["Recall"].mean(),
-            "num_features": len(present),
+            "num_features_attempted": len(present),
+            "num_features_total": num_total_features,
         })
 
     cat_df = pd.DataFrame(records)
     if not cat_df.empty:
         cat_df = cat_df.set_index("category")
     return cat_df
+
+def compute_tier_category_metrics(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute F1 mean per category, broken down by Predominant_Tier."""
+    if df.empty or "Predominant_Tier" not in df.columns:
+        return pd.DataFrame()
+        
+    records = []
+    for category, features in _FEATURE_CATEGORIES.items():
+        present = [f for f in features if f in df.index and df.loc[f, "Predominant_Tier"] != "unknown"]
+        if not present:
+            continue
+            
+        subset = df.loc[present]
+        for tier in subset["Predominant_Tier"].unique():
+            tier_subset = subset[subset["Predominant_Tier"] == tier]
+            if not tier_subset.empty:
+                records.append({
+                    "category": category,
+                    "tier": tier,
+                    "F1_mean": tier_subset["F1"].mean(),
+                    "num_features": len(tier_subset)
+                })
+                
+    if records:
+        tier_df = pd.DataFrame(records)
+        return tier_df.set_index(["category", "tier"])
+    return pd.DataFrame()

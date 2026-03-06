@@ -16,7 +16,7 @@ EVOLUTION_SYSTEM = """\
 Tu es un extracteur d'informations médicales spécialisé en neuro-oncologie. \
 Tu extrais les informations de suivi à partir de comptes rendus de consultation \
 et de RCP français. Tu ne FABRIQUES JAMAIS de données. Si une information \
-n'est pas mentionnée dans le texte, retourne null. /no_think\
+n'est pas mentionnée dans le texte, retourne null.\
 """
 
 EVOLUTION_PROMPT = """\

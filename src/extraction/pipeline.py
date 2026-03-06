@@ -261,7 +261,19 @@ class ExtractionPipeline:
             t1 = tier1_results.get(fname)
             tg = tier15_results.get(fname)
             if fname in gliner_fields and t1 and tg:
-                tier1_gliner_merged[fname] = tg if tg.confidence > t1.confidence else t1
+                t1_val_str = str(t1.value).strip().lower() if t1.value is not None else ""
+                tg_val_str = str(tg.value).strip().lower() if tg.value is not None else ""
+                
+                if t1_val_str == tg_val_str and t1_val_str != "":
+                    # Synergistic Merge: Agreement boosts confidence
+                    base_conf = max(t1.confidence or 0.0, tg.confidence or 0.0)
+                    new_conf = min(1.0, round(base_conf + 0.1, 4))
+                    chosen = tg
+                    chosen.confidence = new_conf
+                    tier1_gliner_merged[fname] = chosen
+                else:
+                    # Mismatch: pick highest confidence
+                    tier1_gliner_merged[fname] = tg if (tg.confidence or 0.0) > (t1.confidence or 0.0) else t1
             elif t1:
                 tier1_gliner_merged[fname] = t1
             elif tg:

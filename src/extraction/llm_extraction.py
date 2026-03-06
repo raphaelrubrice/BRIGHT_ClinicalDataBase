@@ -70,6 +70,10 @@ _SECTION_TO_GROUPS: dict[str, list[str]] = {
 _LLM_FIELDS: set[str] = {
     "diag_integre",
     "ik_clinique",
+    "neuroncologue",
+    "neurochirurgien",
+    "radiotherapeute",
+    "activite_professionnelle",
 }
 
 _RULE_ONLY_FIELDS: set[str] = set(ALL_FIELDS_BY_NAME.keys()) - _LLM_FIELDS
@@ -443,16 +447,60 @@ _DIAG_INTEGRE_SYSTEM = """\
 Tu es un neuropathologiste. À partir des résultats IHC et moléculaires \
 fournis, formule le diagnostic intégré selon la classification OMS 2021 \
 des tumeurs du SNC. Réponds UNIQUEMENT avec le diagnostic intégré. \
-Si les données sont insuffisantes, retourne null. /no_think\
+Si les données sont insuffisantes, retourne null.\
 """
 
-_DIAG_INTEGRE_PROMPT = """\
+_VALID_DIAG_INTEGRE = [
+    "Glioblastome, IDH-wildtype",
+    "Astrocytome, IDH-mute, grade 2",
+    "Astrocytome, IDH-mute, grade 3",
+    "Astrocytome, IDH-mute, grade 4",
+    "Oligodendrogliome, IDH-mute et 1p/19q-codelete, grade 2",
+    "Oligodendrogliome, IDH-mute et 1p/19q-codelete, grade 3",
+    "Gliome diffus de la ligne mediane, H3 K27-altere",
+    "Gliome diffus hemispherique, H3 G34-mute",
+    "Ependymome",
+    "Meningiome",
+    "Autre gliome"
+]
+
+_DIAG_INTEGRE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "values": {
+            "type": "object",
+            "properties": {
+                "diag_integre": {
+                    "type": ["string", "null"],
+                    "enum": _VALID_DIAG_INTEGRE + [None],
+                }
+            },
+            "required": ["diag_integre"],
+        },
+        "_source": {
+            "type": "object",
+            "properties": {
+                "diag_integre": {"type": ["string", "null"]}
+            }
+        }
+    },
+    "required": ["values"],
+}
+
+_DIAG_INTEGRE_PROMPT = f"""\
 Voici les résultats déjà extraits pour ce patient :
 
-{extracted_context}
+{{extracted_context}}
 
 En te basant sur ces résultats et le texte source ci-dessous, \
 formule le diagnostic intégré selon la classification OMS 2021.
+Le diagnostic doit faire partie de cette liste stricte :
+{', '.join(_VALID_DIAG_INTEGRE)}
+
+Exemples :
+- IDH wt + TERT mute + ch10 perte -> "Glioblastome, IDH-wildtype"
+- IDH mute + ATRX perdu + sans codeletion 1p/19q + grade 2 -> "Astrocytome, IDH-mute, grade 2"
+- IDH mute + codeletion 1p/19q + grade 3 -> "Oligodendrogliome, IDH-mute et 1p/19q-codelete, grade 3"
 
 Format de réponse attendu :
 {{"values": {{"diag_integre": "<diagnostic intégré>"}}, \
@@ -462,7 +510,7 @@ Si les données sont insuffisantes pour formuler un diagnostic intégré, \
 retourne : {{"values": {{"diag_integre": null}}, "_source": {{}}}}
 
 ### Texte source :
-{section_text}
+{{section_text}}
 """
 
 # Fields whose pre-extracted values provide context for diag_integre
@@ -520,7 +568,7 @@ def extract_diag_integre(
         response = client.generate(
             prompt=user_prompt,
             system=_DIAG_INTEGRE_SYSTEM,
-            json_schema=None,
+            json_schema=_DIAG_INTEGRE_SCHEMA,
             temperature=0.0,
         )
     except Exception as exc:
@@ -569,13 +617,23 @@ def extract_diag_integre(
     if "_source" in parsed and isinstance(parsed["_source"], dict):
         source_span = parsed["_source"].get("diag_integre")
 
+    from rapidfuzz import fuzz
+    
+    # Fuzzy post-validation against the allowed enum
+    vocab_valid = False
+    if raw_value and isinstance(raw_value, str):
+        for valid_diag in _VALID_DIAG_INTEGRE:
+            if fuzz.ratio(raw_value.lower(), valid_diag.lower()) >= 70:
+                vocab_valid = True
+                break
+                
     return {
         "diag_integre": ExtractionValue(
             value=raw_value.strip(),
             source_span=source_span,
             extraction_tier="llm",
             confidence=0.8,
-            vocab_valid=True,
+            vocab_valid=vocab_valid,
         )
     }
 

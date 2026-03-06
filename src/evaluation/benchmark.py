@@ -10,6 +10,7 @@ from src.evaluation.metrics import (
     compute_per_feature_metrics,
     compute_aggregate_metrics,
     compute_category_metrics,
+    compute_tier_category_metrics,
 )
 
 # ---------------------------------------------------------------------------
@@ -169,6 +170,10 @@ def run_benchmark(
     if not df_metrics.empty:
         df_cat = compute_category_metrics(df_metrics)
         df_cat.to_csv(output_path / "category_metrics.csv")
+        
+        df_tier = compute_tier_category_metrics(df_metrics)
+        if not df_tier.empty:
+            df_tier.to_csv(output_path / "tier_category_metrics.csv")
 
     # ── Error analysis ──
     error_cols = ["document_id", "patient_id", "feature", "error_type", "cause", "predicted", "ground_truth"]

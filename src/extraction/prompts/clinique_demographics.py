@@ -16,7 +16,7 @@ DEMOGRAPHICS_SYSTEM = """\
 Tu es un extracteur d'informations médicales. Tu extrais les informations \
 démographiques et d'équipe soignante à partir de comptes rendus de consultation \
 en neuro-oncologie français. Tu ne FABRIQUES JAMAIS de données. Si une \
-information n'est pas mentionnée dans le texte, retourne null. /no_think\
+information n'est pas mentionnée dans le texte, retourne null.\
 """
 
 DEMOGRAPHICS_PROMPT = """\

@@ -42,21 +42,25 @@ class TestMetrics:
 
     def test_aggregate_metrics(self):
         doc1_metrics = {
-            "feat1": {"TP": 1, "TN": 0, "FP_hallucination": 0, "FN_omission": 0, "alteration": 0},
+            "feat1": {"TP": 1, "TN": 0, "FP_hallucination": 0, "FN_omission": 0, "alteration": 0, "extraction_tier": "llm"},
         }
         doc2_metrics = {
-            "feat1": {"TP": 0, "TN": 0, "FP_hallucination": 1, "FN_omission": 0, "alteration": 0},
+            "feat1": {"TP": 0, "TN": 0, "FP_hallucination": 1, "FN_omission": 0, "alteration": 0, "extraction_tier": "llm"},
+        }
+        doc3_metrics = {
+            "feat1": {"TP": 0, "TN": 0, "FP_hallucination": 0, "FN_omission": 0, "alteration": 1, "extraction_tier": "llm"},
         }
         
-        df = compute_aggregate_metrics([doc1_metrics, doc2_metrics])
+        df = compute_aggregate_metrics([doc1_metrics, doc2_metrics, doc3_metrics])
         
-        # FP = 1, TP = 1 => Precision = 1 / 2 = 0.5
-        # FN = 0, TP = 1 => Recall = 1 / 1 = 1.0
+        # FP = 1 + 0.5 = 1.5, TP = 1 => Precision = 1 / 2.5 = 0.4
+        # FN = 0 + 0.5 = 0.5, TP = 1 => Recall = 1 / 1.5 = 0.666...
         
         assert df.loc["feat1", "TP"] == 1
-        assert df.loc["feat1", "FP"] == 1
-        assert df.loc["feat1", "Precision"] == 0.5
-        assert df.loc["feat1", "Recall"] == 1.0
+        assert df.loc["feat1", "FP"] == 1.5
+        assert df.loc["feat1", "FN"] == 0.5
+        assert round(df.loc["feat1", "Precision"], 4) == 0.4000
+        assert round(df.loc["feat1", "Recall"], 4) == 0.6667
 
     def test_normalize_int_vs_string(self):
         predicted = {"val": ExtractionValue(value=4)}
@@ -96,6 +100,43 @@ class TestMetrics:
         
         predicted = {"val": ExtractionValue(value="2008")}
         ground_truth = {"val": {"value": "2008"}}
+        metrics = compute_per_feature_metrics(predicted, ground_truth)
+        assert metrics["val"]["TP"] == 1
+        
+        predicted = {"val": ExtractionValue(value="12 mars 2021")}
+        ground_truth = {"val": {"value": "12.03.2021"}}
+        metrics = compute_per_feature_metrics(predicted, ground_truth)
+        assert metrics["val"]["TP"] == 1
+
+    def test_fuzzy_matching(self):
+        # Eligible field
+        predicted = {"diag_integre": ExtractionValue(value="glioblastome")}
+        ground_truth = {"diag_integre": {"value": "gliolastome"}}
+        metrics = compute_per_feature_metrics(predicted, ground_truth)
+        assert metrics["diag_integre"]["TP"] == 1
+        
+        # Ineligible field
+        predicted = {"nip": ExtractionValue(value="123456")}
+        ground_truth = {"nip": {"value": "123457"}}
+        metrics = compute_per_feature_metrics(predicted, ground_truth)
+        assert metrics["nip"]["alteration"] == 1
+        
+    def test_normalize_bool_and_nulls(self):
+        predicted = {"val1": ExtractionValue(value="oui"), "val2": ExtractionValue(value="non")}
+        ground_truth = {"val1": {"value": True}, "val2": {"value": False}}
+        metrics = compute_per_feature_metrics(predicted, ground_truth)
+        assert metrics["val1"]["TP"] == 1
+        assert metrics["val2"]["TP"] == 1
+        
+        predicted = {"val3": ExtractionValue(value=""), "val4": ExtractionValue(value="null")}
+        ground_truth = {"val3": {"value": "none"}, "val4": {"value": "NA"}}
+        metrics = compute_per_feature_metrics(predicted, ground_truth)
+        assert metrics["val3"]["TN"] == 1
+        assert metrics["val4"]["TN"] == 1
+        
+    def test_normalize_numeric_strings(self):
+        predicted = {"val": ExtractionValue(value="4.0")}
+        ground_truth = {"val": {"value": "4"}}
         metrics = compute_per_feature_metrics(predicted, ground_truth)
         assert metrics["val"]["TP"] == 1
 
