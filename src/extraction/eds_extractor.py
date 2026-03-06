@@ -295,7 +295,21 @@ class EDSExtractor:
 
     def extract(self, text: str, sections: dict[str, str], feature_subset: list[str]) -> dict[str, ExtractionValue]:
         doc = self._nlp(text)
-        results = {}
+        
+        section_spans: dict[str, tuple[int, int]] = {}
+        for sec_name, sec_text in sections.items():
+            if sec_name == "full_text": continue
+            start = text.find(sec_text)
+            if start != -1:
+                section_spans[sec_name] = (start, start + len(sec_text))
+
+        def get_ent_section(start_char: int) -> str:
+            for sec_name, (sec_start, sec_end) in section_spans.items():
+                if sec_start <= start_char <= sec_end:
+                    return sec_name
+            return "full_text"
+            
+        candidates: list[dict] = []
         chimios_found = []
         chimio_span_start = -1
         chimio_span_end = -1
@@ -394,51 +408,66 @@ class EDSExtractor:
                 if extracted_dates:
                     emits = [(field_name, extracted_dates[0][0])]
             
-            if emits:
-                for subfield, subval in emits:
-                    if subfield in feature_subset and subfield not in results:
-                        results[subfield] = ExtractionValue(
-                            value=subval,
-                            source_span=ent.text,
-                            source_span_start=ent.start_char,
-                            source_span_end=ent.end_char,
-                            extraction_tier="rule",
-                            confidence=0.9,
-                            vocab_valid=True,
-                        )
-                continue
-
-            if field_name not in feature_subset:
-                continue
-            
-            # If we already have a value for this field, don't override (first match wins)
-            if field_name in results:
-                continue
-
-            value = None
-            if field_name.startswith("ihc_"):
-                value = self._parse_ihc_value(ent.text)
+            if not emits:
+                if field_name not in feature_subset:
+                    continue
+                value = None
+                if field_name.startswith("ihc_"):
+                    value = self._parse_ihc_value(ent.text)
+                    if field_name == "ihc_atrx" and value == "negatif" and "perte" in ent.text.lower():
+                        value = "perte"
+                elif field_name.startswith("mol_"):
+                    value = self._parse_mol_value(ent.text)
+                elif field_name.startswith("ch"):
+                    value = self._parse_chr_value(ent.text)
                 
-                # Test compatibility workaround: If normalisation outputted "negatif" but the test 
-                # (and original dataset) expects the specific "perte" literal for ATRX, intercept it here.
-                if field_name == "ihc_atrx" and value == "negatif" and "perte" in ent.text.lower():
-                    value = "perte"
+                if value is not None:
+                    emits = [(field_name, value)]
 
-            elif field_name.startswith("mol_"):
-                value = self._parse_mol_value(ent.text)
-            elif field_name.startswith("ch"):
-                value = self._parse_chr_value(ent.text)
+            if emits:
+                ent_sec = get_ent_section(ent.start_char)
+                for subfield, subval in emits:
+                    if subfield in feature_subset:
+                        candidates.append({
+                            "field": subfield,
+                            "value": subval,
+                            "span": ent.text,
+                            "start": ent.start_char,
+                            "end": ent.end_char,
+                            "section": ent_sec
+                        })
+
+        from src.extraction.section_detector import get_section_for_feature
+        from collections import defaultdict
+        
+        grouped = defaultdict(list)
+        for c in candidates:
+            grouped[c["field"]].append(c)
+
+        has_sections = len(section_spans) > 0
+        results = {}
+
+        for field, c_list in grouped.items():
+            if not has_sections:
+                best = c_list[0]
+            else:
+                preferred = get_section_for_feature(field)
+                c_list.sort(key=lambda x: (
+                    not (x["section"] in preferred),
+                    not (x["section"] == "preamble"),
+                    x["start"]
+                ))
+                best = c_list[0]
             
-            if value is not None:
-                results[field_name] = ExtractionValue(
-                    value=value,
-                    source_span=ent.text,
-                    source_span_start=ent.start_char,
-                    source_span_end=ent.end_char,
-                    extraction_tier="rule",
-                    confidence=0.9,
-                    vocab_valid=True,
-                )
+            results[field] = ExtractionValue(
+                value=best["value"],
+                source_span=best["span"],
+                source_span_start=best["start"],
+                source_span_end=best["end"],
+                extraction_tier="rule",
+                confidence=0.9,
+                vocab_valid=True,
+            )
 
         if "chimios" in feature_subset and chimios_found:
             results["chimios"] = ExtractionValue(

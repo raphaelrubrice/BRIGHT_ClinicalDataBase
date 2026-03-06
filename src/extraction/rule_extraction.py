@@ -68,15 +68,31 @@ _DATE_CONTEXT_KEYWORDS: dict[str, list[str]] = {
         "début de chimiothérapie", "TMZ le", "bévacizumab le", "avastin le",
         "lomustine le", "premier cycle le", "débuté le",
     ],
-    "chm_date_fin": ["fin chimio", "arrêt chimio", "dernière cure", "fin de chimiothérapie"],
+    "chm_date_fin": [
+        "fin chimio", "arrêt chimio", "dernière cure", "fin de chimiothérapie",
+        "fin TMZ", "dernier cycle"
+    ],
     "rx_date_debut": [
         "début radiothérapie", "RT débutée", "irradiation depuis", "début RT",
         "début de radiothérapie", "RT le", "radio le", "irrad",
     ],
-    "rx_date_fin": ["fin radiothérapie", "fin RT", "fin de radiothérapie", "fin d'irradiation"],
-    "date_1er_symptome": ["premier symptôme", "1er symptôme", "début des troubles", "apparition"],
-    "exam_radio_date_decouverte": ["découverte", "IRM du", "scanner du", "imagerie du"],
-    "date_progression": ["progression", "récidive", "rechute", "PD", "rechute le", "récidive le"],
+    "rx_date_fin": [
+        "fin radiothérapie", "fin RT", "fin de radiothérapie", "fin d'irradiation",
+        "fin radio", "fin irradiation"
+    ],
+    "date_1er_symptome": [
+        "premier symptôme", "1er symptôme", "début des troubles", "apparition",
+        "début des symptômes", "symptomatologie initiale", "premiers signes",
+        "début de la symptomatologie"
+    ],
+    "exam_radio_date_decouverte": [
+        "découverte", "IRM du", "scanner du", "imagerie du",
+        "IRM de découverte", "scanner initial", "imagerie initiale", "TDM du"
+    ],
+    "date_progression": [
+        "progression", "récidive", "rechute", "PD", "rechute le", "récidive le",
+        "prise de contraste", "rehaussement", "augmentation de taille"
+    ],
     "date_deces": ["décès", "décédé", "décédée"],
     "dn_date": [
         "dernière nouvelle", "dernières nouvelles", "consultation du",
@@ -84,6 +100,13 @@ _DATE_CONTEXT_KEYWORDS: dict[str, list[str]] = {
         "dernières nouvelles du", "DN du",
     ],
 }
+
+_DATE_CONTEXT_WINDOW = {
+    "chm_date_debut": 300, "chm_date_fin": 300,
+    "rx_date_debut": 300, "rx_date_fin": 300,
+    "date_1er_symptome": 300,
+}
+_DEFAULT_CONTEXT_HALF = 200
 
 
 def _assign_dates_by_context(
@@ -110,14 +133,16 @@ def _assign_dates_by_context(
     results: dict[str, ExtractionValue] = {}
 
     for _i, (norm, raw, start, end) in enumerate(date_results):
-        ctx_start = max(0, start - 200)
-        ctx_end = min(len(text), end + 200)
-        context = _norm(text[ctx_start:ctx_end])
-
         best_field: str | None = None
         best_distance: int = 999999
 
         for field_name in date_fields:
+            # Determine window size for this specific field
+            half_win = _DATE_CONTEXT_WINDOW.get(field_name, _DEFAULT_CONTEXT_HALF)
+            ctx_start = max(0, start - half_win)
+            ctx_end = min(len(text), end + half_win)
+            context = _norm(text[ctx_start:ctx_end])
+
             keywords = _DATE_CONTEXT_KEYWORDS.get(field_name, [])
             for kw in keywords:
                 kw_norm = _norm(kw)
@@ -416,6 +441,10 @@ def extract_ihc(text: str) -> dict[str, ExtractionValue]:
             else:
                 normalised = value_raw
 
+        # Map ATRX positif to maintenu
+        if field_name == "ihc_atrx" and normalised == "positif":
+            normalised = "maintenu"
+
         # Only keep first match per field (first occurrence in text)
         if field_name not in results:
             results[field_name] = ExtractionValue(
@@ -664,12 +693,13 @@ def extract_molecular(text: str) -> dict[str, ExtractionValue]:
 
         normalised = _MOL_STATUS_NORM.get(status_raw)
         if normalised is None:
-            # Likely a variant string
-            if _VARIANT_PATTERN.match(status_raw):
-                normalised = "mute"
-                _set(field_name, normalised, m.group(), m.start(), m.end())
-                # Also store the variant detail
-                continue
+            # Check for variant pattern
+            variant_match = _VARIANT_PATTERN.search(status_raw)
+            if variant_match:
+                if field_name == "mol_braf":
+                    normalised = variant_match.group()
+                else:
+                    normalised = "mute"
             else:
                 normalised = status_raw
 
@@ -880,12 +910,12 @@ _BINARY_KEYWORDS: dict[str, list[str]] = {
     ],
     "histo_necrose": [
         "nécrose", "necrose", "nécroses", "plages de nécrose",
-        "foyers de nécrose", "nécrose palissadique",
+        "foyers de nécrose", "nécrose palissadique", "nécroses en palissade", "nécrose extensive",
     ],
     "histo_pec": [
         "prolifération endothéliocapillaire", "proliferation endotheliocapillaire",
         "prolifération endothélio-capillaire", "PEC",
-        "hyperplasie endothéliocapillaire",
+        "hyperplasie endothéliocapillaire", "prolifération vasculaire", "hyperplasie vasculaire", "néovascularisation",
     ],
     "corticoides": [
         "corticoïdes", "corticoides", "corticothérapie", "dexaméthasone",
@@ -926,6 +956,10 @@ _BINARY_KEYWORDS: dict[str, list[str]] = {
     "antecedent_tumoral": [
         "antécédent tumoral", "antecedent tumoral",
         "antécédent de tumeur", "antécédents tumoraux",
+        "tumeur antérieure", "néoplasie antérieure", "cancer antérieur", "tumeur préexistante",
+    ],
+    "epilepsie_1er_symptome": [
+        "crise inaugurale", "crise révélatrice", "épilepsie inaugurale",
     ],
 }
 
@@ -936,6 +970,15 @@ _BINARY_1ER_SYMPTOME: dict[str, str] = {
     "deficit": "deficit_1er_symptome",
     "cognitif": "cognitif_1er_symptome",
 }
+
+_FIRST_SYMPTOM_MARKERS = [
+    "premier", "initial", "inaugural", "révélateur", "découverte",
+    "motif de consultation", "1er symptôme", "symptôme révélateur",
+]
+
+def _is_first_symptom_context(text: str, match_start: int, window: int = 200) -> bool:
+    context = text[max(0, match_start - window):match_start].lower()
+    return any(marker in context for marker in _FIRST_SYMPTOM_MARKERS)
 
 
 def extract_binary(
@@ -978,9 +1021,15 @@ def extract_binary(
                     is_negated = True
 
             value = "non" if is_negated else "oui"
+            
+            # Disambiguate first-symptom
+            target_field = field_name
+            if field_name in _BINARY_1ER_SYMPTOME:
+                if _is_first_symptom_context(text, match.start()):
+                    target_field = _BINARY_1ER_SYMPTOME[field_name]
 
-            if field_name not in results:
-                results[field_name] = ExtractionValue(
+            if target_field not in results:
+                results[target_field] = ExtractionValue(
                     value=value,
                     source_span=match.group(),
                     source_span_start=match.start(),
@@ -989,7 +1038,15 @@ def extract_binary(
                     confidence=0.8,
                     vocab_valid=True,
                 )
-            break  # First keyword match per field
+            # Cannot break early if disambiguating, as a later match in the text 
+            # might be the other variant (first symptom vs regular).
+            # We break after satisfying both if it's a dual field, or just 1 if not.
+            if field_name not in _BINARY_1ER_SYMPTOME:
+                break
+            elif target_field == field_name and _BINARY_1ER_SYMPTOME[field_name] in results:
+                break
+            elif target_field == _BINARY_1ER_SYMPTOME[field_name] and field_name in results:
+                break
 
     return results
 
@@ -1067,22 +1124,22 @@ def extract_numerical(text: str) -> dict[str, ExtractionValue]:
 
     # Karnofsky
     for m in _PAT_KARNOFSKY.finditer(text):
-        val = int(m.group("value"))
+        val = str(int(m.group("value")))
         _set("ik_clinique", val, m.group(), m.start(), m.end())
 
     # Mitoses
     for m in _PAT_MITOSES.finditer(text):
-        val = int(m.group("value"))
+        val = str(int(m.group("value")))
         _set("histo_mitoses", val, m.group(), m.start(), m.end())
 
     # Grade
     for m in _PAT_GRADE.finditer(text):
         val_str = m.group("value").strip()
         if val_str in _ROMAN_TO_INT:
-            val = _ROMAN_TO_INT[val_str]
+            val = str(_ROMAN_TO_INT[val_str])
         else:
             try:
-                val = int(val_str)
+                val = str(int(val_str))
             except ValueError:
                 continue
         _set("grade", val, m.group(), m.start(), m.end())
@@ -1094,7 +1151,7 @@ def extract_numerical(text: str) -> dict[str, ExtractionValue]:
 
     # Chemo cycles
     for m in _PAT_CYCLES.finditer(text):
-        val = int(m.group("value"))
+        val = str(int(m.group("value")))
         _set("chm_cycles", val, m.group(), m.start(), m.end(), confidence=0.8)
 
     return results
@@ -1465,6 +1522,13 @@ _PAT_EVOL_INITIAL_CONTEXT = re.compile(
     _RE_FLAGS,
 )
 
+_PROGRESSION_PATTERNS = [
+    (re.compile(r"(?:1[èe]re|premi[èe]re)\s+(?:récidive|progression)", _RE_FLAGS), "P1"),
+    (re.compile(r"(?:2[èe]me|deuxi[èe]me)\s+(?:récidive|progression)", _RE_FLAGS), "P2"),
+    (re.compile(r"(?:3[èe]me|troisi[èe]me)\s+(?:récidive|progression)", _RE_FLAGS), "P3"),
+    (re.compile(r"\brécidive\b", _RE_FLAGS), "P1"),  # bare "récidive" defaults to P1
+]
+
 
 def extract_evol_clinique(text: str) -> dict[str, ExtractionValue]:
     """Extract clinical evolution label (initial/P1/P2/…/terminal).
@@ -1510,9 +1574,22 @@ def extract_evol_clinique(text: str) -> dict[str, ExtractionValue]:
                 confidence=0.85, vocab_valid=True,
             )}
 
+    # 3.5 Progression markers
+    for pat, label in _PROGRESSION_PATTERNS:
+        m = pat.search(text)
+        if m:
+            return {"evol_clinique": ExtractionValue(
+                value=label,
+                source_span=m.group(), source_span_start=m.start(),
+                source_span_end=m.end(), extraction_tier="rule",
+                confidence=0.85, vocab_valid=True,
+            )}
+
     # 4. Context inference (flagged — lower confidence)
     m = _PAT_EVOL_INITIAL_CONTEXT.search(text)
     if m:
+        # If we are in a history context, this is likely a past "initial" mention, not the current one.
+        # But we don't have the section easily here, so we just set confidence lower.
         return {"evol_clinique": ExtractionValue(
             value="initial",
             source_span=m.group(), source_span_start=m.start(),
@@ -1585,14 +1662,39 @@ def extract_type_chirurgie(text: str) -> dict[str, ExtractionValue]:
 
     m = _PAT_CHIR_BIOPSIE.search(text)
     if m:
-        return _ev("biopsie", m, 0.85)
+        # Check context: if preceded by "pièce de", this is a specimen description, 
+        # not the surgery type itself (unless it's the only thing we have)
+        context_start = max(0, m.start() - 20)
+        context = text[context_start:m.start()].lower()
+        if "pièce de" in context or "piece de" in context:
+            # We skip this match and search for another one later in the text if possible
+            # But the regex search only finds the first one. Let's use finditer.
+            pass # We'll handle this in a rewrite below
+        else:
+            return _ev("biopsie", m, 0.85)
+            
+    # Rewrite biopsie search to handle "pièce de biopsie"
+    for m in _PAT_CHIR_BIOPSIE.finditer(text):
+        context_start = max(0, m.start() - 20)
+        context = text[context_start:m.start()].lower()
+        if "pièce de" not in context and "piece de" not in context:
+            return _ev("biopsie", m, 0.85)
+
     m = _PAT_CHIR_BST.search(text)
     if m:
         return _ev("biopsie", m, 0.85)
 
     m = _PAT_CHIR_EXERESE_BARE.search(text)
     if m:
+        # Same check for bare exerese
         return _ev("exerese", m, 0.70)
+
+    # Re-evaluate bare exerese with the same logic
+    for m in _PAT_CHIR_EXERESE_BARE.finditer(text):
+        context_start = max(0, m.start() - 20)
+        context = text[context_start:m.start()].lower()
+        if "pièce d" not in context and "piece d" not in context:
+            return _ev("exerese", m, 0.70)
 
     m = _PAT_CHIR_ATTENTE.search(text)
     if m:
@@ -1624,18 +1726,51 @@ _PAT_OMS_YEAR_ONLY = re.compile(
 
 
 def extract_classification_oms(text: str) -> dict[str, ExtractionValue]:
-    """Extract WHO classification year (2007/2016/2021) from *text*."""
+    """Extract WHO classification year (2007/2016/2021) from *text*.
+    
+    Two-pass approach:
+    1. First pass: search only in conclusion/diagnostic context
+    2. Second pass: search full text, prefer the most recent valid year
+    """
+    all_matches = []
+    
+    # Collect all matches across all patterns
     for pat in (_PAT_OMS_CLASSIFICATION, _PAT_OMS_WHO_YEAR, _PAT_OMS_YEAR_ONLY):
-        m = pat.search(text)
-        if m:
-            year = m.group("year")
-            if year in _VALID_OMS_YEARS:
-                return {"classification_oms": ExtractionValue(
-                    value=year,
-                    source_span=m.group(), source_span_start=m.start(),
-                    source_span_end=m.end(), extraction_tier="rule",
-                    confidence=0.95, vocab_valid=True,
-                )}
+        for m in pat.finditer(text):
+            all_matches.append(m)
+            
+    if not all_matches:
+        return {}
+        
+    # Pass 1: look near conclusion/diagnostic keywords
+    for m in all_matches:
+        year = m.group("year")
+        if year not in _VALID_OMS_YEARS:
+            continue
+            
+        context_start = max(0, m.start() - 200)
+        context_end = min(len(text), m.end() + 200)
+        context = text[context_start:context_end].lower()
+        if any(kw in context for kw in ("conclusion", "diagnostic", "synthèse", "retenu")):
+            return {"classification_oms": ExtractionValue(
+                value=year,
+                source_span=m.group(), source_span_start=m.start(),
+                source_span_end=m.end(), extraction_tier="rule",
+                confidence=0.95, vocab_valid=True,
+            )}
+
+    # Pass 2: fallback — pick the highest (most recent) valid year
+    valid_matches = [(int(m.group("year")), m) for m in all_matches if m.group("year") in _VALID_OMS_YEARS]
+    
+    if valid_matches:
+        best_year, best_m = max(valid_matches, key=lambda x: x[0])
+        return {"classification_oms": ExtractionValue(
+            value=str(best_year),
+            source_span=best_m.group(), source_span_start=best_m.start(),
+            source_span_end=best_m.end(), extraction_tier="rule",
+            confidence=0.95, vocab_valid=True,
+        )}
+        
     return {}
 
 
@@ -1691,11 +1826,12 @@ def extract_chimios(text: str) -> dict[str, ExtractionValue]:
     if not found_drugs:
         return {}
 
-    # Sort by position in text
-    found_drugs.sort(key=lambda x: x[1].start())
-    drug_names = list(dict.fromkeys(d[0] for d in found_drugs))  # dedupe, preserve order
-    first_match = found_drugs[0][1]
-    last_match = found_drugs[-1][1]
+    # Sort alphabetically and dedupe
+    drug_names = sorted(list(dict.fromkeys(d[0] for d in found_drugs)))
+    
+    # We still need the min and max positions across all matched drugs to capture the whole span
+    first_match = min(found_drugs, key=lambda x: x[1].start())[1]
+    last_match = max(found_drugs, key=lambda x: x[1].end())[1]
 
     value = " + ".join(drug_names)
     span_text = text[first_match.start():last_match.end()]
@@ -1716,6 +1852,12 @@ def extract_chimios(text: str) -> dict[str, ExtractionValue]:
 # ═══════════════════════════════════════════════════════════════════════════
 
 _ALL_LOCATIONS: list[str] = [
+    # Composite lobes
+    "parieto-occipital", "pariéto-occipital",
+    "fronto-temporal", "fronto-pariétal", "fronto-parietal",
+    "temporo-pariétal", "temporo-parietal",
+    "temporo-occipital", "pariéto-temporal",
+    "fronto-temporo-pariétal",
     # Lobes
     "frontal", "temporal", "pariétal", "parietal", "occipital",
     "insulaire", "cingulaire",
@@ -1767,6 +1909,9 @@ _LOC_NORM: dict[str, str] = {
     "noyaux gris centraux": "ganglions de la base",
     "ventriculaire": "ventricule",
     "épendymaire": "épendyme",
+    "pariéto-occipital": "parieto-occipital",
+    "fronto-pariétal": "fronto-parietal",
+    "temporo-pariétal": "temporo-parietal",
 }
 
 

@@ -233,45 +233,63 @@ class ExtractionPipeline:
         # Step 5.5: Tier 1.5 — GLiNER extractor for Narrative Fields
         # -----------------------------------------------------------------
         tier15_results: dict[str, ExtractionValue] = {}
-        if remaining_after_tier1 and self._gliner_extractor:
+        if self._gliner_extractor:
             t_tier15_start = time.perf_counter()
             try:
                 tier15_results = self._gliner_extractor.extract(
                     text=text,
                     sections=sections,
-                    feature_subset=list(remaining_after_tier1),
+                    feature_subset=feature_subset,
                 )
             except Exception as exc:
                 result.add_log(f"Tier 1.5 GLiNER extraction failed: {exc}")
                 logger.error("Tier 1.5 GLiNER extraction failed: %s", exc)
-                
+
             t_tier15_elapsed = (time.perf_counter() - t_tier15_start) * 1000
+            result.gliner_count = len(tier15_results)
             result.add_log(
                 f"Tier 1.5 (GLiNER): extracted {len(tier15_results)} fields "
                 f"in {t_tier15_elapsed:.0f}ms."
             )
-            
-        remaining_after_tier15 = remaining_after_tier1 - set(tier15_results.keys())
+
+        # -----------------------------------------------------------------
+        # Step 5.6: Merge Tier 1 + GLiNER (confidence-based for GLINER_FIELDS)
+        # -----------------------------------------------------------------
+        gliner_fields = GlinerExtractor.GLINER_FIELDS if self._gliner_extractor else set()
+        tier1_gliner_merged: dict[str, ExtractionValue] = {}
+        for fname in set(list(tier1_results.keys()) + list(tier15_results.keys())):
+            t1 = tier1_results.get(fname)
+            tg = tier15_results.get(fname)
+            if fname in gliner_fields and t1 and tg:
+                tier1_gliner_merged[fname] = tg if tg.confidence > t1.confidence else t1
+            elif t1:
+                tier1_gliner_merged[fname] = t1
+            elif tg:
+                tier1_gliner_merged[fname] = tg
+
+        remaining_for_llm = set(feature_subset) - set(tier1_gliner_merged.keys())
+        remaining_for_llm.discard("nip")
+        result.add_log(
+            f"After Tier 1 + GLiNER merge: {len(tier1_gliner_merged)} fields. "
+            f"Remaining for LLM: {len(remaining_for_llm)}."
+        )
 
         # -----------------------------------------------------------------
         # Step 6: Tier 2 — LLM extraction (for remaining features)
         # -----------------------------------------------------------------
         tier2_results: dict[str, ExtractionValue] = {}
 
-        if remaining_after_tier15 and self.use_llm:
+        if remaining_for_llm and self.use_llm:
             client = self._get_ollama_client()
             if client is not None:
                 t_tier2_start = time.perf_counter()
-                
-                # Combine extracted so LLM has full context
-                already_extracted = {**tier1_results, **tier15_results}
                 
                 try:
                     tier2_results = run_llm_extraction(
                         text=text,
                         sections=sections,
-                        feature_subset=list(remaining_after_tier15),
-                        already_extracted=already_extracted,
+                        feature_subset=list(remaining_for_llm),
+                        already_extracted=tier1_gliner_merged,
                         client=client,
                     )
                 except Exception as exc:  # noqa: BLE001
@@ -290,25 +308,18 @@ class ExtractionPipeline:
                 result.add_log(
                     "Tier 2 (LLM) skipped: Ollama client unavailable."
                 )
-        elif not remaining_after_tier15:
-            result.add_log("Tier 2 (LLM) skipped: all features extracted by Tier 1 and Tier 1.5.")
+        elif not remaining_for_llm:
+            result.add_log("Tier 2 (LLM) skipped: all features extracted by Tier 1 and GLiNER.")
         else:
             result.add_log("Tier 2 (LLM) skipped: LLM extraction disabled.")
 
         # -----------------------------------------------------------------
-        # Step 7: Merge Tier 1 + Tier 1.5 + Tier 2 (Order of Precedence)
+        # Step 7: Merge Tier 1+GLiNER + Tier 2
         # -----------------------------------------------------------------
         merged: dict[str, ExtractionValue] = {}
+        merged.update(tier1_gliner_merged)
 
-        # Tier 1 always wins on conflicts
-        merged.update(tier1_results)
-
-        # Add Tier 1.5 results only for fields not in Tier 1
-        for fname, ev in tier15_results.items():
-            if fname not in merged:
-                merged[fname] = ev
-
-        # Add Tier 2 results only for fields not in Tier 1 or 1.5
+        # Add Tier 2 results only for fields not already covered
         for fname, ev in tier2_results.items():
             if fname not in merged:
                 merged[fname] = ev
@@ -325,7 +336,7 @@ class ExtractionPipeline:
         result.features = merged
         result.add_log(
             f"Merged: {len(merged)} total features "
-            f"({result.tier1_count} Tier 1 + {result.tier2_count} Tier 2)."
+            f"({result.tier1_count} Tier 1 + {result.gliner_count} GLiNER + {result.tier2_count} Tier 2)."
         )
 
         # -----------------------------------------------------------------

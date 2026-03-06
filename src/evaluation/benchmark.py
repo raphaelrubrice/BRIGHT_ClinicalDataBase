@@ -67,7 +67,12 @@ def _classify_error_cause(
            gt_str.strip().lower().replace("é", "e").replace("è", "e"):
             return "format_mismatch"
 
-    # 6. Default: hallucination (FP) or generic omission/alteration
+    # 6. Int/string format mismatch
+    if error_type == "alteration" and p_str and gt_str:
+        if p_str.strip() == gt_str.strip():
+            return "type_mismatch"
+
+    # 7. Default: hallucination (FP) or generic omission/alteration
     return "hallucination" if error_type in ("hallucination", "omission") else "format_mismatch"
 
 

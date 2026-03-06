@@ -1,6 +1,34 @@
+import re
 from typing import Any
 import pandas as pd
 from src.extraction.schema import ExtractionValue
+
+_FRENCH_MONTHS = {
+    "janv": 1, "fev": 2, "févr": 2, "mars": 3, "avr": 4, "mai": 5, "juin": 6,
+    "juil": 7, "aout": 8, "août": 8, "sept": 9, "oct": 10, "nov": 11, "dec": 12, "déc": 12,
+}
+
+def _try_parse_date(s: str) -> str | None:
+    """Attempt to parse a date string to YYYY-MM-DD canonical form."""
+    s = s.strip().lower()
+    # DD/MM/YYYY
+    m = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})$', s)
+    if m:
+        return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+    # YYYY-MM-DD
+    m = re.match(r'^(\d{4})-(\d{1,2})-(\d{1,2})$', s)
+    if m:
+        return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    # month_abbrev-YY (e.g., "avr-10" → 2010-04)
+    m = re.match(r'^([a-zéû]+)-(\d{2})$', s)
+    if m and m.group(1) in _FRENCH_MONTHS:
+        year = 2000 + int(m.group(2))
+        return f"{year}-{_FRENCH_MONTHS[m.group(1)]:02d}"
+    # Year only (e.g., "2008")
+    m = re.match(r'^(\d{4})$', s)
+    if m:
+        return m.group(1)
+    return None
 
 def compute_per_feature_metrics(
     predicted: dict[str, ExtractionValue],
@@ -36,12 +64,30 @@ def compute_per_feature_metrics(
         tp = tn = fp_hallucination = fn_omission = alteration = 0
         
         def normalize(v):
+            if v is None:
+                return None
             if isinstance(v, str):
-                return v.strip().lower()
-            return v
+                s = v.strip().lower()
+                if s == "na":
+                    return None
+                return s
+            return str(v).strip().lower()
             
         p_val_norm = normalize(p_val)
         g_val_norm = normalize(g_val)
+        
+        # Attempt date normalization and chimios normalization
+        if isinstance(p_val_norm, str) and isinstance(g_val_norm, str):
+            p_date = _try_parse_date(p_val_norm)
+            g_date = _try_parse_date(g_val_norm)
+            if p_date and g_date:
+                # Compare at the coarsest shared granularity
+                min_len = min(len(p_date), len(g_date))
+                p_val_norm = p_date[:min_len]
+                g_val_norm = g_date[:min_len]
+            elif " + " in p_val_norm and " + " in g_val_norm:
+                p_val_norm = " + ".join(sorted(p_val_norm.split(" + ")))
+                g_val_norm = " + ".join(sorted(g_val_norm.split(" + ")))
         
         if p_val_norm == g_val_norm:
             if p_val_norm is not None:

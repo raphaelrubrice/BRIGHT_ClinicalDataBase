@@ -57,3 +57,50 @@ class TestMetrics:
         assert df.loc["feat1", "FP"] == 1
         assert df.loc["feat1", "Precision"] == 0.5
         assert df.loc["feat1", "Recall"] == 1.0
+
+    def test_normalize_int_vs_string(self):
+        predicted = {"val": ExtractionValue(value=4)}
+        ground_truth = {"val": {"value": "4"}}
+        metrics = compute_per_feature_metrics(predicted, ground_truth)
+        assert metrics["val"]["TP"] == 1
+        
+        predicted = {"val": ExtractionValue(value=90)}
+        ground_truth = {"val": {"value": "90"}}
+        metrics = compute_per_feature_metrics(predicted, ground_truth)
+        assert metrics["val"]["TP"] == 1
+
+    def test_normalize_na(self):
+        predicted = {"val": None}
+        ground_truth = {"val": {"value": "NA"}}
+        metrics = compute_per_feature_metrics(predicted, ground_truth)
+        assert metrics["val"]["TN"] == 1
+        
+        ground_truth = {"val": {"value": " na "}}
+        metrics = compute_per_feature_metrics(predicted, ground_truth)
+        assert metrics["val"]["TN"] == 1
+        
+        ground_truth = {"val": {"value": "Na"}}
+        metrics = compute_per_feature_metrics(predicted, ground_truth)
+        assert metrics["val"]["TN"] == 1
+
+    def test_normalize_date(self):
+        predicted = {"val": ExtractionValue(value="01/04/2010")}
+        ground_truth = {"val": {"value": "avr-10"}}
+        metrics = compute_per_feature_metrics(predicted, ground_truth)
+        assert metrics["val"]["TP"] == 1
+        
+        predicted = {"val": ExtractionValue(value="01/03/2025")}
+        ground_truth = {"val": {"value": "mars-25"}}
+        metrics = compute_per_feature_metrics(predicted, ground_truth)
+        assert metrics["val"]["TP"] == 1
+        
+        predicted = {"val": ExtractionValue(value="2008")}
+        ground_truth = {"val": {"value": "2008"}}
+        metrics = compute_per_feature_metrics(predicted, ground_truth)
+        assert metrics["val"]["TP"] == 1
+
+    def test_normalize_chimios_order(self):
+        predicted = {"chimios": ExtractionValue(value="bevacizumab + temozolomide")}
+        ground_truth = {"chimios": {"value": "Temozolomide + bevacizumab"}}
+        metrics = compute_per_feature_metrics(predicted, ground_truth)
+        assert metrics["chimios"]["TP"] == 1
