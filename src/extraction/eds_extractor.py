@@ -1,6 +1,7 @@
 import re
 from typing import Any
 import edsnlp
+import edsnlp.pipes as eds
 
 from src.extraction.schema import ExtractionValue, get_field, ControlledVocab
 from src.extraction.rule_extraction import (
@@ -14,219 +15,155 @@ from src.extraction.rule_extraction import (
     _assign_dates_by_context,
     _DIAGNOSIS_VOCAB,
     _DRUG_SYNONYMS,
+    _DATE_CONTEXT_KEYWORDS,
 )
 from src.extraction.text_normalisation import normalise as _norm
+from collections import defaultdict
+from src.extraction.section_detector import get_section_for_feature
 
 # ---------------------------------------------------------------------------
 # Matcher Dictionaries
 # ---------------------------------------------------------------------------
 
 TERM_DICT: dict[str, list[str]] = {
-    # Booleans / Interventions
     "optune": ["optune", "ttfields", "tt-fields", "tumor treating fields", "champs électriques"],
     "corticoides": ["corticoïdes", "corticoides", "corticothérapie", "dexaméthasone", "dexamethasone", "solumédrol", "solumedrol", "médrol", "prednisone", "cortancyl", "prednisolone"],
     "anti_epileptiques": ["anti-épileptique", "antiépileptique", "anti-epileptique", "antiepileptique", "keppra", "lévétiracétam", "levetiracetam", "valproate", "dépakine", "depakine", "lacosamide", "vimpat", "lamotrigine"],
     "type_chirurgie": ["exérèse complète", "exérèse partielle", "biopsie", "gtr", "str", "exérèse", "resection"],
-    
-    # Symptoms
     "epilepsie_1er_symptome": ["épilepsie", "epilepsie", "crises comitiales", "crises convulsives", "crise convulsive", "crise comitiale", "crise épileptique", "crises épileptiques", "comitialité"],
     "ceph_hic_1er_symptome": ["céphalées", "cephalees", "céphalée", "htic", "hypertension intracrânienne", "hypertension intracranienne"],
     "deficit_1er_symptome": ["déficit", "deficit", "déficitaire", "hémiplégie", "hémiparésie", "hemiparesie", "parésie", "paralysie"],
     "cognitif_1er_symptome": ["troubles cognitifs", "trouble cognitif", "confusion", "troubles mnésiques", "trouble mnésique", "ralentissement"],
     "histo_necrose": ["nécrose", "necrose", "nécroses", "plages de nécrose", "foyers de nécrose", "nécrose palissadique"],
     "histo_pec": ["prolifération endothéliocapillaire", "proliferation endotheliocapillaire", "prolifération endothélio-capillaire", "pec", "hyperplasie endothéliocapillaire"],
-    
-    # Demographics
     "sexe": ["homme", "femme", "masculin", "féminin", "feminin", "monsieur", "madame", "mme"],
-    
-    # Tumor Stats
     "tumeur_lateralite": ["gauche", "droit", "droite", "bilateral", "bilaterale", "bilatéral", "bilatérale", "median", "mediane", "médian", "médiane"],
     "evol_clinique": ["initial", "p1", "p2", "p3", "p4", "p5", "terminal"],
 }
 
-for _canon, _syns in _DIAGNOSIS_VOCAB.items():
-    TERM_DICT.setdefault("diag_histologique", []).extend(_syns)
-
-for _canon, _syns in _DRUG_SYNONYMS.items():
-    TERM_DICT.setdefault("chimios", []).extend(_syns)
-
 REGEX_DICT: dict[str, list[str]] = {
-    # Demographics
-    "date_de_naissance": [r"(?i)(?:n[ée]e?\s+le\s+|date\s+de\s+naissance\s*[:\s]\s*)\d{4}-\?\?-\?\?"],
-    "sexe": [r"(?i)\|\s*[MF]\s*\|"], # Added (?i) to work with attr="LOWER"
-    
-    # Numerical
-    "rx_dose": [r"(?i)\b\d+(?:[.,]\d+)?\s*Gy\b"],
-    "histo_mitoses": [r"(?i)\b\d+\s*mitoses?(?:\s*/\s*\d+\s*HPF)?\b"],
-    "chm_cycles": [r"(?i)\b\d+\s*(?:cycles?|cures?)\b"],
-    "ik_clinique": [r"(?i)(?:IK|Karnofsky|KPS|indice\s+de\s+Karnofsky)\s*[:=\-àa\s]\s*\d{2,3}\s*%?"],
-    
-    # Categorical
+    "sexe": [r"(?i)\|\s*[MF]\s*\|"],
     "classification_oms": [
         r"(?i)(?:classification|class\.?)\s+(?:OMS|WHO)\s+(?:de\s+)?20\d{2}",
         r"(?i)(?:OMS|WHO)\s+20\d{2}",
         r"(?i)classification\s+20\d{2}"
     ],
     "grade": [r"(?i)\bgrade\s*[:=\-\s]?\s*(?:[1-4]|I{1,3}V?|IV)\b"],
+    "ik_clinique": [
+        r"(?i)(?:indice\s+de\s+)?karnofsky\s*(?:[:=\-]|(?:est\s+)?(?:estim[eé]e?|[eé]valu[eé]e?)\s+[àa]\s+|de\s+)?\s*\d{2,3}", 
+        r"(?i)\bik\s*(?:[:=\-]|(?:est\s+)?(?:estim[eé]e?|[eé]valu[eé]e?)\s+[àa]\s+|de\s+)?\s*\d{2,3}"
+    ],
+    "rx_dose": [r"(?i)dose\s+(?:de\s+)?(?:radio|rt)[^\d]*?\d+(?:[.,]\d+)?\s*gy", r"(?i)\b\d+(?:[.,]\d+)?\s*gy\b"],
+    "chm_cycles": [r"(?i)\b\d+\s+cycles?\b"],
+    "histo_mitoses": [r"(?i)\b\d+\s*mitoses?\b"],
 }
 
-from src.extraction.rule_extraction import _DATE_CONTEXT_KEYWORDS
-_MONTHS_PATTERN = r"(?:janv(?:ier)?|f[eé]v(?:rier)?|mars|avr(?:il)?|mai|juin|juill?(?:et)?|ao[uû]t|sept(?:embre)?|oct(?:obre)?|nov(?:embre)?|d[eé]c(?:embre)?)"
-_DATE_PATTERN = (
-    r"(?:(?:le\s+)?\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}"
-    r"|(?:le\s+)?\d{1,2}\s+" + _MONTHS_PATTERN + r"\s+\d{2,4}"
-    r"|(?:en\s+|depuis\s+)?(?:19|20)\d{2})"
-)
-
-for _date_field, _keywords in _DATE_CONTEXT_KEYWORDS.items():
-    _kws_regex = "|".join(re.escape(k) for k in _keywords)
-    REGEX_DICT[_date_field] = [
-        r"(?i)(?:" + _kws_regex + r")\s*(?:[:\-\s]|est\s+)?\s*" + _DATE_PATTERN,
-        r"(?i)" + _DATE_PATTERN + r"\s*(?:[:\-\s]|pour\s+(?:une\s+)?)?\s*(?:" + _kws_regex + r")\b"
-    ]
-
-# We build regexes for IHC, Molecular, Chromosomal that capture the concept + value
-# to mimic rule_extraction.py but rely on EDS-NLP for entity spans and negation.
-
 _OPT_SEP = r"\s*(?:[:=\-]|est\s+(?:estim[eé]e?\s+[àa]\s+|[eé]valu[eé]e?\s+[àa]\s+|de\s+|un\s+score\s+de\s+)?)?\s*"
+IHC_REGEX = _OPT_SEP + r"(" + r"\d+\s*(?:[àa\-]\s*\d+\s*)?%|<?\.?\s*\d+\s*%|score\s+(?:de\s+)?\d+|positif[s]?|n[ée]gatif(?:ve)?|positive?|n[ée]gative?|maintenu[e]?|perte\s+d['’]?\s*expression|absence\s+d['’]?\s*expression|conserv[ée]e?|expression\s+(?:conserv[ée]e?|maintenue)|surexprim[ée]|surexpression|exprim[ée]|pr[ée]sent|absent|perte|perdu|non\s+(?:exprim[ée]|d[ée]tect[ée]|retrouv[ée])|pr[ée]serv[ée]|normal|\+(?!\d)|\-(?!\d)" + r")"
+MOL_REGEX = _OPT_SEP + r"(" + r"wt|wild[- ]?type|sauvage|type\s+sauvage|s[ée]quence\s+sauvage|statut?\s+wt|status\s+wt|non\s+mut[ée]e?(?:\(e\))?|mut[ée]e?(?:\(e\))?|mutation|mutation\s+(?:d[ée]tect[ée]e?|identifi[ée]e?)|variant\s+pathog[eè]ne|alt[ée]r[ée]e?(?:\(e\))?|pr[ée]sence\s+de\s+mutation|absence\s+de\s+mutation(?:\s+d[ée]tect[ée]e?)?|pas\s+de\s+mutation(?:\s+d[ée]tect[ée]e?)?|promoteur\s+(?:non\s+)?m[ée]thyl[ée]|m[ée]thylation\s+(?:du\s+promoteur|positive|n[ée]gative|absente)|hyper?m[ée]thyl[ée]|non\s+hyper?m[ée]thyl[ée]|m[ée]thyl[ée]|non\s+m[ée]thyl[ée]|absence\s+de\s+m[ée]thylation|(?:p\.)?[A-Z]\d+[A-Z]" + r")"
+CHR_REGEX = _OPT_SEP + r"(" + r"gain(?:\s+de\s+signal)?|perte(?:\s+(?:partielle|focale|all[ée]lique|de\s+signal|d['']h[ée]t[ée]rozygotie|h[ée]mi?zygote|homo(?:zygote)?|h[ée]t[ée]ro(?:zygote)?))?|d[ée]l[ée]tion(?:\s+(?:focale|partielle))?|deleted?|del|monosomie|polysomie|trisomie|loh|normal[e]?" + r")"
 
-# --- IHC ---
-_IHC_VALUE_CODA = (
-    _OPT_SEP +
-    r"(?:"
-    r"positif[s]?|n[ée]gatif(?:ve)?|positive?|n[ée]gative?"
-    r"|maintenu[e]?|perte\s+d['’]?\s*expression|absence\s+d['’]?\s*expression"
-    r"|conserv[ée]e?|expression\s+(?:conserv[ée]e?|maintenue)"
-    r"|surexprim[ée]|surexpression|exprim[ée]|pr[ée]sent"
-    r"|absent|perte|perdu"
-    r"|non\s+(?:exprim[ée]|d[ée]tect[ée]|retrouv[ée])"
-    r"|pr[ée]serv[ée]|normal"
-    r"|\+|\-"
-    r"|\d+\s*(?:[àa\-]\s*\d+\s*)?%"
-    r"|<?\.?\s*\d+\s*%"
-    r"|score\s+(?:de\s+)?\d+"
-    r")"
-)
+def _build_ihc_pattern(source, terms):
+    return dict(
+        source=source,
+        terms=terms,
+        regex=[r"(?i)hirsch.*?est.*?(?:score\s+)?(\d+)"] if source == "ihc_egfr_hirsch" else [],
+        assign=[
+            dict(
+                name="value",
+                regex=IHC_REGEX,
+                window=10,
+                replace_entity=True,
+                reduce_mode="keep_first"
+            )
+        ]
+    )
 
-REGEX_DICT.update({
-    "ihc_idh1": [r"(?i)(?:idh-?1)" + _IHC_VALUE_CODA],
-    "ihc_p53": [r"(?i)(?:p53)" + _IHC_VALUE_CODA],
-    "ihc_atrx": [r"(?i)(?:atrx)" + _IHC_VALUE_CODA],
-    "ihc_fgfr3": [r"(?i)(?:fgfr3)" + _IHC_VALUE_CODA],
-    "ihc_braf": [r"(?i)(?:braf)" + _IHC_VALUE_CODA],
-    "ihc_hist_h3k27m": [r"(?i)(?:h3\s*k27m|h3\.3\s*k27m|histone\s*h3\s*k27m)" + _IHC_VALUE_CODA],
-    "ihc_hist_h3k27me3": [r"(?i)(?:h3\s*k27me3)" + _IHC_VALUE_CODA],
+def _build_mol_pattern(source, terms):
+    return dict(
+        source=source,
+        terms=terms,
+        regex=[r"(?i)(?:statut?\s+WT|status\s+WT)\s+(?:du?\s+g[eè]ne?\s+)?(?:" + "|".join(terms) + r")",
+               r"(?i)g[eè]ne\s+(?:" + "|".join(terms) + r")\s+sauvage",
+               r"(?i)(?:pas\s+de\s+mutation(?:\s+d[ée]tect[ée]e?)?|absence\s+de\s+mutation(?:\s+d[ée]tect[ée]e?)?)\s+(?:du?\s+g[eè]ne?\s+)?(?:" + "|".join(terms) + r")"],
+        assign=[
+            dict(
+                name="value",
+                regex=MOL_REGEX,
+                window=10,
+                replace_entity=True,
+                reduce_mode="keep_first"
+            )
+        ]
+    )
+
+def _build_chr_pattern(source, terms, additional_regex=None):
+    res = dict(
+        source=source,
+        terms=terms,
+        assign=[
+            dict(
+                name="value",
+                regex=CHR_REGEX,
+                window=8,
+                replace_entity=True,
+                reduce_mode="keep_first"
+            )
+        ]
+    )
+    if additional_regex:
+        res["regex"] = additional_regex
+    return res
+
+CM_PATTERNS = [
+    _build_ihc_pattern("ihc_idh1", ["idh-1", "idh1"]),
+    _build_ihc_pattern("ihc_p53", ["p53"]),
+    _build_ihc_pattern("ihc_atrx", ["atrx"]),
+    _build_ihc_pattern("ihc_fgfr3", ["fgfr3"]),
+    _build_ihc_pattern("ihc_braf", ["braf"]),
+    _build_ihc_pattern("ihc_hist_h3k27m", ["h3 k27m", "h3.3 k27m", "h3k27m", "histone h3 k27m"]),
+    _build_ihc_pattern("ihc_hist_h3k27me3", ["h3 k27me3", "h3k27me3"]),
+    _build_ihc_pattern("ihc_egfr_hirsch", ["egfr hirsch", "score hirsch", "egfr"]),
+    _build_ihc_pattern("ihc_gfap", ["gfap"]),
+    _build_ihc_pattern("ihc_olig2", ["olig2"]),
+    _build_ihc_pattern("ihc_ki67", ["ki-67", "ki67", "index de prolifération"]),
+    _build_ihc_pattern("ihc_mmr", ["mmr", "mlh1", "msh2", "msh6", "pms2", "dmmr", "pmmr", "deficit mmr"]),
     
-    # 1. High-priority match for conversational Hirsch scores ("est score de 3", "évalué à 2") ignoring percentages
-    # 2. Fallback coda for standard "EGFR: positif" or "EGFR 20%"
-    "ihc_egfr_hirsch": [
-        r"(?i)(?:score\s+hirsch|egfr(?:\s*hirsch)?)\s*(?:est\s+|évalu[ée]e?\s+[àa]\s+|[:=\-]\s*)?(?:un\s+)?(?:score\s+(?:de\s+)?)?\d+(?![\d\s]*%)",
-        r"(?i)(?:egfr(?:\s*hirsch)?|score\s+hirsch)" + _IHC_VALUE_CODA
-    ],
+    _build_mol_pattern("mol_idh1", ["idh-1", "idh1"]),
+    _build_mol_pattern("mol_idh2", ["idh-2", "idh2"]),
+    _build_mol_pattern("mol_tert", ["tert"]),
+    _build_mol_pattern("mol_CDKN2A", ["cdkn2a"]),
+    _build_mol_pattern("mol_h3f3a", ["h3f3a"]),
+    _build_mol_pattern("mol_hist1h3b", ["hist1h3b"]),
+    _build_mol_pattern("mol_braf", ["braf"]),
+    _build_mol_pattern("mol_mgmt", ["mgmt"]),
+    _build_mol_pattern("mol_fgfr1", ["fgfr1"]),
+    _build_mol_pattern("mol_egfr_mut", ["egfr"]),
+    _build_mol_pattern("mol_prkca", ["prkca"]),
+    _build_mol_pattern("mol_p53", ["p53", "tp53"]),
+    _build_mol_pattern("mol_pten", ["pten"]),
+    _build_mol_pattern("mol_cic", ["cic"]),
+    _build_mol_pattern("mol_fubp1", ["fubp1"]),
+    _build_mol_pattern("mol_atrx", ["atrx"]),
     
-    "ihc_gfap": [r"(?i)(?:gfap)" + _IHC_VALUE_CODA],
-    "ihc_olig2": [r"(?i)(?:olig2)" + _IHC_VALUE_CODA],
-    "ihc_ki67": [r"(?i)(?:ki-?67|index\s+de\s+prolif[ée]ration)" + _IHC_VALUE_CODA],
-    "ihc_mmr": [r"(?i)(?:mmr|mlh1|msh2|msh6|pms2|[dp]mmr|deficit\s*mmr)" + _IHC_VALUE_CODA],
-})
-
-
-# --- Molecular ---
-_MOL_VALUE_CODA = (
-    _OPT_SEP +
-    r"(?:"
-    r"wt|wild[- ]?type|sauvage|type\s+sauvage|s[ée]quence\s+sauvage"
-    r"|statut?\s+wt|status\s+wt"
-    r"|non\s+mut[ée]e?(?:\(e\))?"
-    r"|mut[ée]e?(?:\(e\))?|mutation"
-    r"|mutation\s+(?:d[ée]tect[ée]e?|identifi[ée]e?)"
-    r"|variant\s+pathog[eè]ne"
-    r"|alt[ée]r[ée]e?(?:\(e\))?"
-    r"|pr[ée]sence\s+de\s+mutation"
-    r"|absence\s+de\s+mutation(?:\s+d[ée]tect[ée]e?)?"
-    r"|pas\s+de\s+mutation(?:\s+d[ée]tect[ée]e?)?"
-    r"|promoteur\s+(?:non\s+)?m[ée]thyl[ée]"
-    r"|m[ée]thylation\s+(?:du\s+promoteur|positive|n[ée]gative|absente)"
-    r"|hyper?m[ée]thyl[ée]|non\s+hyper?m[ée]thyl[ée]"
-    r"|m[ée]thyl[ée]|non\s+m[ée]thyl[ée]"
-    r"|absence\s+de\s+m[ée]thylation"
-    r"|(?:p\.)?[A-Z]\d+[A-Z]"  # Variant
-    r")"
-)
-
-# pas de mutation <gene> -> we'll extract as "wt"
-_MOL_NEGATED_PREFIX = r"(?:pas\s+de\s+mutation(?:\s+d[ée]tect[ée]e?)?|absence\s+de\s+mutation(?:\s+d[ée]tect[ée]e?)?)\s+(?:du?\s+g[eè]ne?\s+)?"
-_MOL_MUTATION_PREFIX = r"(?:mutation|mutation\s+(?:d[ée]tect[ée]e?|identifi[ée]e?))\s+(?:du?\s+(?:g[eè]ne?\s+)?)?(?:promoteur\s+(?:du?\s+)?)?"
-_MOL_WT_PREFIX = r"(?:statut?\s+WT|status\s+WT)\s+(?:du?\s+g[eè]ne?\s+)?"
-_MOL_GENE_SAUVAGE_SUFFIX = r"\s+sauvage"
-
-def _mol_regex(gene_names: str) -> list[str]:
-    return [
-        r"(?i)" + rf"(?:{gene_names})" + _MOL_VALUE_CODA,
-        r"(?i)" + _MOL_NEGATED_PREFIX + rf"(?:{gene_names})",
-        r"(?i)" + _MOL_MUTATION_PREFIX + rf"(?:{gene_names})(?:\s*[:(\s]\s*(?:p\.)?[A-Z]\d+[A-Z]\s*[)]?)?",
-        r"(?i)" + _MOL_WT_PREFIX + rf"(?:{gene_names})",
-        r"(?i)" + rf"g[eè]ne\s+(?:{gene_names})" + _MOL_GENE_SAUVAGE_SUFFIX,
-    ]
-
-REGEX_DICT.update({
-    "mol_idh1": _mol_regex(r"idh-?1"),
-    "mol_idh2": _mol_regex(r"idh-?2"),
-    "mol_tert": _mol_regex(r"tert"),
-    "mol_CDKN2A": _mol_regex(r"cdkn2a"),
-    "mol_h3f3a": _mol_regex(r"h3f3a"),
-    "mol_hist1h3b": _mol_regex(r"hist1h3b"),
-    "mol_braf": _mol_regex(r"braf"),
-    "mol_mgmt": _mol_regex(r"mgmt") + [
-        r"(?i)" + r"mgmt\s*[:\-]?\s*(?:promoteur\s+(?:non\s+)?m[ée]thyl[ée]|m[ée]thylation\s+(?:du\s+promoteur|positive|n[ée]gative|absente)|m[ée]thyl[ée]|non\s+m[ée]thyl[ée]|hyper?m[ée]thyl[ée]|non\s+hyper?m[ée]thyl[ée]|wt|mut[ée]e?)"
-    ],
-    "mol_fgfr1": _mol_regex(r"fgfr1"),
-    "mol_egfr_mut": _mol_regex(r"egfr"),
-    "mol_prkca": _mol_regex(r"prkca"),
-    "mol_p53": _mol_regex(r"p53|tp53"),
-    "mol_pten": _mol_regex(r"pten"),
-    "mol_cic": _mol_regex(r"cic"),
-    "mol_fubp1": _mol_regex(r"fubp1"),
-    "mol_atrx": _mol_regex(r"atrx"),
-    "del_cdkn2a": [r"(?i)" + r"d[ée]l[ée]tion\s+(?:homo(?:zygote)?|bi[- ]?all[ée]lique)\s+(?:de\s+)?cdkn2a"],
-})
-
-
-# --- Chromosomal ---
-_CHR_VALUE_CODA = (
-    _OPT_SEP +
-    r"(?:"
-    r"gain(?:\s+de\s+signal)?|perte(?:\s+(?:partielle|focale|all[ée]lique|de\s+signal|d['']h[ée]t[ée]rozygotie|h[ée]mi?zygote|homo(?:zygote)?|h[ée]t[ée]ro(?:zygote)?))?"
-    r"|d[ée]l[ée]tion(?:\s+(?:focale|partielle))?"
-    r"|deleted?|del"
-    r"|monosomie|polysomie|trisomie|loh"
-    r"|normal[e]?"
-    r")"
-)
-_CHR_ABSENCE_PREFIX = r"(?:absence\s+de\s+(?:perte|d[ée]l[ée]tion)|pas\s+de\s+(?:perte|d[ée]l[ée]tion))\s+(?:du\s+(?:bras\s+)?)?"
-
-def _chr_regex(arm: str) -> list[str]:
-    return [
-        r"(?i)" + rf"(?:{arm})" + _CHR_VALUE_CODA,
-        r"(?i)" + rf"\b(?:{arm})\s*[+\-]\s", # CGH
-        r"(?i)" + _CHR_ABSENCE_PREFIX + rf"(?:{arm})",
-    ]
-
-# The complex codeletion regexes
-REGEX_DICT.update({
-    "codeletion_1p_19q": [
-        r"(?i)" + r"(?:cod[ée]l[ée]tion|co-d[ée]l[ée]tion)\s+(?:des?\s+)?(?:bras?\s+)?1p[/\s]+(?:et\s+)?19q",
-        r"(?i)" + r"1p[/\s]*19q\s+(?:cod[ée]l[ée]t|co-d[ée]l[ée]t)",
-    ],
-    "ch1p": _chr_regex(r"1p"),
-    "ch19q": _chr_regex(r"19q"),
-    "ch10p": _chr_regex(r"10p"),
-    "ch10q": _chr_regex(r"10q"),
-    "ch7p": _chr_regex(r"7p"),
-    "ch7q": _chr_regex(r"7q"),
-    "ch9p": _chr_regex(r"9p"),
-    "ch9q": _chr_regex(r"9q"),
-})
+    _build_chr_pattern("ch1p", ["1p"], [r"(?i)\b1p\s*([+\-])\s", r"(?i)(?:absence\s+de\s+(?:perte|d[ée]l[ée]tion)|pas\s+de\s+(?:perte|d[ée]l[ée]tion))\s+(?:du\s+(?:bras\s+)?)?1p"]),
+    _build_chr_pattern("ch19q", ["19q"], [r"(?i)\b19q\s*([+\-])\s", r"(?i)(?:absence\s+de\s+(?:perte|d[ée]l[ée]tion)|pas\s+de\s+(?:perte|d[ée]l[ée]tion))\s+(?:du\s+(?:bras\s+)?)?19q"]),
+    _build_chr_pattern("ch10p", ["10p"], [r"(?i)\b10p\s*([+\-])\s"]),
+    _build_chr_pattern("ch10q", ["10q"], [r"(?i)\b10q\s*([+\-])\s"]),
+    _build_chr_pattern("ch7p", ["7p"], [r"(?i)\b7p\s*([+\-])\s"]),
+    _build_chr_pattern("ch7q", ["7q"], [r"(?i)\b7q\s*([+\-])\s"]),
+    _build_chr_pattern("ch9p", ["9p"], [r"(?i)\b9p\s*([+\-])\s"]),
+    _build_chr_pattern("ch9q", ["9q"], [r"(?i)\b9q\s*([+\-])\s"]),
+    
+    dict(
+        source="codeletion_1p_19q",
+        regex=[r"(?i)(?:cod[ée]l[ée]tion|co-d[ée]l[ée]tion)\s+(?:des?\s+)?(?:bras?\s+)?1p[/\s]+(?:et\s+)?19q", r"(?i)1p[/\s]*19q\s+(?:cod[ée]l[ée]t|co-d[ée]l[ée]t)"]
+    ),
+    dict(
+        source="del_cdkn2a",
+        regex=[r"(?i)d[ée]l[ée]tion\s+(?:homo(?:zygote)?|bi[- ]?all[ée]lique)\s+(?:de\s+)?cdkn2a"]
+    ),
+]
 
 
 class EDSExtractor:
@@ -234,103 +171,131 @@ class EDSExtractor:
         self._nlp = edsnlp.blank("eds")
         self._nlp.add_pipe("eds.sentences")
         self._nlp.add_pipe("eds.normalizer")
+        self._nlp.add_pipe("eds.sections")
         
-        # We pass our regex config. Matcher works incrementally over text.
         self._nlp.add_pipe(
             "eds.matcher", 
             config=dict(terms=TERM_DICT, regex=REGEX_DICT, attr="LOWER")
         )
-        self._nlp.add_pipe("eds.negation")
-        self._nlp.add_pipe("eds.hypothesis")
-        self._nlp.add_pipe("eds.family")
-
-    def _parse_ihc_value(self, text: str) -> str:
-        text = text.lower()
-        import re
-        range_match = re.search(r"(\d+)\s*[àa\-]\s*(\d+)\s*%", text)
-        lt_match = re.search(r"<\s*(\d+)\s*%", text)
-        pct_match = re.search(r"(\d+)\s*%", text)
-        score_match = re.search(r"score\s+(?:de\s+)?(\d+)", text)
+        self._nlp.add_pipe("eds.dates")
+        self._nlp.add_pipe("eds.quantities")
         
-        # New safety net to explicitly catch "est 3", "évalué à 2", etc.
-        hirsch_num_match = re.search(r"(?:hirsch|egfr).*?(?:est|évalu[ée]?\s*[àa]|:|-|=|\s)\s*(?:un\s+)?(?:score\s+(?:de\s+)?)?(\d+)(?![\d\s]*%)", text)
+        self._nlp.add_pipe("eds.terminology", name="terminology_diag", config=dict(
+            label="diag_histologique",
+            terms=_DIAGNOSIS_VOCAB,
+            attr="LOWER"
+        ))
+        
+        self._nlp.add_pipe("eds.terminology", name="terminology_drugs", config=dict(
+            label="chimios",
+            terms=_DRUG_SYNONYMS,
+            attr="LOWER"
+        ))
+        
+        self._nlp.add_pipe("eds.hemiplegia", config=dict(span_setter={"ents": True, "deficit_1er_symptome": True}))
+        self._nlp.add_pipe("eds.dementia", config=dict(span_setter={"ents": True, "cognitif_1er_symptome": True}))
+        
+        self._nlp.add_pipe("eds.contextual_matcher", config=dict(
+            attr="LOWER",
+            patterns=CM_PATTERNS,
+            label="contextual_feature"
+        ))
+
+        self._nlp.add_pipe("eds.negation")
+        self._nlp.add_pipe("eds.family")
+        self._nlp.add_pipe("eds.hypothesis")
+        self._nlp.add_pipe("eds.history")
+
+    def _parse_ihc_assigned(self, val: str) -> str:
+        val = val.lower()
+        range_match = re.search(r"(\d+)\s*[àa\-]\s*(\d+)\s*%", val)
+        lt_match = re.search(r"<\s*(\d+)\s*%", val)
+        pct_match = re.search(r"(\d+)\s*%", val)
+        score_match = re.search(r"score\s+(?:de\s+)?(\d+)", val)
 
         if range_match: return f"{range_match.group(1)}-{range_match.group(2)}"
         if lt_match: return f"<{lt_match.group(1)}"
         if pct_match: return pct_match.group(1)
-        if hirsch_num_match: return hirsch_num_match.group(1)
         if score_match: return score_match.group(1)
         
         for raw in sorted(_IHC_VALUE_NORM.keys(), key=len, reverse=True):
-            if re.search(r"\b" + re.escape(raw) + r"\b", text) or raw in ["+", "-"] and raw in text:
+            if re.search(r"\b" + re.escape(raw) + r"\b", val) or raw in ["+", "-"] and raw in val:
                 return _IHC_VALUE_NORM[raw]
-        return text
+        return val
 
-    def _parse_mol_value(self, text: str) -> str:
-        text = text.lower()
-        import re
-        if re.search(r"pas de mutation|absence de mutation|sauvage|wt|non mut", text):
+    def _parse_mol_assigned(self, val: str) -> str:
+        val = val.lower()
+        if re.search(r"pas de mutation|absence de mutation|sauvage|wt|non mut", val):
             return "wt"
-        if re.search(_VARIANT_PATTERN, text):
+        if re.search(_VARIANT_PATTERN, val):
             return "mute"
         for raw in sorted(_MOL_STATUS_NORM.keys(), key=len, reverse=True):
-            if re.search(r"\b" + re.escape(raw) + r"\b", text):
+            if re.search(r"\b" + re.escape(raw) + r"\b", val):
                 return _MOL_STATUS_NORM[raw]
         return "mute"
 
-    def _parse_chr_value(self, text: str) -> str | None:
-        text = text.lower()
-        import re
-        if re.search(r"absence de (?:perte|d[ée]l[ée]tion)|pas de (?:perte|d[ée]l[ée]tion)", text):
-            return None # Ignored
-        # Short CGH
-        cgh = re.search(r"\b(?:1p|19q|10p|10q|7p|7q|9p|9q)\s*([+\-])\s", text)
+    def _parse_chr_assigned(self, val: str) -> str | None:
+        val = val.lower()
+        if re.search(r"absence de (?:perte|d[ée]l[ée]tion)|pas de (?:perte|d[ée]l[ée]tion)", val):
+            return None
+        cgh = re.search(r"\b(?:1p|19q|10p|10q|7p|7q|9p|9q)\s*([+\-])\s", val)
         if cgh:
             return "gain" if cgh.group(1) == "+" else "perte"
         
         for raw in sorted(_CHR_STATUS_NORM.keys(), key=len, reverse=True):
-            if re.search(r"\b" + re.escape(raw) + r"\b", text):
+            if re.search(r"\b" + re.escape(raw) + r"\b", val):
                 return _CHR_STATUS_NORM[raw]
-        return "perte" # Default for codeletion matches
+        return "perte"
+
 
     def extract(self, text: str, sections: dict[str, str], feature_subset: list[str]) -> dict[str, ExtractionValue]:
         doc = self._nlp(text)
+        has_sections = len(sections) > 1 or (len(sections) == 1 and "full_text" not in sections)
         
-        section_spans: dict[str, tuple[int, int]] = {}
-        for sec_name, sec_text in sections.items():
-            if sec_name == "full_text": continue
-            start = text.find(sec_text)
-            if start != -1:
-                section_spans[sec_name] = (start, start + len(sec_text))
-
-        def get_ent_section(start_char: int) -> str:
-            for sec_name, (sec_start, sec_end) in section_spans.items():
-                if sec_start <= start_char <= sec_end:
-                    return sec_name
-            return "full_text"
-            
         candidates: list[dict] = []
         chimios_found = []
         chimio_span_start = -1
         chimio_span_end = -1
 
-        for ent in doc.ents:
+        all_ents = list(doc.ents)
+        for span_group in ["dates", "quantities"]:
+            if span_group in doc.spans:
+                all_ents.extend(doc.spans[span_group])
+                
+        seen_spans = set()
+        unique_ents = []
+        for ent in all_ents:
+            span_id = (ent.start, ent.end, ent.label_)
+            if span_id not in seen_spans:
+                seen_spans.add(span_id)
+                unique_ents.append(ent)
+
+        for ent in unique_ents:
             field_name = ent.label_
+            if field_name == "contextual_feature" and hasattr(ent._, "source"):
+                field_name = ent._.source
             
-            # 1. Family history filtering
             if ent._.family:
                 continue
+            
+            if getattr(ent._, 'hypothesis', False) and field_name not in ["diag_histologique", "tumeur_lateralite", "classification_oms", "grade"]:
+                continue
+            
+            if getattr(ent._, 'history', False) and field_name not in ["chimios", "type_chirurgie", "date_1er_symptome", "date", "dates", "classification_oms", "grade"]:
+                continue
 
-            # Multi-field handlers
             emits = []
+            ent_sec = "full_text"
+            if hasattr(ent._, "section") and getattr(ent._, "section") is not None:
+                ent_sec = ent._.section.label_
+                
             if field_name == "codeletion_1p_19q":
                 emits = [("ch1p", "perte"), ("ch19q", "perte")]
             elif field_name == "del_cdkn2a":
                 emits = [("mol_CDKN2A", "mute"), ("ch9p", "perte")]
             elif field_name == "sexe":
                 t = ent.text.lower()
-                # Use strict string replacement to avoid evaluating 'm' in 'femme'
-                if t in ["femme", "féminin", "feminin", "madame", "mme"] or "f" in t.replace("|", "").strip():
+                if "femme" in t or "féminin" in t or "feminin" in t or "madame" in t or "mme" in t or "f" in t.replace("|", "").strip():
                     sex_val = "F"
                 else:
                     sex_val = "M"
@@ -349,16 +314,6 @@ class EDSExtractor:
                     grade_val = _ROMAN_TO_INT.get(val_str) or (int(val_str) if val_str.isdigit() else None)
                     if grade_val is not None:
                         emits = [("grade", grade_val)]
-            elif field_name in ["rx_dose", "histo_mitoses", "chm_cycles", "ik_clinique"]:
-                if field_name == "ik_clinique":
-                    num_match = re.search(r"(\d{2,3})", ent.text)
-                else:
-                    num_match = re.search(r"(\d+(?:[.,]\d+)?)", ent.text)
-                if num_match:
-                    val: str | int = num_match.group(1).replace(",", ".")
-                    if field_name in ["histo_mitoses", "chm_cycles", "ik_clinique"]:
-                        val = int(float(val))
-                    emits = [(field_name, val)]
             elif field_name == "type_chirurgie":
                 n = _norm(ent.text.lower())
                 if "complet" in n or "gtr" in n or "total" in n: type_val = "exerese complete"
@@ -371,61 +326,86 @@ class EDSExtractor:
                 is_negated = getattr(ent._, "negation", False)
                 emits = [(field_name, "non" if is_negated else "oui")]
             elif field_name == "evol_clinique":
-                # Categorical
                 emits = [("evol_clinique", ent.text.lower() if ent.text.lower() in ["initial", "terminal"] else ent.text.upper())]
-            
             elif field_name == "diag_histologique":
-                t = ent.text.lower()
-                canon = t
-                for k, syns in _DIAGNOSIS_VOCAB.items():
-                    if t in [s.lower() for s in syns]:
-                        canon = k
-                        break
+                canon = ent.kb_id_ if getattr(ent, "kb_id_", "") else ent.text.lower()
                 emits = [("diag_histologique", canon)]
-            
             elif field_name == "chimios":
-                t = ent.text.lower()
-                canon = t
-                for k, syns in _DRUG_SYNONYMS.items():
-                    if t in [s.lower() for s in syns]:
-                        canon = k
-                        break
+                canon = ent.kb_id_ if getattr(ent, "kb_id_", "") else None
+                if not canon:
+                    for k, syns in _DRUG_SYNONYMS.items():
+                        if ent.text.lower() in [s.lower() for s in syns]:
+                            canon = k
+                            break
+                    if not canon: 
+                        canon = ent.text.lower()
                 if canon not in chimios_found:
                     chimios_found.append(canon)
                     if chimio_span_start == -1 or ent.start_char < chimio_span_start:
                         chimio_span_start = ent.start_char
                     if ent.end_char > chimio_span_end:
                         chimio_span_end = ent.end_char
-                # Do not emit normally, handled after loop
                 continue
-
-            elif field_name in [
-                "date_de_naissance", "chir_date", "date_chir", "chm_date_debut", "chm_date_fin",
-                "rx_date_debut", "rx_date_fin", "date_1er_symptome", "exam_radio_date_decouverte",
-                "date_progression", "date_deces", "dn_date"
-            ]:
-                extracted_dates = extract_dates(ent.text)
-                if extracted_dates:
-                    emits = [(field_name, extracted_dates[0][0])]
+            elif field_name in ["date", "dates"]:
+                dt = getattr(ent._, "date", None)
+                if dt and dt.year:
+                    if getattr(ent, "sent", None):
+                        surrounding_text = ent.sent.text.lower()
+                    else:
+                        surrounding_text = text[max(0, ent.start_char - 40):min(len(text), ent.end_char + 40)].lower()
+                        
+                    for t_field, keywords in _DATE_CONTEXT_KEYWORDS.items():
+                        for kw in keywords:
+                            if kw in surrounding_text:
+                                fmt_date = f"{dt.day:02d}/{dt.month:02d}/{dt.year}" if dt.month and dt.day else str(dt.year)
+                                emits.append((t_field, fmt_date))
+                                break
+            elif field_name in ["rx_dose", "histo_mitoses", "chm_cycles", "ik_clinique"]:
+                if field_name == "ik_clinique":
+                    num_match = re.search(r"(\d{2,3})", ent.text)
+                else:
+                    num_match = re.search(r"(\d+(?:[.,]\d+)?)", ent.text)
+                if num_match:
+                    val_str = num_match.group(1).replace(",", ".")
+                    val_num = int(float(val_str)) if field_name in ["histo_mitoses", "chm_cycles", "ik_clinique"] else val_str
+                    emits = [(field_name, val_num)]
             
             if not emits:
                 if field_name not in feature_subset:
                     continue
                 value = None
+                span_to_parse = ent.text
+                if hasattr(ent._, "assigned"):
+                    assign_dict = ent._.assigned
+                    if assign_dict and "value" in assign_dict:
+                        assigned_val = assign_dict["value"]
+                        if isinstance(assigned_val, list) and len(assigned_val) > 0:
+                            span_to_parse = assigned_val[0].text if hasattr(assigned_val[0], 'text') else str(assigned_val[0])
+                        elif hasattr(assigned_val, 'text'):
+                            span_to_parse = assigned_val.text
+                        else:
+                            span_to_parse = str(assigned_val)
+                            
                 if field_name.startswith("ihc_"):
-                    value = self._parse_ihc_value(ent.text)
+                    value = self._parse_ihc_assigned(span_to_parse)
                     if field_name == "ihc_atrx" and value == "negatif" and "perte" in ent.text.lower():
                         value = "perte"
                 elif field_name.startswith("mol_"):
-                    value = self._parse_mol_value(ent.text)
+                    value = self._parse_mol_assigned(span_to_parse)
+                    if field_name == "mol_mgmt":
+                        # FIXED: Removed the "mgmt" check and check both the assigned span and original text
+                        check_text = (span_to_parse + " " + ent.text).lower()
+                        if "promoteur" in check_text or "méthyl" in check_text or "methyl" in check_text:
+                            if re.search(r"non |im|hypo", check_text): value = "non methyle"
+                            elif "hyper" in check_text: value = "hypermethyle"
+                            else: value = "methyle"
                 elif field_name.startswith("ch"):
-                    value = self._parse_chr_value(ent.text)
+                    value = self._parse_chr_assigned(span_to_parse)
                 
                 if value is not None:
                     emits = [(field_name, value)]
-
+            
             if emits:
-                ent_sec = get_ent_section(ent.start_char)
                 for subfield, subval in emits:
                     if subfield in feature_subset:
                         candidates.append({
@@ -437,16 +417,11 @@ class EDSExtractor:
                             "section": ent_sec
                         })
 
-        from src.extraction.section_detector import get_section_for_feature
-        from collections import defaultdict
-        
         grouped = defaultdict(list)
         for c in candidates:
             grouped[c["field"]].append(c)
 
-        has_sections = len(section_spans) > 0
         results = {}
-
         for field, c_list in grouped.items():
             if not has_sections:
                 best = c_list[0]
