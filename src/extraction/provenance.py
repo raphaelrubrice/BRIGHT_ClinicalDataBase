@@ -49,9 +49,11 @@ class ExtractionResult:
     classification_is_ambiguous : bool
         Whether the document type classification was ambiguous.
     tier1_count : int
-        Number of features extracted by Tier 1 (rule-based).
+        Number of features extracted by EDS-NLP / Rules.
     tier2_count : int
-        Number of features extracted by Tier 2 (LLM).
+        Deprecated (kept for backward compatibility). Always 0.
+    gliner_count : int
+        Number of features extracted by GLiNER (primary extractor).
     total_extraction_time_ms : float
         Total time spent on extraction in milliseconds.
     """

@@ -17,9 +17,9 @@ class DummyPipeline(ExtractionPipeline):
     def extract_document(self, text: str, document_id: str = "", patient_id: str = "") -> ExtractionResult:
         res = ExtractionResult(document_id=document_id, patient_id=patient_id)
         if text == "match":
-            res.features["f1"] = ExtractionValue(value="val1")
+            res.features["diag_histologique"] = ExtractionValue(value="val1")
         elif text == "hallucinate":
-            res.features["f1"] = ExtractionValue(value="fake_val")
+            res.features["diag_histologique"] = ExtractionValue(value="fake_val")
         return res
 
 def test_run_benchmark():
@@ -28,8 +28,8 @@ def test_run_benchmark():
         gs_dir = tmp_path / "gs"
         out_dir = tmp_path / "out"
         
-        doc1 = {"document_id": "d1", "raw_text": "match", "annotations": {"f1": {"value": "val1"}}}
-        doc2 = {"document_id": "d2", "raw_text": "hallucinate", "annotations": {"f1": {"value": "real_val"}}}
+        doc1 = {"document_id": "d1", "raw_text": "match", "annotations": {"diag_histologique": {"value": "val1"}}}
+        doc2 = {"document_id": "d2", "raw_text": "hallucinate", "annotations": {"diag_histologique": {"value": "real_val"}}}
         
         save_gold_standard(doc1, gs_dir / "d1.json")
         save_gold_standard(doc2, gs_dir / "d2.json")
@@ -38,8 +38,8 @@ def test_run_benchmark():
         df = run_benchmark(gs_dir, pipeline, out_dir)
         
         assert len(df) == 1
-        assert df.loc["f1", "TP"] == 1
-        assert df.loc["f1", "alteration"] == 1
+        assert df.loc["diag_histologique", "TP"] == 1
+        assert df.loc["diag_histologique", "alteration"] == 1
         
         assert (out_dir / "benchmark_metrics.csv").exists()
         assert (out_dir / "error_analysis.csv").exists()

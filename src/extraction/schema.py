@@ -1,6 +1,6 @@
 """Feature schema definitions, controlled vocabularies, and JSON schemas.
 
-Defines all 102 clinical + biological fields with their value types,
+Defines all 111 clinical + biological fields with their value types,
 constraints, and controlled vocabulary references.  Field names are
 derived from the REQ_BIO.csv and REQ_CLINIQUE.csv annotation files in
 ``test_annotated/ANNOTATIONS_RE MAJ Infos cliniques Braincap/``.
@@ -9,8 +9,8 @@ Public API
 ----------
 - ``ControlledVocab``          – Enum-like namespace of allowed value sets.
 - ``ExtractionValue``          – Single extracted value with provenance.
-- ``BiologicalFeatures``       – All 54 biological fields.
-- ``ClinicalFeatures``         – All 48 clinical fields.
+- ``BiologicalFeatures``       – All 55 biological fields.
+- ``ClinicalFeatures``         – All 56 clinical fields.
 - ``DocumentExtraction``       – Full extraction result for one document.
 - ``FEATURE_ROUTING``          – Document-type → extractable feature subsets.
 - ``get_json_schema(group)``   – JSON Schema dict for Ollama ``format`` param.
@@ -64,6 +64,8 @@ class ControlledVocab:
     SEX: set[str] = {"M", "F"}
 
     LATERALITY: set[str] = {"gauche", "droite", "bilateral", "median"}
+
+    HANDEDNESS: set[str] = {"droitier", "gaucher", "ambidextre", "droitier contrarié", "gaucher contrarié"}
 
     @staticmethod
     def is_valid_evolution(value: str) -> bool:
@@ -152,12 +154,11 @@ class FieldDefinition(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Biological feature fields  (54 fields from REQ_BIO.csv)
+# Biological feature fields  (55 fields from REQ_BIO.csv)
 # ---------------------------------------------------------------------------
 
 BIO_FIELDS: list[FieldDefinition] = [
     # ── Identifiers / context ──
-    FieldDefinition(name="nip",       display_name="NIP (patient ID)",        field_type=FieldType.STRING,      group="identifiers"),
     FieldDefinition(name="date_chir", display_name="Date chirurgie",          field_type=FieldType.DATE,        group="identifiers"),
     FieldDefinition(name="num_labo",  display_name="Numéro laboratoire",      field_type=FieldType.STRING,      group="identifiers"),
 
@@ -185,6 +186,7 @@ BIO_FIELDS: list[FieldDefinition] = [
     FieldDefinition(name="histo_necrose",  display_name="Nécrose",         field_type=FieldType.CATEGORICAL, group="histology", allowed_values=ControlledVocab.BINARY),
     FieldDefinition(name="histo_pec",      display_name="Prise de contraste endothéliocapillaire", field_type=FieldType.CATEGORICAL, group="histology", allowed_values=ControlledVocab.BINARY),
     FieldDefinition(name="histo_mitoses",  display_name="Mitoses (count)", field_type=FieldType.INTEGER,     group="histology"),
+    FieldDefinition(name="aspect_cellulaire", display_name="Aspect cellulaire", field_type=FieldType.FREE_TEXT, group="histology"),
 
     # ── Molecular biology ──
     FieldDefinition(name="mol_idh1",       display_name="IDH1 moléculaire",       field_type=FieldType.STRING, group="molecular"),
@@ -213,6 +215,7 @@ BIO_FIELDS: list[FieldDefinition] = [
     FieldDefinition(name="ch7q",   display_name="7q",  field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL),
     FieldDefinition(name="ch9p",   display_name="9p",  field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL),
     FieldDefinition(name="ch9q",   display_name="9q",  field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL),
+    FieldDefinition(name="ch1p19q_codel", display_name="Codélétion 1p/19q", field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.BINARY),
 
     # ── Amplifications ──
     FieldDefinition(name="ampli_mdm2",  display_name="Amplification MDM2", field_type=FieldType.CATEGORICAL, group="amplification", allowed_values=ControlledVocab.BINARY),
@@ -232,12 +235,12 @@ ALL_BIO_FIELD_NAMES: list[str] = [f.name for f in BIO_FIELDS]
 
 
 # ---------------------------------------------------------------------------
-# Clinical feature fields  (48 fields from REQ_CLINIQUE.csv)
+# Clinical feature fields  (56 fields from REQ_CLINIQUE.csv)
 # ---------------------------------------------------------------------------
 
 CLINIQUE_FIELDS: list[FieldDefinition] = [
     # ── Identifiers / demographics ──
-    FieldDefinition(name="nip",                       display_name="NIP (patient ID)",             field_type=FieldType.STRING,      group="demographics"),
+    FieldDefinition(name="date_rcp",                   display_name="Date RCP",                    field_type=FieldType.DATE,        group="demographics"),
     FieldDefinition(name="date_de_naissance",          display_name="Date de naissance",            field_type=FieldType.DATE,        group="demographics"),
     FieldDefinition(name="sexe",                       display_name="Sexe",                         field_type=FieldType.CATEGORICAL, group="demographics", allowed_values=ControlledVocab.SEX),
     FieldDefinition(name="activite_professionnelle",   display_name="Activité professionnelle",     field_type=FieldType.FREE_TEXT,   group="demographics"),
@@ -247,12 +250,14 @@ CLINIQUE_FIELDS: list[FieldDefinition] = [
     FieldDefinition(name="neuroncologue",              display_name="Neuro-oncologue",              field_type=FieldType.FREE_TEXT,   group="care_team"),
     FieldDefinition(name="neurochirurgien",            display_name="Neurochirurgien",              field_type=FieldType.FREE_TEXT,   group="care_team"),
     FieldDefinition(name="radiotherapeute",            display_name="Radiothérapeute",              field_type=FieldType.FREE_TEXT,   group="care_team"),
+    FieldDefinition(name="anatomo_pathologiste",       display_name="Anatomo-pathologiste",         field_type=FieldType.FREE_TEXT,   group="care_team"),
     FieldDefinition(name="localisation_radiotherapie", display_name="Localisation radiothérapie",   field_type=FieldType.FREE_TEXT,   group="care_team"),
     FieldDefinition(name="localisation_chir",          display_name="Localisation chirurgie",       field_type=FieldType.FREE_TEXT,   group="care_team"),
 
     # ── Outcome ──
     FieldDefinition(name="date_deces",    display_name="Date décès",    field_type=FieldType.DATE,      group="outcome"),
     FieldDefinition(name="infos_deces",   display_name="Infos décès",   field_type=FieldType.FREE_TEXT, group="outcome"),
+    FieldDefinition(name="survie_globale", display_name="Survie globale", field_type=FieldType.FREE_TEXT, group="outcome"),
 
     # ── First symptoms ──
     FieldDefinition(name="date_1er_symptome",          display_name="Date 1er symptôme",          field_type=FieldType.DATE,        group="first_symptoms"),
@@ -265,19 +270,23 @@ CLINIQUE_FIELDS: list[FieldDefinition] = [
     # ── Radiology / imaging at discovery ──
     FieldDefinition(name="exam_radio_date_decouverte", display_name="Date découverte radiologique", field_type=FieldType.DATE,        group="radiology"),
     FieldDefinition(name="contraste_1er_symptome",     display_name="Prise de contraste initiale",  field_type=FieldType.CATEGORICAL, group="radiology", allowed_values=ControlledVocab.BINARY),
+    FieldDefinition(name="prise_de_contraste",         display_name="Prise de contraste",           field_type=FieldType.CATEGORICAL, group="radiology", allowed_values=ControlledVocab.BINARY),
     FieldDefinition(name="oedeme_1er_symptome",        display_name="Œdème initial",                field_type=FieldType.CATEGORICAL, group="radiology", allowed_values=ControlledVocab.BINARY),
     FieldDefinition(name="calcif_1er_symptome",        display_name="Calcification initiale",       field_type=FieldType.CATEGORICAL, group="radiology", allowed_values=ControlledVocab.BINARY),
 
     # ── Tumour location ──
     FieldDefinition(name="tumeur_lateralite",  display_name="Latéralité tumeur",   field_type=FieldType.CATEGORICAL, group="tumour_location", allowed_values=ControlledVocab.LATERALITY),
     FieldDefinition(name="tumeur_position",    display_name="Position tumeur",     field_type=FieldType.FREE_TEXT,   group="tumour_location"),
+    FieldDefinition(name="dominance_cerebrale", display_name="Dominance cérébrale", field_type=FieldType.CATEGORICAL, group="tumour_location", allowed_values=ControlledVocab.HANDEDNESS),
 
     # ── Clinical timepoint ──
     FieldDefinition(name="dn_date",         display_name="Date dernière nouvelle",  field_type=FieldType.DATE,        group="evolution"),
     FieldDefinition(name="evol_clinique",   display_name="Évolution clinique",      field_type=FieldType.STRING,      group="evolution"),  # validated via is_valid_evolution
+    FieldDefinition(name="reponse_radiologique", display_name="Réponse radiologique", field_type=FieldType.FREE_TEXT, group="evolution"),
 
     # ── Treatment — chemotherapy ──
     FieldDefinition(name="chimios",           display_name="Chimiothérapie(s)",       field_type=FieldType.FREE_TEXT,    group="treatment_chemo"),
+    FieldDefinition(name="chimio_protocole",  display_name="Protocole chimiothérapie", field_type=FieldType.FREE_TEXT,   group="treatment_chemo"),
     FieldDefinition(name="chm_date_debut",    display_name="Date début chimio",       field_type=FieldType.DATE,         group="treatment_chemo"),
     FieldDefinition(name="chm_date_fin",      display_name="Date fin chimio",         field_type=FieldType.DATE,         group="treatment_chemo"),
     FieldDefinition(name="chm_cycles",        display_name="Nombre cycles chimio",    field_type=FieldType.INTEGER,      group="treatment_chemo"),
@@ -301,11 +310,13 @@ CLINIQUE_FIELDS: list[FieldDefinition] = [
     # ── Surgery ──
     FieldDefinition(name="chir_date",       display_name="Date chirurgie",    field_type=FieldType.DATE,        group="surgery"),
     FieldDefinition(name="type_chirurgie",  display_name="Type chirurgie",    field_type=FieldType.CATEGORICAL, group="surgery", allowed_values=ControlledVocab.SURGERY_TYPE),
+    FieldDefinition(name="qualite_exerese", display_name="Qualité de l'exérèse", field_type=FieldType.STRING,     group="surgery"),
 
     # ── Treatment — radiotherapy ──
     FieldDefinition(name="rx_date_debut",  display_name="Date début radiothérapie",   field_type=FieldType.DATE,   group="treatment_radio"),
     FieldDefinition(name="rx_date_fin",    display_name="Date fin radiothérapie",     field_type=FieldType.DATE,   group="treatment_radio"),
     FieldDefinition(name="rx_dose",        display_name="Dose radiothérapie (Gy)",    field_type=FieldType.STRING, group="treatment_radio"),  # "60", "non", "oui", "en attente"
+    FieldDefinition(name="rx_fractionnement", display_name="Fractionnement radiothérapie", field_type=FieldType.STRING, group="treatment_radio"),
 
     # ── Other ──
     FieldDefinition(name="corticoides",  display_name="Corticoïdes",  field_type=FieldType.CATEGORICAL, group="adjunct", allowed_values=ControlledVocab.BINARY),
@@ -338,10 +349,9 @@ def get_field(name: str) -> FieldDefinition:
 # ---------------------------------------------------------------------------
 
 class BiologicalFeatures(BaseModel):
-    """All 54 biological fields, each wrapped in an ``ExtractionValue``."""
+    """All 55 biological fields, each wrapped in an ``ExtractionValue``."""
 
     # Identifiers
-    nip: Optional[ExtractionValue] = None
     date_chir: Optional[ExtractionValue] = None
     num_labo: Optional[ExtractionValue] = None
 
@@ -369,6 +379,7 @@ class BiologicalFeatures(BaseModel):
     histo_necrose: Optional[ExtractionValue] = None
     histo_pec: Optional[ExtractionValue] = None
     histo_mitoses: Optional[ExtractionValue] = None
+    aspect_cellulaire: Optional[ExtractionValue] = None
 
     # Molecular
     mol_idh1: Optional[ExtractionValue] = None
@@ -397,6 +408,7 @@ class BiologicalFeatures(BaseModel):
     ch7q: Optional[ExtractionValue] = None
     ch9p: Optional[ExtractionValue] = None
     ch9q: Optional[ExtractionValue] = None
+    ch1p19q_codel: Optional[ExtractionValue] = None
 
     # Amplifications
     ampli_mdm2: Optional[ExtractionValue] = None
@@ -412,10 +424,10 @@ class BiologicalFeatures(BaseModel):
 
 
 class ClinicalFeatures(BaseModel):
-    """All 48 clinical fields, each wrapped in an ``ExtractionValue``."""
+    """All 56 clinical fields, each wrapped in an ``ExtractionValue``."""
 
     # Demographics
-    nip: Optional[ExtractionValue] = None
+    date_rcp: Optional[ExtractionValue] = None
     date_de_naissance: Optional[ExtractionValue] = None
     sexe: Optional[ExtractionValue] = None
     activite_professionnelle: Optional[ExtractionValue] = None
@@ -425,12 +437,14 @@ class ClinicalFeatures(BaseModel):
     neuroncologue: Optional[ExtractionValue] = None
     neurochirurgien: Optional[ExtractionValue] = None
     radiotherapeute: Optional[ExtractionValue] = None
+    anatomo_pathologiste: Optional[ExtractionValue] = None
     localisation_radiotherapie: Optional[ExtractionValue] = None
     localisation_chir: Optional[ExtractionValue] = None
 
     # Outcome
     date_deces: Optional[ExtractionValue] = None
     infos_deces: Optional[ExtractionValue] = None
+    survie_globale: Optional[ExtractionValue] = None
 
     # First symptoms
     date_1er_symptome: Optional[ExtractionValue] = None
@@ -443,19 +457,23 @@ class ClinicalFeatures(BaseModel):
     # Radiology at discovery
     exam_radio_date_decouverte: Optional[ExtractionValue] = None
     contraste_1er_symptome: Optional[ExtractionValue] = None
+    prise_de_contraste: Optional[ExtractionValue] = None
     oedeme_1er_symptome: Optional[ExtractionValue] = None
     calcif_1er_symptome: Optional[ExtractionValue] = None
 
     # Tumour location
     tumeur_lateralite: Optional[ExtractionValue] = None
     tumeur_position: Optional[ExtractionValue] = None
+    dominance_cerebrale: Optional[ExtractionValue] = None
 
     # Evolution
     dn_date: Optional[ExtractionValue] = None
     evol_clinique: Optional[ExtractionValue] = None
+    reponse_radiologique: Optional[ExtractionValue] = None
 
     # Treatment — chemo
     chimios: Optional[ExtractionValue] = None
+    chimio_protocole: Optional[ExtractionValue] = None
     chm_date_debut: Optional[ExtractionValue] = None
     chm_date_fin: Optional[ExtractionValue] = None
     chm_cycles: Optional[ExtractionValue] = None
@@ -480,11 +498,13 @@ class ClinicalFeatures(BaseModel):
     # Surgery
     chir_date: Optional[ExtractionValue] = None
     type_chirurgie: Optional[ExtractionValue] = None
+    qualite_exerese: Optional[ExtractionValue] = None
 
     # Treatment — radio
     rx_date_debut: Optional[ExtractionValue] = None
     rx_date_fin: Optional[ExtractionValue] = None
     rx_dose: Optional[ExtractionValue] = None
+    rx_fractionnement: Optional[ExtractionValue] = None
 
     # Other adjuncts
     corticoides: Optional[ExtractionValue] = None
@@ -551,21 +571,21 @@ _RCP_BIO_FIELDS = _resolve_patterns(BIO_FIELDS, [
 ])
 
 _RCP_CLINIQUE_FIELDS = _resolve_patterns(CLINIQUE_FIELDS, [
-    "nip", "sexe", "date_de_naissance",
-    "chimios", "chm_*",
+    "date_rcp", "sexe", "date_de_naissance",
+    "chimios", "chimio_protocole", "chm_*",
     "rx_*",
-    "chir_date", "type_chirurgie",
+    "chir_date", "type_chirurgie", "qualite_exerese",
     "ik_clinique",
-    "tumeur_lateralite", "tumeur_position",
-    "evol_clinique",
+    "tumeur_lateralite", "tumeur_position", "dominance_cerebrale",
+    "evol_clinique", "reponse_radiologique",
     "progress_clinique", "progress_radiologique", "date_progression",
 ])
 
 _RADIOLOGY_CLINIQUE_FIELDS = _resolve_patterns(CLINIQUE_FIELDS, [
-    "tumeur_lateralite", "tumeur_position",
+    "tumeur_lateralite", "tumeur_position", "dominance_cerebrale",
     "exam_radio_date_decouverte",
-    "contraste_1er_symptome", "oedeme_1er_symptome", "calcif_1er_symptome",
-    "progress_radiologique",
+    "contraste_1er_symptome", "prise_de_contraste", "oedeme_1er_symptome", "calcif_1er_symptome",
+    "progress_radiologique", "reponse_radiologique",
 ])
 
 
@@ -630,9 +650,9 @@ FEATURE_GROUPS: dict[str, list[str]] = {
         "histo_necrose", "histo_pec", "histo_mitoses",
     ]),
     "demographics": _resolve_patterns(CLINIQUE_FIELDS, [
-        "nip", "date_de_naissance", "sexe", "activite_professionnelle",
+        "date_rcp", "date_de_naissance", "sexe", "activite_professionnelle",
         "antecedent_tumoral", "neuroncologue", "neurochirurgien",
-        "radiotherapeute", "localisation_radiotherapie", "localisation_chir",
+        "radiotherapeute", "anatomo_pathologiste", "localisation_radiotherapie", "localisation_chir",
     ]),
     "symptoms": (
         _resolve_patterns(CLINIQUE_FIELDS, [
@@ -640,7 +660,7 @@ FEATURE_GROUPS: dict[str, list[str]] = {
             "ceph_hic_1er_symptome", "deficit_1er_symptome",
             "cognitif_1er_symptome", "autre_trouble_1er_symptome",
             "exam_radio_date_decouverte",
-            "contraste_1er_symptome", "oedeme_1er_symptome", "calcif_1er_symptome",
+            "contraste_1er_symptome", "prise_de_contraste", "oedeme_1er_symptome", "calcif_1er_symptome",
         ])
         + _resolve_patterns(CLINIQUE_FIELDS, [
             "epilepsie", "ceph_hic", "deficit", "cognitif", "autre_trouble",
@@ -648,17 +668,17 @@ FEATURE_GROUPS: dict[str, list[str]] = {
         ])
     ),
     "treatment": _resolve_patterns(CLINIQUE_FIELDS, [
-        "chimios", "chm_*",
-        "chir_date", "type_chirurgie",
+        "chimios", "chimio_protocole", "chm_*",
+        "chir_date", "type_chirurgie", "qualite_exerese",
         "rx_*",
         "anti_epileptiques", "essai_therapeutique",
         "corticoides", "optune",
     ]),
     "evolution": _resolve_patterns(CLINIQUE_FIELDS, [
-        "dn_date", "evol_clinique",
+        "dn_date", "evol_clinique", "reponse_radiologique",
         "progress_clinique", "progress_radiologique", "date_progression",
-        "tumeur_lateralite", "tumeur_position",
-        "date_deces", "infos_deces",
+        "tumeur_lateralite", "tumeur_position", "dominance_cerebrale",
+        "date_deces", "infos_deces", "survie_globale",
     ]),
 }
 

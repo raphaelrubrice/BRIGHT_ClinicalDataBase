@@ -5,8 +5,9 @@ common variants, and flags out-of-vocabulary values for human review.
 
 Public API
 ----------
-- ``validate_extraction()`` – Main validation entry point.
-- ``normalise_value()``     – Normalise a single value for a given field.
+- ``validate_extraction()``     – Main validation entry point.
+- ``normalise_value()``         – Normalise a single value for a given field.
+- ``validate_source_spans()``   – Verify source spans exist in original text.
 """
 
 from __future__ import annotations
@@ -304,5 +305,105 @@ def validate_extraction(
                 normalised,
                 field_def.allowed_values,
             )
+
+    return extractions
+
+
+# ---------------------------------------------------------------------------
+# Pseudo-token rejection (relocated from llm_extraction.py)
+# ---------------------------------------------------------------------------
+
+_PSEUDO_TOKEN_RE = re.compile(
+    r'\[?(NOM|PRENOM|TEL|MAIL|ADDRESS|HOPITAL|VILLE|IPP|DATE|ZIP|SSID|NDA)_[A-Fa-f0-9]+\]?'
+)
+
+
+def _is_reasonable_date(date_str: str) -> bool:
+    """Check if a date string (DD/MM/YYYY) is within reasonable bounds."""
+    import datetime
+    parts = date_str.split("/")
+    if len(parts) != 3:
+        return True  # Not a parseable date, let it through
+    try:
+        day, month, year = int(parts[0]), int(parts[1]), int(parts[2])
+        now = datetime.datetime.now()
+        return 1900 <= year <= now.year + 1
+    except (ValueError, IndexError):
+        return True
+
+
+# ---------------------------------------------------------------------------
+# Source span validation (relocated from llm_extraction.py)
+# ---------------------------------------------------------------------------
+
+def _normalise_whitespace(text: str) -> str:
+    """Collapse all whitespace to single spaces and strip."""
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def validate_source_spans(
+    extractions: dict[str, ExtractionValue],
+    original_text: str,
+    fuzzy_threshold: float = 0.8,
+) -> dict[str, ExtractionValue]:
+    """Verify that each cited source_span exists in the original text.
+
+    For each extraction that has a ``source_span``, check whether the span
+    actually appears in the document. If not found (even with fuzzy matching),
+    flag the value for human review.
+
+    Parameters
+    ----------
+    extractions : dict[str, ExtractionValue]
+        The extractions to validate.
+    original_text : str
+        The full original document text.
+    fuzzy_threshold : float
+        Minimum similarity ratio for fuzzy matching (0.0-1.0).
+
+    Returns
+    -------
+    dict[str, ExtractionValue]
+        The same dict with ``flagged=True`` set on extractions whose
+        source spans could not be verified.
+    """
+    normalised_text = _normalise_whitespace(original_text)
+
+    for field_name, ev in extractions.items():
+        if ev.source_span is None or ev.source_span.strip() == "":
+            continue
+
+        normalised_span = _normalise_whitespace(ev.source_span)
+
+        # Exact match (normalised)
+        if normalised_span in normalised_text:
+            continue  # Source span verified
+
+        # Try fuzzy match: check if a high proportion of span words
+        # appear near each other in the text
+        span_words = normalised_span.split()
+        if not span_words:
+            continue
+
+        found_count = sum(1 for w in span_words if w in normalised_text)
+        similarity = found_count / len(span_words)
+
+        if similarity >= fuzzy_threshold:
+            logger.debug(
+                "Field '%s': source span fuzzy-matched (%.0f%% words found).",
+                field_name,
+                similarity * 100,
+            )
+            continue  # Close enough
+
+        # Source span not found — flag
+        ev.flagged = True
+        logger.warning(
+            "Field '%s': source span NOT found in text (%.0f%% match). "
+            "Span: '%s'",
+            field_name,
+            similarity * 100,
+            ev.source_span[:80],
+        )
 
     return extractions

@@ -143,7 +143,6 @@ class TestSingleEventNoduplication:
             chir_date="01/03/2020",
             type_chirurgie="biopsie",
             sexe="M",
-            nip="12345",
         )
         result = detect_multiple_events(ext)
         assert len(result) == 1
@@ -181,7 +180,6 @@ class TestMultipleSurgeries:
             chir_date="01/03/2020, 15/09/2021",
             type_chirurgie="biopsie",
             sexe="M",
-            nip="12345",
             tumeur_lateralite="gauche",
         )
         result = detect_multiple_events(ext)
@@ -191,8 +189,6 @@ class TestMultipleSurgeries:
         for row in result:
             assert "sexe" in row.features
             assert row.features["sexe"].value == "M"
-            assert "nip" in row.features
-            assert row.features["nip"].value == "12345"
             assert "tumeur_lateralite" in row.features
             assert row.features["tumeur_lateralite"].value == "gauche"
 
@@ -224,7 +220,6 @@ class TestMultipleChemoLines:
         ext = _make_extraction(
             chimios="Temozolomide, Bevacizumab",
             chm_date_debut="01/04/2020, 01/01/2021",
-            nip="12345",
         )
         result = detect_multiple_events(ext)
         assert len(result) == 2
@@ -252,7 +247,6 @@ class TestMultipleRadiotherapy:
         ext = _make_extraction(
             rx_date_debut="01/05/2020, 01/11/2021",
             rx_dose="60",
-            nip="12345",
         )
         result = detect_multiple_events(ext)
         assert len(result) == 2
@@ -260,7 +254,6 @@ class TestMultipleRadiotherapy:
         # Both rows should have the dose (copied from original)
         for row in result:
             assert "rx_dose" in row.features
-            assert "nip" in row.features
 
 
 class TestMultipleProgressions:
@@ -303,7 +296,6 @@ class TestSharedFeaturesCopied:
         # Create extraction with representative shared features
         ext = _make_extraction(
             sexe="M",
-            nip="12345",
             date_de_naissance="01/01/1970",
             tumeur_lateralite="gauche",
             tumeur_position="frontal",

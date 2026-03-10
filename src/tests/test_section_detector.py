@@ -33,7 +33,7 @@ from src.extraction.schema import (
 
 SAMPLE_ANAPATH_REPORT = """\
 Hôpital Universitaire — Service d'Anatomie Pathologique
-NIP: 12345678   Date chirurgie: 15/03/2024   N° labo: AP24-1234
+Date_chir: 15/03/2024   N° labo: AP24-1234
 
 Examen macroscopique
 Pièce de résection tumorale temporale droite, 3.5 x 2.8 x 2 cm, fixation formolée.
@@ -96,7 +96,7 @@ Corticoïdes : non. Optune : non.
 """
 
 SAMPLE_FREE_TEXT = """\
-Le patient NIP 87654321 est suivi depuis 2022 pour un gliome de bas grade.
+Le patient numéro AP24-1234 est suivi depuis 2022 pour un gliome de bas grade.
 Dernière IRM stable. Karnofsky 90%. Pas de nouvelle épilepsie.
 Poursuite de la surveillance.
 """
@@ -263,7 +263,7 @@ class TestSectionDetectorAnapath:
     def test_preamble_captured(self):
         """Text before the first header should be captured as preamble."""
         assert "preamble" in self.sections
-        assert "NIP" in self.sections["preamble"]
+        assert "Date" in self.sections["preamble"]
 
     def test_ihc_content(self):
         """IHC section should contain marker results."""
@@ -537,7 +537,7 @@ class TestFeatureHelpers:
     def test_preamble_features_included_by_default(self):
         features = get_features_for_sections(["ihc"])
         # Preamble features like NIP should be included
-        assert "nip" in features
+        assert "date_rcp" in features
 
     def test_preamble_features_excluded_when_requested(self):
         features = get_features_for_sections(["ihc"], include_preamble=False)
@@ -548,7 +548,7 @@ class TestFeatureHelpers:
     def test_unknown_section_names_ignored(self):
         features = get_features_for_sections(["nonexistent_section"])
         # Should still include preamble features but nothing else
-        assert "nip" in features
+        assert "date_rcp" in features
         assert "ihc_idh1" not in features
 
     def test_get_section_for_ihc_field(self):

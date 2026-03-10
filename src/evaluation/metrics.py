@@ -73,7 +73,10 @@ def compute_per_feature_metrics(
         Metrics counts per feature: TP, TN, FP_hallucination, FN_omission, alteration.
     """
     results = {}
-    all_features = set(predicted.keys()) | set(ground_truth.keys())
+    # Only score features present in ground truth.  Predicted fields without
+    # ground truth (e.g. new schema fields with no annotation data) are
+    # silently skipped — we cannot evaluate them.
+    all_features = set(ground_truth.keys())
     
     for feature in all_features:
         p_val = predicted[feature].value if feature in predicted and predicted[feature] else None
@@ -225,27 +228,85 @@ def compute_aggregate_metrics(all_results: list[dict[str, dict[str, int]]]) -> p
 # ---------------------------------------------------------------------------
 
 _FEATURE_CATEGORIES: dict[str, list[str]] = {
-    "demographics": ["nip", "date_de_naissance", "sexe", "activite_professionnelle", "antecedent_tumoral"],
-    "care_team": ["neuroncologue", "neurochirurgien", "radiotherapeute", "localisation_radiotherapie", "localisation_chir"],
-    "dates": ["chir_date", "date_chir", "chm_date_debut", "chm_date_fin", "rx_date_debut", "rx_date_fin",
-              "date_1er_symptome", "exam_radio_date_decouverte", "date_progression", "date_deces", "dn_date"],
-    "symptoms": ["epilepsie_1er_symptome", "ceph_hic_1er_symptome", "deficit_1er_symptome",
-                 "cognitif_1er_symptome", "autre_trouble_1er_symptome", "epilepsie", "ceph_hic",
-                 "deficit", "cognitif", "autre_trouble", "ik_clinique"],
-    "treatment": ["chimios", "chm_cycles", "type_chirurgie", "rx_dose", "anti_epileptiques",
-                  "essai_therapeutique", "corticoides", "optune"],
-    "bio_ihc": ["ihc_idh1", "ihc_p53", "ihc_atrx", "ihc_fgfr3", "ihc_braf",
-                "ihc_hist_h3k27m", "ihc_hist_h3k27me3", "ihc_egfr_hirsch",
-                "ihc_gfap", "ihc_olig2", "ihc_ki67", "ihc_mmr"],
-    "bio_molecular": ["mol_idh1", "mol_idh2", "mol_tert", "mol_CDKN2A", "mol_h3f3a",
-                      "mol_hist1h3b", "mol_braf", "mol_mgmt", "mol_fgfr1", "mol_egfr_mut",
-                      "mol_prkca", "mol_p53", "mol_pten", "mol_cic", "mol_fubp1", "mol_atrx"],
-    "bio_chromosomal": ["ch1p", "ch19q", "ch10p", "ch10q", "ch7p", "ch7q", "ch9p", "ch9q",
-                        "ampli_mdm2", "ampli_cdk4", "ampli_egfr", "ampli_met", "ampli_mdm4",
-                        "fusion_fgfr", "fusion_ntrk", "fusion_autre"],
-    "bio_diagnosis": ["diag_histologique", "diag_integre", "classification_oms", "grade",
-                      "histo_necrose", "histo_pec", "histo_mitoses"],
+    "demographics": [
+        "date_rcp", "date_de_naissance", "sexe",
+        "activite_professionnelle", "antecedent_tumoral",
+    ],
+    "care_team": [
+        "neuroncologue", "neurochirurgien", "radiotherapeute",
+        "anatomo_pathologiste", "localisation_radiotherapie", "localisation_chir",
+    ],
+    "dates": [
+        "chir_date", "date_chir", "chm_date_debut", "chm_date_fin",
+        "rx_date_debut", "rx_date_fin", "date_1er_symptome",
+        "exam_radio_date_decouverte", "date_progression", "date_deces", "dn_date",
+    ],
+    "symptoms": [
+        "epilepsie_1er_symptome", "ceph_hic_1er_symptome", "deficit_1er_symptome",
+        "cognitif_1er_symptome", "autre_trouble_1er_symptome",
+        "epilepsie", "ceph_hic", "deficit", "cognitif", "autre_trouble",
+        "ik_clinique",
+    ],
+    "radiology": [
+        "contraste_1er_symptome", "prise_de_contraste",
+        "oedeme_1er_symptome", "calcif_1er_symptome",
+    ],
+    "tumour_location": [
+        "tumeur_lateralite", "tumeur_position", "dominance_cerebrale",
+    ],
+    "evolution": [
+        "evol_clinique", "reponse_radiologique",
+        "progress_clinique", "progress_radiologique",
+        "survie_globale", "infos_deces",
+    ],
+    "treatment": [
+        "chimios", "chimio_protocole", "chm_cycles",
+        "type_chirurgie", "qualite_exerese",
+        "rx_dose", "rx_fractionnement",
+        "anti_epileptiques", "essai_therapeutique", "corticoides", "optune",
+    ],
+    "bio_ihc": [
+        "ihc_idh1", "ihc_p53", "ihc_atrx", "ihc_fgfr3", "ihc_braf",
+        "ihc_hist_h3k27m", "ihc_hist_h3k27me3", "ihc_egfr_hirsch",
+        "ihc_gfap", "ihc_olig2", "ihc_ki67", "ihc_mmr",
+    ],
+    "bio_molecular": [
+        "mol_idh1", "mol_idh2", "mol_tert", "mol_CDKN2A", "mol_h3f3a",
+        "mol_hist1h3b", "mol_braf", "mol_mgmt", "mol_fgfr1", "mol_egfr_mut",
+        "mol_prkca", "mol_p53", "mol_pten", "mol_cic", "mol_fubp1", "mol_atrx",
+    ],
+    "bio_chromosomal": [
+        "ch1p", "ch19q", "ch1p19q_codel",
+        "ch10p", "ch10q", "ch7p", "ch7q", "ch9p", "ch9q",
+        "ampli_mdm2", "ampli_cdk4", "ampli_egfr", "ampli_met", "ampli_mdm4",
+        "fusion_fgfr", "fusion_ntrk", "fusion_autre",
+    ],
+    "bio_diagnosis": [
+        "diag_histologique", "diag_integre", "classification_oms", "grade",
+        "histo_necrose", "histo_pec", "histo_mitoses",
+        "aspect_cellulaire", "num_labo",
+    ],
 }
+
+
+def _validate_feature_categories() -> None:
+    """Warn if any schema field is missing from _FEATURE_CATEGORIES."""
+    try:
+        from src.extraction.schema import ALL_FIELDS_BY_NAME
+    except ImportError:
+        return
+    categorized: set[str] = set()
+    for fields in _FEATURE_CATEGORIES.values():
+        categorized.update(fields)
+    missing = set(ALL_FIELDS_BY_NAME.keys()) - categorized
+    if missing:
+        import warnings
+        warnings.warn(
+            f"Fields missing from _FEATURE_CATEGORIES in metrics.py: {sorted(missing)}"
+        )
+
+
+_validate_feature_categories()
 
 
 def compute_category_metrics(df: pd.DataFrame) -> pd.DataFrame:

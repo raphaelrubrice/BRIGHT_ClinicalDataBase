@@ -217,7 +217,7 @@ SECTION_TO_FEATURES: dict[str, list[str]] = {
         "mol_prkca", "mol_p53", "mol_pten", "mol_cic", "mol_fubp1", "mol_atrx",
     ],
     "chromosomal": [
-        "ch1p", "ch19q", "ch10p", "ch10q", "ch7p", "ch7q", "ch9p", "ch9q",
+        "ch1p", "ch19q", "ch10p", "ch10q", "ch7p", "ch7q", "ch9p", "ch9q", "ch1p19q_codel",
         "ampli_mdm2", "ampli_cdk4", "ampli_egfr", "ampli_met", "ampli_mdm4",
         "fusion_fgfr", "fusion_ntrk", "fusion_autre",
     ],
@@ -228,7 +228,7 @@ SECTION_TO_FEATURES: dict[str, list[str]] = {
     ],
     "microscopy": [
         "diag_histologique", "grade",
-        "histo_necrose", "histo_pec", "histo_mitoses",
+        "histo_necrose", "histo_pec", "histo_mitoses", "aspect_cellulaire",
         "ihc_ki67",  # Ki67 is sometimes described in microscopy text
     ],
     "conclusion": [
@@ -245,12 +245,12 @@ SECTION_TO_FEATURES: dict[str, list[str]] = {
         "cognitif_1er_symptome", "autre_trouble_1er_symptome",
         "antecedent_tumoral", "activite_professionnelle",
         # General demographics often stated in anamnesis
-        "date_de_naissance", "sexe", "nip",
+        "date_de_naissance", "sexe", "date_rcp",
     ],
     "treatment": [
-        "chimios", "chm_date_debut", "chm_date_fin", "chm_cycles",
-        "chir_date", "type_chirurgie",
-        "rx_date_debut", "rx_date_fin", "rx_dose",
+        "chimios", "chimio_protocole", "chm_date_debut", "chm_date_fin", "chm_cycles",
+        "chir_date", "type_chirurgie", "qualite_exerese",
+        "rx_date_debut", "rx_date_fin", "rx_dose", "rx_fractionnement",
         "anti_epileptiques", "essai_therapeutique",
         "corticoides", "optune",
     ],
@@ -261,18 +261,18 @@ SECTION_TO_FEATURES: dict[str, list[str]] = {
     ],
     "radiology": [
         "exam_radio_date_decouverte",
-        "contraste_1er_symptome", "oedeme_1er_symptome", "calcif_1er_symptome",
-        "tumeur_lateralite", "tumeur_position",
-        "progress_radiologique",
+        "contraste_1er_symptome", "prise_de_contraste", "oedeme_1er_symptome", "calcif_1er_symptome",
+        "tumeur_lateralite", "tumeur_position", "dominance_cerebrale",
+        "progress_radiologique", "reponse_radiologique",
     ],
 
     # --- New sections (Phase 4.1) ---
     "equipe_soignante": [
-        "neuroncologue", "neurochirurgien", "radiotherapeute",
+        "neuroncologue", "neurochirurgien", "radiotherapeute", "anatomo_pathologiste",
         "localisation_radiotherapie", "localisation_chir",
     ],
     "demographics": [
-        "nip", "date_de_naissance", "sexe", "activite_professionnelle",
+        "date_rcp", "date_de_naissance", "sexe", "activite_professionnelle",
     ],
     "summary": [
         "diag_histologique", "diag_integre", "grade",
@@ -288,11 +288,11 @@ SECTION_TO_FEATURES: dict[str, list[str]] = {
 # in the document preamble or free-flowing prose).  These are checked
 # against the full text whenever section detection is used.
 _PREAMBLE_FEATURES: list[str] = [
-    "nip", "date_chir", "num_labo",
+    "date_rcp", "date_chir", "num_labo",
     "date_de_naissance", "sexe",
-    "neuroncologue", "neurochirurgien", "radiotherapeute",
+    "neuroncologue", "neurochirurgien", "radiotherapeute", "anatomo_pathologiste",
     "localisation_radiotherapie", "localisation_chir",
-    "date_deces", "infos_deces",
+    "date_deces", "infos_deces", "survie_globale",
     "dn_date", "evol_clinique",
     "date_progression",
     "progress_clinique", "progress_radiologique",

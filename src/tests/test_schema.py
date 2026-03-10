@@ -46,26 +46,24 @@ class TestFieldCounts:
     """Verify that the schema defines the expected number of fields."""
 
     def test_bio_field_count(self):
-        """54 biological fields (from REQ_BIO.csv)."""
-        assert len(BIO_FIELDS) == 54, (
-            f"Expected 54 BIO fields, got {len(BIO_FIELDS)}. "
+        """55 biological fields (from REQ_BIO.csv)."""
+        assert len(BIO_FIELDS) == 55, (
+            f"Expected 55 BIO fields, got {len(BIO_FIELDS)}. "
             f"Names: {ALL_BIO_FIELD_NAMES}"
         )
 
     def test_clinique_field_count(self):
-        """48 clinical fields (from REQ_CLINIQUE.csv)."""
-        assert len(CLINIQUE_FIELDS) == 48, (
-            f"Expected 48 CLINIQUE fields, got {len(CLINIQUE_FIELDS)}. "
+        """56 clinical fields (from REQ_CLINIQUE.csv)."""
+        assert len(CLINIQUE_FIELDS) == 56, (
+            f"Expected 56 CLINIQUE fields, got {len(CLINIQUE_FIELDS)}. "
             f"Names: {ALL_CLINIQUE_FIELD_NAMES}"
         )
 
     def test_total_field_count(self):
-        """102 total fields minus the shared 'nip' → 101 unique names."""
+        """111 total fields -> 111 unique names."""
         total_unique = len(ALL_FIELDS_BY_NAME)
-        # 'nip' appears in both BIO and CLINIQUE, so we expect
-        # 54 + 48 - 1 = 101 unique field names (nip is shared)
-        assert total_unique == 101, (
-            f"Expected 101 unique field names, got {total_unique}"
+        assert total_unique == 111, (
+            f"Expected 111 unique field names, got {total_unique}"
         )
 
     def test_no_duplicate_bio_fields(self):
@@ -94,17 +92,17 @@ class TestBioFieldNames:
     """Verify all expected BIO field names from REQ_BIO.csv exist."""
 
     EXPECTED_BIO = [
-        "nip", "date_chir", "num_labo",
+        "date_chir", "num_labo",
         "diag_histologique", "diag_integre", "classification_oms", "grade",
         "ihc_idh1", "ihc_p53", "ihc_atrx", "ihc_fgfr3", "ihc_braf",
         "ihc_hist_h3k27m", "ihc_hist_h3k27me3", "ihc_egfr_hirsch",
         "ihc_gfap", "ihc_olig2", "ihc_ki67", "ihc_mmr",
-        "histo_necrose", "histo_pec", "histo_mitoses",
+        "histo_necrose", "histo_pec", "histo_mitoses", "aspect_cellulaire",
         "mol_idh1", "mol_idh2", "mol_tert", "mol_CDKN2A", "mol_h3f3a",
         "mol_hist1h3b", "mol_braf", "mol_mgmt", "mol_fgfr1",
         "mol_egfr_mut", "mol_prkca", "mol_p53", "mol_pten",
         "mol_cic", "mol_fubp1", "mol_atrx",
-        "ch1p", "ch19q", "ch10p", "ch10q", "ch7p", "ch7q", "ch9p", "ch9q",
+        "ch1p", "ch19q", "ch10p", "ch10q", "ch7p", "ch7q", "ch9p", "ch9q", "ch1p19q_codel",
         "ampli_mdm2", "ampli_cdk4", "ampli_egfr", "ampli_met", "ampli_mdm4",
         "fusion_fgfr", "fusion_ntrk", "fusion_autre",
     ]
@@ -120,25 +118,25 @@ class TestCliniqueFieldNames:
     """Verify all expected CLINIQUE field names from REQ_CLINIQUE.csv exist."""
 
     EXPECTED_CLINIQUE = [
-        "nip", "date_de_naissance", "sexe", "activite_professionnelle",
+        "date_rcp", "date_de_naissance", "sexe", "activite_professionnelle",
         "antecedent_tumoral",
-        "neuroncologue", "neurochirurgien", "radiotherapeute",
+        "neuroncologue", "neurochirurgien", "radiotherapeute", "anatomo_pathologiste",
         "localisation_radiotherapie", "localisation_chir",
-        "date_deces", "infos_deces",
+        "date_deces", "infos_deces", "survie_globale",
         "date_1er_symptome", "epilepsie_1er_symptome",
         "ceph_hic_1er_symptome", "deficit_1er_symptome",
         "cognitif_1er_symptome", "autre_trouble_1er_symptome",
         "exam_radio_date_decouverte",
-        "contraste_1er_symptome", "oedeme_1er_symptome", "calcif_1er_symptome",
-        "tumeur_lateralite", "tumeur_position",
-        "dn_date", "evol_clinique",
-        "chimios", "chm_date_debut", "chm_date_fin", "chm_cycles",
+        "contraste_1er_symptome", "prise_de_contraste", "oedeme_1er_symptome", "calcif_1er_symptome",
+        "tumeur_lateralite", "tumeur_position", "dominance_cerebrale",
+        "dn_date", "evol_clinique", "reponse_radiologique",
+        "chimios", "chimio_protocole", "chm_date_debut", "chm_date_fin", "chm_cycles",
         "ik_clinique", "progress_clinique", "progress_radiologique",
         "date_progression",
         "epilepsie", "ceph_hic", "deficit", "cognitif", "autre_trouble",
         "anti_epileptiques", "essai_therapeutique",
-        "chir_date", "type_chirurgie",
-        "rx_date_debut", "rx_date_fin", "rx_dose",
+        "chir_date", "type_chirurgie", "qualite_exerese",
+        "rx_date_debut", "rx_date_fin", "rx_dose", "rx_fractionnement",
         "corticoides", "optune",
     ]
 
@@ -325,7 +323,6 @@ class TestBiologicalFeatures:
 
     def test_empty_creation(self):
         bio = BiologicalFeatures()
-        assert bio.nip is None
         assert bio.ihc_idh1 is None
 
     def test_partial_population(self):
@@ -363,7 +360,6 @@ class TestClinicalFeatures:
 
     def test_empty_creation(self):
         clin = ClinicalFeatures()
-        assert clin.nip is None
         assert clin.epilepsie is None
 
     def test_partial_population(self):
@@ -594,7 +590,6 @@ class TestSampleExtractionParsing:
     def test_parse_bio_sample(self):
         """Parse a sample BIO extraction matching REQ_BIO patient 1."""
         bio = BiologicalFeatures(
-            nip=ExtractionValue(value="8003373720"),
             date_chir=ExtractionValue(value="15/10/2024"),
             num_labo=ExtractionValue(value="24EN01638"),
             diag_histologique=ExtractionValue(value="glioblastome"),
@@ -646,7 +641,6 @@ class TestSampleExtractionParsing:
     def test_parse_clinique_sample(self):
         """Parse a sample CLINIQUE extraction matching REQ_CLINIQUE patient 1."""
         clin = ClinicalFeatures(
-            nip=ExtractionValue(value="8003373720"),
             date_de_naissance=ExtractionValue(value="26/08/1977"),
             sexe=ExtractionValue(value="M"),
             activite_professionnelle=ExtractionValue(value="Agent immobilier"),

@@ -1,8 +1,7 @@
 """Tests for src/extraction/pipeline.py — end-to-end extraction pipeline.
 
-Tests use rule-based extraction only (``use_llm=False``) to avoid
-dependency on a running Ollama server.  LLM integration is tested
-separately via test_llm_extraction.py and test_ollama_client.py.
+Tests use EDS/Rules extraction with GLiNER disabled to avoid model
+download overhead in CI.
 """
 
 import pytest
@@ -129,11 +128,11 @@ SAMPLE_SHORT_TEXT = "Ceci est un texte très court sans structure."
 # ---------------------------------------------------------------------------
 
 class TestExtractionPipelineRuleOnly:
-    """Test ExtractionPipeline with use_llm=False."""
+    """Test ExtractionPipeline with EDS/Rules only (GLiNER disabled)."""
 
     @pytest.fixture
     def pipeline(self):
-        return ExtractionPipeline(use_llm=False, use_negation=True)
+        return ExtractionPipeline(use_negation=True, use_gliner=False)
 
     def test_extract_anapath(self, pipeline):
         """Extract from a sample anapath report."""
@@ -147,8 +146,6 @@ class TestExtractionPipelineRuleOnly:
         assert result.document_id == "test_anapath_001"
         assert result.patient_id == "P12345"
         assert result.document_type == "anapath"
-        assert result.tier2_count == 0  # LLM disabled
-
         # Check that features were extracted
         assert len(result.features) > 0, "Should extract at least some features"
 
@@ -246,21 +243,18 @@ class TestPipelineBehaviour:
 
     @pytest.fixture
     def pipeline(self):
-        return ExtractionPipeline(use_llm=False, use_negation=True)
+        return ExtractionPipeline(use_negation=True, use_gliner=False)
 
-    def test_tier1_precedence_over_tier2(self, pipeline):
-        """Tier 1 results should take precedence when merged."""
-        # Since we're using use_llm=False, all results are Tier 1.
-        # We test the merge logic directly.
+    def test_all_features_are_rule_tier(self, pipeline):
+        """With GLiNER disabled, all features should be rule tier."""
         result = pipeline.extract_document(
             text=SAMPLE_ANAPATH,
-            document_id="test_precedence",
+            document_id="test_tiers",
         )
 
-        # All extracted features should be Tier 1
         for fname, ev in result.features.items():
             assert ev.extraction_tier == "rule", (
-                f"Field '{fname}' should be 'rule' tier when LLM is disabled"
+                f"Field '{fname}' should be 'rule' tier when GLiNER is disabled"
             )
 
     def test_extraction_log_populated(self, pipeline):
@@ -276,7 +270,7 @@ class TestPipelineBehaviour:
         assert "Pipeline started" in log_text
         assert "Document classified" in log_text
         assert "Sections detected" in log_text
-        assert "Tier 1" in log_text
+        assert "EDS/Rules" in log_text or "GLiNER" in log_text
         assert "Pipeline completed" in log_text
 
     def test_flagged_fields_tracked(self, pipeline):
@@ -320,14 +314,13 @@ class TestPipelineBehaviour:
         assert 0.0 <= result.classification_confidence <= 1.0
 
     def test_tier_counts(self, pipeline):
-        """Tier 1 and Tier 2 counts should be accurate."""
+        """Extraction counts should be accurate."""
         result = pipeline.extract_document(
             text=SAMPLE_ANAPATH,
             document_id="test_counts",
         )
 
         assert result.tier1_count >= 0
-        assert result.tier2_count == 0  # LLM disabled
 
     def test_vocab_validation_runs(self, pipeline):
         """Vocabulary validation should run on all extracted features."""
@@ -350,7 +343,7 @@ class TestExtractBatch:
 
     @pytest.fixture
     def pipeline(self):
-        return ExtractionPipeline(use_llm=False, use_negation=True)
+        return ExtractionPipeline(use_negation=True, use_gliner=False)
 
     def test_batch_multiple_documents(self, pipeline):
         """Process multiple documents in batch."""

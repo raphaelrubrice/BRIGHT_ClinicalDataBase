@@ -37,12 +37,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 STATIC_FEATURES: set[str] = {
-    "nip", "sexe", "date_de_naissance", "tumeur_lateralite",
-    "tumeur_position", "activite_professionnelle",
+    "date_rcp", "sexe", "date_de_naissance", "tumeur_lateralite",
+    "tumeur_position", "dominance_cerebrale", "activite_professionnelle",
     "antecedent_tumoral",
     # Outcome (set when known, not forward-filled in the traditional sense,
     # but once recorded it persists)
-    "date_deces", "infos_deces",
+    "date_deces", "infos_deces", "survie_globale",
     # First symptoms (historical, set once)
     "date_1er_symptome", "epilepsie_1er_symptome",
     "ceph_hic_1er_symptome", "deficit_1er_symptome",
@@ -51,7 +51,7 @@ STATIC_FEATURES: set[str] = {
     "exam_radio_date_decouverte", "contraste_1er_symptome",
     "oedeme_1er_symptome", "calcif_1er_symptome",
     # Care team
-    "neuroncologue", "neurochirurgien", "radiotherapeute",
+    "neuroncologue", "neurochirurgien", "radiotherapeute", "anatomo_pathologiste",
     "localisation_radiotherapie", "localisation_chir",
 }
 
@@ -64,13 +64,13 @@ SPECIMEN_BOUND_FEATURES: set[str] = {
     "ihc_hist_h3k27m", "ihc_hist_h3k27me3", "ihc_egfr_hirsch",
     "ihc_gfap", "ihc_olig2", "ihc_ki67", "ihc_mmr",
     # Histology
-    "histo_necrose", "histo_pec", "histo_mitoses",
+    "histo_necrose", "histo_pec", "histo_mitoses", "aspect_cellulaire",
     # Molecular
     "mol_idh1", "mol_idh2", "mol_tert", "mol_CDKN2A", "mol_h3f3a",
     "mol_hist1h3b", "mol_braf", "mol_mgmt", "mol_fgfr1", "mol_egfr_mut",
     "mol_prkca", "mol_p53", "mol_pten", "mol_cic", "mol_fubp1", "mol_atrx",
     # Chromosomal
-    "ch1p", "ch19q", "ch10p", "ch10q", "ch7p", "ch7q", "ch9p", "ch9q",
+    "ch1p", "ch19q", "ch10p", "ch10q", "ch7p", "ch7q", "ch9p", "ch9q", "ch1p19q_codel",
     # Amplifications
     "ampli_mdm2", "ampli_cdk4", "ampli_egfr", "ampli_met", "ampli_mdm4",
     # Fusions
@@ -80,12 +80,13 @@ SPECIMEN_BOUND_FEATURES: set[str] = {
 TIME_VARYING_FEATURES: set[str] = {
     "ik_clinique", "epilepsie", "ceph_hic", "deficit", "cognitif",
     "autre_trouble",
-    "chimios", "chm_date_debut", "chm_date_fin", "chm_cycles",
-    "chir_date", "type_chirurgie",
-    "rx_date_debut", "rx_date_fin", "rx_dose",
+    "chimios", "chimio_protocole", "chm_date_debut", "chm_date_fin", "chm_cycles",
+    "chir_date", "type_chirurgie", "qualite_exerese",
+    "rx_date_debut", "rx_date_fin", "rx_dose", "rx_fractionnement",
     "corticoides", "optune",
     "anti_epileptiques", "essai_therapeutique",
-    "progress_clinique", "progress_radiologique", "date_progression",
+    "progress_clinique", "progress_radiologique", "reponse_radiologique", "date_progression",
+    "prise_de_contraste",
     "dn_date", "evol_clinique",
 }
 

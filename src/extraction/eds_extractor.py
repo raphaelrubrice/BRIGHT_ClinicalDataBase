@@ -36,6 +36,8 @@ TERM_DICT: dict[str, list[str]] = {
     "cognitif_1er_symptome": ["troubles cognitifs", "trouble cognitif", "confusion", "troubles mnésiques", "trouble mnésique", "ralentissement"],
     "histo_necrose": ["nécrose", "necrose", "nécroses", "plages de nécrose", "foyers de nécrose", "nécrose palissadique"],
     "histo_pec": ["prolifération endothéliocapillaire", "proliferation endotheliocapillaire", "prolifération endothélio-capillaire", "pec", "hyperplasie endothéliocapillaire"],
+    "prise_de_contraste": ["prise de contraste", "rehaussement", "injection"],
+    "dominance_cerebrale": ["droitier", "gaucher", "ambidextre", "latéralité manuelle", "lateralite manuelle"],
     "sexe": ["homme", "femme", "masculin", "féminin", "feminin", "monsieur", "madame", "mme"],
     "tumeur_lateralite": ["gauche", "droit", "droite", "bilateral", "bilaterale", "bilatéral", "bilatérale", "median", "mediane", "médian", "médiane"],
     "evol_clinique": ["initial", "p1", "p2", "p3", "p4", "p5", "terminal"],
@@ -290,7 +292,7 @@ class EDSExtractor:
                 ent_sec = ent._.section.label_
                 
             if field_name == "codeletion_1p_19q":
-                emits = [("ch1p", "perte"), ("ch19q", "perte")]
+                emits = [("ch1p", "perte"), ("ch19q", "perte"), ("ch1p19q_codel", "oui")]
             elif field_name == "del_cdkn2a":
                 emits = [("mol_CDKN2A", "mute"), ("ch9p", "perte")]
             elif field_name == "sexe":
@@ -303,6 +305,8 @@ class EDSExtractor:
             elif field_name == "tumeur_lateralite":
                 norm = _LATERALITY_NORM.get(ent.text.lower(), ent.text.lower())
                 emits = [("tumeur_lateralite", norm)]
+            elif field_name == "dominance_cerebrale":
+                emits = [("dominance_cerebrale", ent.text.lower())]
             elif field_name == "classification_oms":
                 year_match = re.search(r"20\d{2}", ent.text)
                 if year_match and year_match.group(0) in ["2007", "2016", "2021"]:
@@ -322,7 +326,7 @@ class EDSExtractor:
                 elif "attente" in n: type_val = "en attente"
                 else: type_val = "exerese"
                 emits = [("type_chirurgie", type_val)]
-            elif field_name in ["optune", "corticoides", "anti_epileptiques", "epilepsie_1er_symptome", "ceph_hic_1er_symptome", "deficit_1er_symptome", "cognitif_1er_symptome", "histo_necrose", "histo_pec"]:
+            elif field_name in ["optune", "corticoides", "anti_epileptiques", "epilepsie_1er_symptome", "ceph_hic_1er_symptome", "deficit_1er_symptome", "cognitif_1er_symptome", "histo_necrose", "histo_pec", "prise_de_contraste"]:
                 is_negated = getattr(ent._, "negation", False)
                 emits = [(field_name, "non" if is_negated else "oui")]
             elif field_name == "evol_clinique":

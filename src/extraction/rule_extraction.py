@@ -55,6 +55,7 @@ _PAT_PSEUDO_BIRTHDATE = re.compile(
 # Context keywords for date-field assignment (replaces positional matching)
 _DATE_CONTEXT_KEYWORDS: dict[str, list[str]] = {
     "date_de_naissance": ["né(e) le", "naissance", "DDN", "date de naissance", "né le", "née le"],
+    "date_rcp": ["rcp", "réunion de concertation pluridisciplinaire", "concertation", "staff"],
     "chir_date": [
         "chirurgie", "opéré", "intervention", "opération", "exérèse", "biopsie",
         "opéré le", "opérée le", "résection", "craniotomie", "craniectomie", "reprise chir",

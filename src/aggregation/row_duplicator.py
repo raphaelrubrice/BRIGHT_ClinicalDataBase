@@ -29,15 +29,15 @@ from ..extraction.schema import ExtractionValue
 # Fields that are shared across all rows (demographics, tumour location, etc.)
 SHARED_FEATURES: set[str] = {
     # Demographics
-    "nip", "date_de_naissance", "sexe", "activite_professionnelle",
+    "date_rcp", "date_de_naissance", "sexe", "activite_professionnelle",
     "antecedent_tumoral",
     # Care team
-    "neuroncologue", "neurochirurgien", "radiotherapeute",
+    "neuroncologue", "neurochirurgien", "radiotherapeute", "anatomo_pathologiste",
     "localisation_radiotherapie", "localisation_chir",
     # Tumour location
-    "tumeur_lateralite", "tumeur_position",
+    "tumeur_lateralite", "tumeur_position", "dominance_cerebrale",
     # Outcome (shared across timeline)
-    "date_deces", "infos_deces",
+    "date_deces", "infos_deces", "survie_globale",
     # Biological identifiers
     "num_labo",
     # Diagnosis (shared unless explicitly different per specimen)
@@ -53,11 +53,11 @@ SHARED_FEATURES: set[str] = {
     "ihc_idh1", "ihc_p53", "ihc_atrx", "ihc_fgfr3", "ihc_braf",
     "ihc_hist_h3k27m", "ihc_hist_h3k27me3", "ihc_egfr_hirsch",
     "ihc_gfap", "ihc_olig2", "ihc_ki67", "ihc_mmr",
-    "histo_necrose", "histo_pec", "histo_mitoses",
+    "histo_necrose", "histo_pec", "histo_mitoses", "aspect_cellulaire",
     "mol_idh1", "mol_idh2", "mol_tert", "mol_CDKN2A", "mol_h3f3a",
     "mol_hist1h3b", "mol_braf", "mol_mgmt", "mol_fgfr1", "mol_egfr_mut",
     "mol_prkca", "mol_p53", "mol_pten", "mol_cic", "mol_fubp1", "mol_atrx",
-    "ch1p", "ch19q", "ch10p", "ch10q", "ch7p", "ch7q", "ch9p", "ch9q",
+    "ch1p", "ch19q", "ch10p", "ch10q", "ch7p", "ch7q", "ch9p", "ch9q", "ch1p19q_codel",
     "ampli_mdm2", "ampli_cdk4", "ampli_egfr", "ampli_met", "ampli_mdm4",
     "fusion_fgfr", "fusion_ntrk", "fusion_autre",
 }
@@ -66,19 +66,19 @@ SHARED_FEATURES: set[str] = {
 # Each group represents a distinct "event axis" that can trigger duplication.
 
 SURGERY_EVENT_FIELDS: list[str] = [
-    "chir_date", "type_chirurgie", "date_chir",
+    "chir_date", "type_chirurgie", "qualite_exerese", "date_chir",
 ]
 
 CHEMO_EVENT_FIELDS: list[str] = [
-    "chimios", "chm_date_debut", "chm_date_fin", "chm_cycles",
+    "chimios", "chimio_protocole", "chm_date_debut", "chm_date_fin", "chm_cycles",
 ]
 
 RADIO_EVENT_FIELDS: list[str] = [
-    "rx_date_debut", "rx_date_fin", "rx_dose",
+    "rx_date_debut", "rx_date_fin", "rx_dose", "rx_fractionnement",
 ]
 
 PROGRESSION_EVENT_FIELDS: list[str] = [
-    "date_progression", "progress_clinique", "progress_radiologique",
+    "date_progression", "progress_clinique", "progress_radiologique", "reponse_radiologique",
 ]
 
 # Clinical state fields that accompany the timepoint
@@ -213,8 +213,9 @@ def _detect_surgery_events(
             source_span=date_val,
         )
         # Copy type_chirurgie from original (same for all unless LLM split it)
-        if "type_chirurgie" in extraction.features:
-            event["type_chirurgie"] = extraction.features["type_chirurgie"]
+        for f in ("type_chirurgie", "qualite_exerese"):
+            if f in extraction.features:
+                event[f] = extraction.features[f]
 
         # Copy clinical state fields from original
         for f in CLINICAL_STATE_FIELDS:
@@ -258,7 +259,7 @@ def _detect_chemo_events(
             event["chimios"] = extraction.features["chimios"]
 
         # Copy other chemo fields from original
-        for f in ("chm_date_fin", "chm_cycles"):
+        for f in ("chm_date_fin", "chm_cycles", "chimio_protocole"):
             if f in extraction.features:
                 event[f] = extraction.features[f]
 
@@ -289,7 +290,7 @@ def _detect_radio_events(
             source_span=date_val,
         )
         # Copy dose / end date from original
-        for f in ("rx_date_fin", "rx_dose"):
+        for f in ("rx_date_fin", "rx_dose", "rx_fractionnement"):
             if f in extraction.features:
                 event[f] = extraction.features[f]
 
@@ -320,7 +321,7 @@ def _detect_progression_events(
             source_span=date_val,
         )
         # Copy progression flags from original
-        for f in ("progress_clinique", "progress_radiologique"):
+        for f in ("progress_clinique", "progress_radiologique", "reponse_radiologique"):
             if f in extraction.features:
                 event[f] = extraction.features[f]
 

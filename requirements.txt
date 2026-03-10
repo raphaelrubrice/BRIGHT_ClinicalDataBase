@@ -17,10 +17,11 @@ surya-ocr
 easyocr
 
 # Clinical feature extraction pipeline
-ollama
 edsnlp>=0.17.0
 pydantic>=2.0
 gliner
+gliner2
+langdetect
 onnxruntime
 
 # Testing

@@ -11,6 +11,7 @@ Usage:
 import csv
 import json
 import os
+import sys
 from pathlib import Path
 
 
@@ -22,6 +23,12 @@ OUTPUT_DIR = PROJECT_ROOT / "data" / "gold_standard"
 
 REQ_BIO_PATH = ANNOTATIONS_DIR / "REQ_BIO.csv"
 REQ_CLINIQUE_PATH = ANNOTATIONS_DIR / "REQ_CLINIQUE.csv"
+
+sys.path.append(str(PROJECT_ROOT))
+from src.extraction.schema import ALL_FIELDS_BY_NAME
+
+
+SKIPPED_FIELDS = {}
 
 
 def parse_transposed_csv(filepath: Path) -> list[dict[str, str]]:
@@ -95,6 +102,11 @@ def clean_annotations(annotations: dict[str, str | None]) -> dict[str, object]:
         # Skip the identifier fields (handled separately)
         if field in ("nip",):
             continue
+        # Schema validation
+        if field not in ALL_FIELDS_BY_NAME:
+            SKIPPED_FIELDS[field] = SKIPPED_FIELDS.get(field, 0) + 1
+            continue
+
         # Try integer conversion for grade, cycles, etc.
         if field in ("grade", "chm_cycles", "histo_mitoses", "ik_clinique"):
             try:
@@ -265,6 +277,11 @@ def main():
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
     print(f"\nWrote manifest with {len(gold_entries)} entries to {manifest_path}")
+
+    if SKIPPED_FIELDS:
+        print(f"\nSkipped {sum(SKIPPED_FIELDS.values())} values across {len(SKIPPED_FIELDS)} non-schema fields:")
+        for field, count in sorted(SKIPPED_FIELDS.items()):
+            print(f"  - {field}: {count} occurrences")
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ from src.extraction.schema import (
     ExtractionValue,
     get_extractable_fields,
 )
-from src.extraction.llm_extraction import _PSEUDO_TOKEN_RE, _is_reasonable_date
+from src.extraction.validation import _PSEUDO_TOKEN_RE, _is_reasonable_date
 
 
 # ═══════════════════════════════════════════════════════════════════════════

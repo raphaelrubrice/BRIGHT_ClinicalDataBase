@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from src.extraction.schema import ALL_FIELDS_BY_NAME
+
 def load_gold_standard(directory: str | Path) -> list[dict[str, Any]]:
     """
     Load all gold standard JSON files from a directory.
@@ -17,11 +19,18 @@ def load_gold_standard(directory: str | Path) -> list[dict[str, Any]]:
         return results
         
     for file_path in directory.glob("*.json"):
+        if file_path.name == "manifest.json":
+            continue
+            
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-            # Ensure annotations dict exists
+            # Ensure annotations dict exists and filter invalid schema fields
             if "annotations" not in data:
                 data["annotations"] = {}
+            else:
+                data["annotations"] = {
+                    k: v for k, v in data["annotations"].items() if k in ALL_FIELDS_BY_NAME
+                }
             results.append(data)
     return results
 

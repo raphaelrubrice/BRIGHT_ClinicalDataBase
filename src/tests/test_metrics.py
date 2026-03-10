@@ -116,10 +116,10 @@ class TestMetrics:
         assert metrics["diag_integre"]["TP"] == 1
         
         # Ineligible field
-        predicted = {"nip": ExtractionValue(value="123456")}
-        ground_truth = {"nip": {"value": "123457"}}
+        predicted = {"num_labo": ExtractionValue(value="123456")}
+        ground_truth = {"num_labo": {"value": "123457"}}
         metrics = compute_per_feature_metrics(predicted, ground_truth)
-        assert metrics["nip"]["alteration"] == 1
+        assert metrics["num_labo"]["alteration"] == 1
         
     def test_normalize_bool_and_nulls(self):
         predicted = {"val1": ExtractionValue(value="oui"), "val2": ExtractionValue(value="non")}

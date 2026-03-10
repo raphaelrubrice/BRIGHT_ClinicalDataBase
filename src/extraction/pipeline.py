@@ -1,8 +1,9 @@
-"""Main extraction pipeline orchestrator.
+"""Main extraction pipeline orchestrator — GLiNER-first architecture.
 
-Wires together document classification, section detection, Tier 1
-rule-based extraction, Tier 2 LLM extraction, validation, and
-provenance tracking into a single ``extract_document()`` function.
+Wires together document classification, section detection, GLiNER primary
+extraction, EDS-NLP qualifier identification and standalone extraction,
+validation, and provenance tracking into a single ``extract_document()``
+function.
 
 Public API
 ----------
@@ -16,65 +17,116 @@ import time
 from typing import Optional
 
 from .document_classifier import DocumentClassifier
-from .llm_extraction import run_llm_extraction, validate_source_spans
-from .ollama_client import OllamaClient, OllamaError
 from .provenance import ExtractionResult
 from .eds_extractor import EDSExtractor
 from .gliner_extractor import GlinerExtractor
+from .negation import AssertionAnnotator
 from .rule_extraction import run_rule_extraction
 from .schema import (
     ExtractionValue,
     FEATURE_ROUTING,
+    ALL_FIELDS_BY_NAME,
     get_extractable_fields,
 )
 from .section_detector import SectionDetector
-from .validation import validate_extraction
+from .validation import validate_extraction, validate_source_spans
 
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Negation value flipping
+# ---------------------------------------------------------------------------
+
+def _flip_negated_value(field_name: str, value) -> str:
+    """Flip an extracted value when negation is detected.
+
+    Instead of discarding the entity, we invert it:
+    - Binary (oui/non) → flip
+    - IHC (positif/negatif/maintenu) → flip
+    - Molecular (mute/wt) → flip
+    - Other → prefix with "non"
+    """
+    val_str = str(value).strip().lower() if value is not None else ""
+
+    # Binary fields
+    if val_str == "oui":
+        return "non"
+    if val_str == "non":
+        return "oui"
+
+    # IHC fields
+    if field_name.startswith("ihc_"):
+        if val_str in ("positif", "positive", "maintenu"):
+            return "negatif"
+        if val_str in ("negatif", "negative"):
+            return "positif"
+
+    # Molecular fields
+    if field_name.startswith("mol_"):
+        if val_str in ("mute", "muté", "mutée"):
+            return "wt"
+        if val_str == "wt":
+            return "mute"
+        if val_str in ("methyle", "méthylé"):
+            return "non methyle"
+        if val_str in ("non methyle", "non méthylé"):
+            return "methyle"
+
+    # Chromosomal fields
+    if field_name.startswith("ch") and field_name not in (
+        "chir_date", "chimios", "chm_date_debut", "chm_date_fin", "chm_cycles",
+    ):
+        if val_str == "gain":
+            return "perte"
+        if val_str in ("perte", "perte partielle"):
+            return "gain"
+
+    # Amplification / fusion fields
+    if field_name.startswith("ampli_") or field_name.startswith("fusion_"):
+        if val_str == "oui":
+            return "non"
+        if val_str == "non":
+            return "oui"
+
+    return val_str
+
+
 class ExtractionPipeline:
-    """End-to-end clinical feature extraction pipeline.
+    """End-to-end clinical feature extraction pipeline (GLiNER-first).
 
     Orchestrates:
     1. Document type classification
     2. Section detection
-    3. Feature routing (document type → extractable fields)
-    4. Tier 1 rule-based extraction
-    5. Assertion annotation (negation / hypothesis / history)
-    6. Tier 2 LLM extraction (for remaining fields)
-    7. Merge (Tier 1 takes precedence)
-    8. Controlled vocabulary validation
-    9. Source span validation
-    10. Provenance record + flagging
+    3. Language detection
+    4. Feature routing (document type → extractable fields)
+    5. Primary extraction via GLiNER (all fields)
+    6. EDS-NLP Level 1: qualifier identification for GLiNER entities
+    7. EDS-NLP Level 2 / Rules: standalone extraction
+    8. Merge (GLiNER precedence, synergy boost, EDS fallback)
+    9. Controlled vocabulary validation
+    10. Source span validation
+    11. Provenance record + flagging
 
     Parameters
     ----------
-    ollama_model : str
-        Ollama model name (default ``"qwen3:8b"``).
-    ollama_base_url : str
-        Ollama server URL.
-    ollama_timeout : int
-        Request timeout in seconds for Ollama calls (default 600).
-    use_llm : bool
-        Whether to enable Tier 2 LLM extraction. When ``False``,
-        only Tier 1 (rule-based) extraction is performed.
     use_negation : bool
         Whether to enable negation / hypothesis / history annotation.
+    use_eds : bool
+        Whether to enable EDS-NLP standalone extraction.
+    use_gliner : bool
+        Whether to enable GLiNER primary extraction.
+    gliner_model : str
+        GLiNER model name (default ``"urchade/gliner_multi-v2.1"``).
     """
 
     def __init__(
         self,
-        ollama_model: str = "qwen3:8b",
-        ollama_base_url: str = "http://localhost:11434",
-        ollama_timeout: int = 600,
-        use_llm: bool = True,
         use_negation: bool = True,
         use_eds: bool = True,
         use_gliner: bool = True,
         gliner_model: str = "urchade/gliner_multi-v2.1",
     ):
-        self.use_llm = use_llm
         self.use_negation = use_negation
         self.use_eds = use_eds
         self.use_gliner = use_gliner
@@ -84,36 +136,24 @@ class ExtractionPipeline:
         self.section_detector = SectionDetector()
 
         self._eds_extractor = EDSExtractor() if use_eds else None
-        
+
         self._gliner_extractor = None
-        if use_gliner: 
+        if use_gliner:
             self._gliner_extractor = GlinerExtractor(model_name=gliner_model)
 
-        # Ollama client (initialised lazily to avoid startup overhead)
-        self._ollama_client: Optional[OllamaClient] = None
-        self._ollama_model = ollama_model
-        self._ollama_base_url = ollama_base_url
-        self._ollama_timeout = ollama_timeout
+        self._assertion_annotator = AssertionAnnotator() if use_negation else None
 
-    # -- Lazy Ollama client --------------------------------------------------
+    # -- Language detection ---------------------------------------------------
 
-    def _get_ollama_client(self) -> Optional[OllamaClient]:
-        """Return the OllamaClient, creating it on first use."""
-        if not self.use_llm:
-            return None
-
-        if self._ollama_client is None:
-            try:
-                self._ollama_client = OllamaClient(
-                    model=self._ollama_model,
-                    base_url=self._ollama_base_url,
-                    timeout=self._ollama_timeout,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.error("Failed to create OllamaClient: %s", exc)
-                return None
-
-        return self._ollama_client
+    @staticmethod
+    def _detect_language(text: str) -> str:
+        """Detect the language of *text*, defaulting to ``"fr"``."""
+        try:
+            from langdetect import detect
+            lang = detect(text[:2000])  # Use first 2000 chars for speed
+            return lang
+        except Exception:
+            return "fr"
 
     # -- Main entry point ----------------------------------------------------
 
@@ -177,13 +217,18 @@ class ExtractionPipeline:
         )
 
         # -----------------------------------------------------------------
-        # Step 3: Determine extractable feature subset
+        # Step 3: Language detection
+        # -----------------------------------------------------------------
+        language = self._detect_language(text)
+        result.add_log(f"Detected language: '{language}'.")
+
+        # -----------------------------------------------------------------
+        # Step 4: Determine extractable feature subset
         # -----------------------------------------------------------------
         try:
             feature_subset = get_extractable_fields(result.document_type)
         except ValueError as exc:
             result.add_log(f"Feature routing error: {exc}. Using full feature set.")
-            # Fall back to all fields
             from .schema import ALL_BIO_FIELD_NAMES, ALL_CLINIQUE_FIELD_NAMES
             feature_subset = sorted(
                 set(ALL_BIO_FIELD_NAMES + ALL_CLINIQUE_FIELD_NAMES)
@@ -194,165 +239,122 @@ class ExtractionPipeline:
         )
 
         # -----------------------------------------------------------------
-        # Step 4: Tier 1 — Rule-based extraction (EDS-NLP)
+        # Step 5: PRIMARY — GLiNER extraction (runs FIRST)
         # -----------------------------------------------------------------
-        t_tier1_start = time.perf_counter()
-        if self.use_eds and self._eds_extractor:
-            tier1_results = self._eds_extractor.extract(
-                text=text,
-                sections=sections,
-                feature_subset=feature_subset,
-            )
-            result.add_log("Tier 1 using EDS-NLP.")
-        else:
-            tier1_results = run_rule_extraction(
-                text=text,
-                sections=sections,
-                feature_subset=feature_subset,
-            )
-            result.add_log("Tier 1 using Regex (legacy logic).")
-        t_tier1_elapsed = (time.perf_counter() - t_tier1_start) * 1000
-
-        result.tier1_count = len(tier1_results)
-        result.add_log(
-            f"Tier 1 (EDS-NLP): extracted {len(tier1_results)} fields "
-            f"in {t_tier1_elapsed:.0f}ms."
-        )
-
-        # -----------------------------------------------------------------
-        # Step 5: Determine remaining unextracted features
-        # -----------------------------------------------------------------
-        remaining_after_tier1 = set(feature_subset) - set(tier1_results.keys())
-        # NIP comes from document metadata, not LLM extraction
-        remaining_after_tier1.discard("nip")
-        result.add_log(
-            f"Remaining after Tier 1: {len(remaining_after_tier1)} fields."
-        )
-
-        # -----------------------------------------------------------------
-        # Step 5.5: Tier 1.5 — GLiNER extractor for Narrative Fields
-        # -----------------------------------------------------------------
-        tier15_results: dict[str, ExtractionValue] = {}
+        gliner_results: dict[str, ExtractionValue] = {}
         if self._gliner_extractor:
-            t_tier15_start = time.perf_counter()
+            t_gliner_start = time.perf_counter()
             try:
-                tier15_results = self._gliner_extractor.extract(
+                gliner_results = self._gliner_extractor.extract(
                     text=text,
-                    sections=sections,
                     feature_subset=feature_subset,
+                    language=language,
                 )
             except Exception as exc:
-                result.add_log(f"Tier 1.5 GLiNER extraction failed: {exc}")
-                logger.error("Tier 1.5 GLiNER extraction failed: %s", exc)
+                result.add_log(f"GLiNER extraction failed: {exc}")
+                logger.error("GLiNER extraction failed: %s", exc)
 
-            t_tier15_elapsed = (time.perf_counter() - t_tier15_start) * 1000
-            result.gliner_count = len(tier15_results)
+            t_gliner_elapsed = (time.perf_counter() - t_gliner_start) * 1000
+            result.gliner_count = len(gliner_results)
             result.add_log(
-                f"Tier 1.5 (GLiNER): extracted {len(tier15_results)} fields "
-                f"in {t_tier15_elapsed:.0f}ms."
+                f"GLiNER (primary): extracted {len(gliner_results)} fields "
+                f"in {t_gliner_elapsed:.0f}ms."
             )
 
         # -----------------------------------------------------------------
-        # Step 5.6: Merge Tier 1 + GLiNER (confidence-based for GLINER_FIELDS)
+        # Step 6: EDS-NLP Level 1 — Qualifier identification for GLiNER
         # -----------------------------------------------------------------
-        gliner_fields = GlinerExtractor.GLINER_FIELDS if self._gliner_extractor else set()
-        tier1_gliner_merged: dict[str, ExtractionValue] = {}
-        for fname in set(list(tier1_results.keys()) + list(tier15_results.keys())):
-            t1 = tier1_results.get(fname)
-            tg = tier15_results.get(fname)
-            if fname in gliner_fields and t1 and tg:
-                t1_val_str = str(t1.value).strip().lower() if t1.value is not None else ""
-                tg_val_str = str(tg.value).strip().lower() if tg.value is not None else ""
-                
-                if t1_val_str == tg_val_str and t1_val_str != "":
-                    # Synergistic Merge: Agreement boosts confidence
-                    base_conf = max(t1.confidence or 0.0, tg.confidence or 0.0)
-                    new_conf = min(1.0, round(base_conf + 0.1, 4))
-                    chosen = tg
-                    chosen.confidence = new_conf
-                    tier1_gliner_merged[fname] = chosen
-                else:
-                    # Mismatch: pick highest confidence
-                    tier1_gliner_merged[fname] = tg if (tg.confidence or 0.0) > (t1.confidence or 0.0) else t1
-            elif t1:
-                tier1_gliner_merged[fname] = t1
-            elif tg:
-                tier1_gliner_merged[fname] = tg
+        if self._assertion_annotator and gliner_results:
+            qualified_count = 0
+            for field_name, ev in list(gliner_results.items()):
+                if ev.source_span_start is None or ev.source_span_end is None:
+                    continue
 
-        remaining_for_llm = set(feature_subset) - set(tier1_gliner_merged.keys())
-        remaining_for_llm.discard("nip")
+                annotations = self._assertion_annotator.annotate(
+                    text,
+                    [(ev.source_span_start, ev.source_span_end, field_name)],
+                )
+                if not annotations:
+                    continue
+
+                ann = annotations[0]
+                if ann.is_negated:
+                    ev.value = _flip_negated_value(field_name, ev.value)
+                    qualified_count += 1
+                if ann.is_hypothesis:
+                    ev.confidence = round((ev.confidence or 0.5) * 0.7, 4)
+                    qualified_count += 1
+                if ann.is_history:
+                    ev.flagged = True
+                    qualified_count += 1
+
+            result.add_log(
+                f"EDS-NLP Level 1 (qualifiers): {qualified_count} GLiNER "
+                f"entities qualified (negation/hypothesis/history)."
+            )
+
+        # -----------------------------------------------------------------
+        # Step 7: EDS-NLP Level 2 / Rules — Standalone extraction
+        # -----------------------------------------------------------------
+        t_eds_start = time.perf_counter()
+        if self.use_eds and self._eds_extractor:
+            eds_results = self._eds_extractor.extract(
+                text=text,
+                sections=sections,
+                feature_subset=feature_subset,
+            )
+            result.add_log("EDS-NLP Level 2: standalone extraction.")
+        else:
+            eds_results = run_rule_extraction(
+                text=text,
+                sections=sections,
+                feature_subset=feature_subset,
+            )
+            result.add_log("EDS-NLP Level 2: Regex fallback (legacy logic).")
+        t_eds_elapsed = (time.perf_counter() - t_eds_start) * 1000
+
+        result.tier1_count = len(eds_results)
         result.add_log(
-            f"After Tier 1 + GLiNER merge: {len(tier1_gliner_merged)} fields. "
-            f"Remaining for LLM: {len(remaining_for_llm)}."
+            f"EDS/Rules: extracted {len(eds_results)} fields "
+            f"in {t_eds_elapsed:.0f}ms."
         )
 
         # -----------------------------------------------------------------
-        # Step 6: Tier 2 — LLM extraction (for remaining features)
-        # -----------------------------------------------------------------
-        tier2_results: dict[str, ExtractionValue] = {}
-
-        if remaining_for_llm and self.use_llm:
-            client = self._get_ollama_client()
-            if client is not None:
-                t_tier2_start = time.perf_counter()
-                
-                try:
-                    tier2_results = run_llm_extraction(
-                        text=text,
-                        sections=sections,
-                        feature_subset=list(remaining_for_llm),
-                        already_extracted=tier1_gliner_merged,
-                        client=client,
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    result.add_log(
-                        f"Tier 2 LLM extraction failed: {exc}"
-                    )
-                    logger.error("Tier 2 LLM extraction failed: %s", exc)
-
-                t_tier2_elapsed = (time.perf_counter() - t_tier2_start) * 1000
-                result.tier2_count = len(tier2_results)
-                result.add_log(
-                    f"Tier 2 (LLM): extracted {len(tier2_results)} fields "
-                    f"in {t_tier2_elapsed:.0f}ms."
-                )
-            else:
-                result.add_log(
-                    "Tier 2 (LLM) skipped: Ollama client unavailable."
-                )
-        elif not remaining_for_llm:
-            result.add_log("Tier 2 (LLM) skipped: all features extracted by Tier 1 and GLiNER.")
-        else:
-            result.add_log("Tier 2 (LLM) skipped: LLM extraction disabled.")
-
-        # -----------------------------------------------------------------
-        # Step 7: Merge Tier 1+GLiNER + Tier 2
+        # Step 8: Merge GLiNER + EDS (GLiNER precedence)
         # -----------------------------------------------------------------
         merged: dict[str, ExtractionValue] = {}
-        merged.update(tier1_gliner_merged)
 
-        # Add Tier 2 results only for fields not already covered
-        for fname, ev in tier2_results.items():
-            if fname not in merged:
-                merged[fname] = ev
+        all_fields = set(list(gliner_results.keys()) + list(eds_results.keys()))
+        for fname in all_fields:
+            g = gliner_results.get(fname)
+            e = eds_results.get(fname)
 
-        # NIP from document metadata (avoid LLM hallucination)
-        if patient_id and "nip" in set(feature_subset) and "nip" not in merged:
-            merged["nip"] = ExtractionValue(
-                value=patient_id,
-                extraction_tier="rule",
-                confidence=1.0,
-                vocab_valid=True,
-            )
+            if g and e:
+                g_val = str(g.value).strip().lower() if g.value is not None else ""
+                e_val = str(e.value).strip().lower() if e.value is not None else ""
+
+                if g_val == e_val and g_val != "":
+                    # Synergy boost: both agree → boost confidence
+                    base_conf = max(g.confidence or 0.0, e.confidence or 0.0)
+                    g.confidence = min(1.0, round(base_conf + 0.1, 4))
+                    merged[fname] = g
+                else:
+                    # GLiNER takes precedence
+                    merged[fname] = g
+            elif g:
+                merged[fname] = g
+            else:
+                # EDS fallback for fields GLiNER missed
+                merged[fname] = e
 
         result.features = merged
         result.add_log(
             f"Merged: {len(merged)} total features "
-            f"({result.tier1_count} Tier 1 + {result.gliner_count} GLiNER + {result.tier2_count} Tier 2)."
+            f"({result.gliner_count} GLiNER + {result.tier1_count} EDS/Rules)."
         )
 
         # -----------------------------------------------------------------
-        # Step 8: Validate against controlled vocabularies
+        # Step 9: Validate against controlled vocabularies
         # -----------------------------------------------------------------
         validate_extraction(merged)
         vocab_flagged = [
@@ -368,7 +370,7 @@ class ExtractionPipeline:
             result.add_log("Vocabulary validation: all values valid.")
 
         # -----------------------------------------------------------------
-        # Step 9: Validate source spans
+        # Step 10: Validate source spans
         # -----------------------------------------------------------------
         validate_source_spans(merged, text)
         span_flagged = [
@@ -384,22 +386,12 @@ class ExtractionPipeline:
             result.add_log("Source span validation: all spans verified.")
 
         # -----------------------------------------------------------------
-        # Step 10: Build flagged-for-review list
+        # Step 11: Build flagged-for-review list
         # -----------------------------------------------------------------
         result.update_flagged_from_features()
         result.add_log(
             f"Total flagged for review: {len(result.flagged_for_review)} fields."
         )
-
-        # -----------------------------------------------------------------
-        # Step 11: Extract document date (if available from Tier 1)
-        # -----------------------------------------------------------------
-        # Look for date fields in extracted features
-        for date_field in ("date_chir", "dn_date", "chir_date"):
-            ev = merged.get(date_field)
-            if ev and ev.value:
-                result.document_date = str(ev.value)
-                break
 
         # Finalise timing
         result.total_extraction_time_ms = (

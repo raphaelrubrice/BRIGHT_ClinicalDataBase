@@ -14,6 +14,7 @@ FILEPATH = Path(__file__).resolve()
 REPO_ROOT = FILEPATH.parent.parent
 sys.path.append(str(REPO_ROOT))
 
+from src.extraction.schema import ALL_FIELDS_BY_NAME
 from src.extraction.pipeline import ExtractionPipeline
 from src.evaluation.benchmark import run_benchmark
 from src.aggregation.patient_timeline import build_patient_timeline
@@ -244,8 +245,8 @@ def main():
                     skipped += 1
                     continue
 
-                # Wrap annotation values in {"value": ...} for gold_standard format
-                gs_annotations = {k: {"value": v} for k, v in annotations.items()}
+                # Wrap annotation values in {"value": ...} for gold_standard format (filtered by schema)
+                gs_annotations = {k: {"value": v} for k, v in annotations.items() if k in ALL_FIELDS_BY_NAME}
 
                 gs_data = {
                     "document_id": doc_id,
