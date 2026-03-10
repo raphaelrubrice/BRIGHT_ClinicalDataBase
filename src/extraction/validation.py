@@ -22,6 +22,7 @@ from .schema import (
     ExtractionValue,
     FieldDefinition,
     FieldType,
+    vocab_has_autre,
 )
 
 logger = logging.getLogger(__name__)
@@ -104,6 +105,14 @@ _NORMALISATION_MAP: dict[str, str] = {
     "h": "M",
     "f": "F",
     "m": "M",
+    "mr": "M",
+    "mme": "F",
+    "monsieur": "M",
+    "madame": "F",
+    "mademoiselle": "F",
+    "male": "M",
+    "mâle": "M",
+    "female": "F",
     # Laterality
     "gauche": "gauche",
     "droite": "droite",
@@ -241,6 +250,13 @@ def _is_value_valid(
         for allowed in field_def.allowed_values:
             if isinstance(allowed, str) and allowed.lower() == normalised_lower:
                 return True
+
+    # If the vocab contains "autre", any non-empty string is valid
+    # (the "autre" category accepts free-text values that don't match
+    # specific controlled options).
+    if isinstance(normalised_value, str) and normalised_value.strip():
+        if vocab_has_autre(field_def.allowed_values):
+            return True
 
     return False
 

@@ -29,6 +29,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # Controlled vocabularies
 # ---------------------------------------------------------------------------
 
+import re
+
 class ControlledVocab:
     """Namespace of allowed value sets for constrained fields."""
 
@@ -36,17 +38,17 @@ class ControlledVocab:
 
     IHC_STATUS: set[str] = {"positif", "negatif", "maintenu", "NA"}
 
-    MOLECULAR_STATUS: set[str] = {"wt", "mute", "NA"}
-    # Note: free variant strings (e.g. "R132H", "C228T") are also accepted
-    # for molecular fields.  ``is_valid_molecular`` performs the check.
+    # Added "autre"
+    MOLECULAR_STATUS: set[str] = {"wt", "mute", "autre", "NA"}
 
     CHROMOSOMAL: set[str] = {"gain", "perte", "perte partielle", "NA"}
 
     METHYLATION: set[str] = {"methyle", "non methyle", "NA"}
-    # MGMT also accepts "wt" and "mute" in the annotation data.
+    
     MGMT_STATUS: set[str] = {"methyle", "non methyle", "wt", "mute", "NA"}
 
-    GRADE: set[int] = {1, 2, 3, 4}
+    # Changed to allow "autre" (Type hint updated to include str)
+    GRADE: set[int | str] = {1, 2, 3, 4, "autre"}
 
     WHO_CLASSIFICATION: set[str] = {"2007", "2016", "2021", "NA"}
 
@@ -59,8 +61,8 @@ class ControlledVocab:
         "NA",
     }
 
-    EVOLUTION: set[str] = {"initial", "terminal", "NA"}
-    # Plus P1, P2, P3, … (validated by ``is_valid_evolution``).
+    # Added "autre"
+    EVOLUTION: set[str] = {"initial", "terminal", "autre", "NA"}
 
     SEX: set[str] = {"M", "F", "NA"}
 
@@ -72,10 +74,10 @@ class ControlledVocab:
     def is_valid_evolution(value: str) -> bool:
         """Return *True* if *value* is a valid evolution label.
 
-        Accepted formats: ``initial``, ``terminal``, ``P<k>`` where *k* is a
-        positive integer.
+        Accepted formats: ``initial``, ``terminal``, ``autre``, ``NA``, 
+        or ``P<k>`` where *k* is a positive integer.
         """
-        if value in ("initial", "terminal", "NA"):
+        if value in ControlledVocab.EVOLUTION:
             return True
         return bool(re.fullmatch(r"P\d+", value))
 
@@ -83,7 +85,7 @@ class ControlledVocab:
     def is_valid_molecular(value: str) -> bool:
         """Return *True* if *value* is an accepted molecular status.
 
-        Accepts ``wt``, ``mute``, or specific variant strings (e.g.
+        Accepts ``wt``, ``mute``, ``autre``, or specific variant strings (e.g.
         ``R132H``, ``C228T``, ``V600E``, ``mute + delete``).
         """
         if value == "NA":
@@ -94,6 +96,21 @@ class ControlledVocab:
         if re.fullmatch(r"[A-Za-z0-9_+/ .-]+", value) and len(value) <= 50:
             return True
         return False
+
+
+# ---------------------------------------------------------------------------
+# "autre" category detection
+# ---------------------------------------------------------------------------
+
+def vocab_has_autre(allowed_values: set | None) -> bool:
+    """Return *True* if the allowed-values set contains an ``\"autre\"`` option.
+
+    This signals that the field can accept free-text values when the
+    extracted span does not match any other controlled vocabulary option.
+    """
+    if allowed_values is None:
+        return False
+    return "autre" in {str(v).lower() for v in allowed_values}
 
 
 # ---------------------------------------------------------------------------

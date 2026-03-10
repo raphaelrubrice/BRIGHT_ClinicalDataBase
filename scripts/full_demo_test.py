@@ -189,12 +189,13 @@ def main():
     # ------------------------------------------------------------------
     # 4. Initialise pipeline
     # ------------------------------------------------------------------
-    logger.info("Initializing ExtractionPipeline (GLiNER First, batching=%s)...", args.batching_strategy)
+    logger.info("Initializing ExtractionPipeline (GLiNER First, batching=%s, verbose)...", args.batching_strategy)
     pipeline_kwargs = {
         "use_gliner": args.use_gliner,
         "use_eds": True,
         "use_negation": True,
         "batching_strategy": args.batching_strategy,
+        "verbose": True,
     }
 
     pipeline = ExtractionPipeline(**pipeline_kwargs)

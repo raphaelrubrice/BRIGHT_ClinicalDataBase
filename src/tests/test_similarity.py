@@ -165,3 +165,54 @@ class TestClinicalScenarios:
         val, score = match_to_vocab("droite", LATERALITY_VALUES, "tumeur_lateralite")
         assert val == "droite"
         assert score == 1.0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# "autre" category fallback
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Vocab sets that include "autre"
+MOLECULAR_STATUS_VALUES = {"wt", "mute", "autre", "NA"}
+EVOLUTION_VALUES = {"initial", "terminal", "autre", "NA"}
+GRADE_VALUES = {"1", "2", "3", "4", "autre"}  # stringified for match_to_vocab
+
+
+class TestAutreFallback:
+    """'autre' category fallback when no vocab option matches."""
+
+    def test_autre_accepts_novel_value(self):
+        """Novel text should be accepted as-is when 'autre' is in vocab."""
+        val, score = match_to_vocab(
+            "duplication 7q", MOLECULAR_STATUS_VALUES, "mol_idh1"
+        )
+        # Should NOT be "NA" — the vocab has "autre" so novel values are accepted
+        assert val == "duplication 7q"
+        assert score == 0.6
+
+    def test_autre_not_triggered_without_autre(self):
+        """Vocab without 'autre' should still fall back to NA."""
+        val, score = match_to_vocab("xyzabc123", IHC_VALUES, "ihc_idh1")
+        # IHC_VALUES has no "autre" → must still go to NA
+        assert val in {"positif", "negatif", "maintenu", "NA"}
+
+    def test_exact_match_takes_precedence(self):
+        """Exact match should still win even when 'autre' is in vocab."""
+        val, score = match_to_vocab("wt", MOLECULAR_STATUS_VALUES, "mol_idh1")
+        assert val == "wt"
+        assert score == 1.0
+
+    def test_autre_for_grade(self):
+        """Novel value against GRADE (has 'autre') should return raw value."""
+        val, score = match_to_vocab(
+            "inclassable", GRADE_VALUES, "grade"
+        )
+        assert val == "inclassable"
+        assert score == 0.6
+
+    def test_autre_for_evolution(self):
+        """Novel evolution value should be accepted via 'autre' fallback."""
+        val, score = match_to_vocab(
+            "stabilisation partielle", EVOLUTION_VALUES, "evol_clinique"
+        )
+        assert val == "stabilisation partielle"
+        assert score == 0.6

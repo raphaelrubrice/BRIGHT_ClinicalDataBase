@@ -1,6 +1,10 @@
 pip install pymupdf
 pip install torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1
 pip install --force-reinstall markupsafe jinja2 "numpy<2.0" pillow
+
+python -m spacy download en_core_web_lg
+python -m spacy download fr_core_news_lg
+
 git clone https://github.com/aphp/eds-pseudo.git
 pip install "edsnlp[ml]" -U
 

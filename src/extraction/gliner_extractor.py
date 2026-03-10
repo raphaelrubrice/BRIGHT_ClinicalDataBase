@@ -516,6 +516,289 @@ for _batch in SEMANTIC_BATCHES.values():
 
 
 # ---------------------------------------------------------------------------
+# Field descriptions — passed to GLiNER as entity labels for richer semantics
+# Sourced from GlinerINPUTS.md
+# ---------------------------------------------------------------------------
+
+FIELD_DESCRIPTIONS_EN: dict[str, str] = {
+    # 1. Identifiers & Dates
+    "date_chir": "Neurosurgery or resection date.",
+    "num_labo": "Pathology lab sample number.",
+    "date_rcp": "Multidisciplinary team meeting date.",
+    "dn_date": "Date of last news or follow-up contact.",
+    "date_deces": "Patient date of death.",
+    # 2. Demographics
+    "sexe": "Patient sex or gender.",
+    "annee_de_naissance": "Patient birth year.",
+    "activite_professionnelle": "Patient job or occupation.",
+    "antecedent_tumoral": "Previous personal brain tumor history.",
+    "ik_clinique": "Karnofsky performance score (KPS) or WHO performance status (PS).",
+    # 3. Diagnosis
+    "diag_histologique": "Pathological brain tumor diagnosis.",
+    "diag_integre": "Integrated WHO 2021 diagnosis combining histology and molecular markers.",
+    "classification_oms": "WHO classification system used. Referred as the year. (2007, 2016 or 2021)",
+    "grade": "CNS WHO tumor grade (1, 2, 3, 4).",
+    # 4. Tumor Location
+    "tumeur_lateralite": "Tumor laterality (left, right, bilateral).",
+    "tumeur_position": "Specific brain lobe/structure containing tumor.",
+    "dominance_cerebrale": "Brain hemisphere dominance (handedness).",
+    # 5. Radiology
+    "exam_radio_date_decouverte": "Date of first radiological exam discovering tumor (not MRI-specific).",
+    "contraste_1er_symptome": "Contrast enhancement on first imaging.",
+    "prise_de_contraste": "General mention of contrast enhancement (not restricted to current imaging).",
+    "oedeme_1er_symptome": "Edema presence on first imaging.",
+    "calcif_1er_symptome": "Calcification presence on first imaging.",
+    # 6. Symptoms Onset
+    "date_1er_symptome": "Date of first clinical symptoms.",
+    "epilepsie_1er_symptome": "Seizures/convulsions as first symptom.",
+    "ceph_hic_1er_symptome": "Headaches/ICP signs as first symptom.",
+    "deficit_1er_symptome": "Neurological deficit at onset (motor, sensory, visual, speech — not motor-only).",
+    "cognitif_1er_symptome": "Cognitive issues/confusion as first symptom.",
+    "autre_trouble_1er_symptome": "Other non-specific first clinical symptoms.",
+    # 7. Symptoms Current
+    "epilepsie": "Mention of seizures, epilepsy, or convulsions.",
+    "ceph_hic": "Mention of severe headaches or ICP signs.",
+    "deficit": "Mention of neurological deficit (motor, sensory, visual, speech — not motor-only).",
+    "cognitif": "Mention of cognitive impairment, memory loss, confusion.",
+    "autre_trouble": "Mention of other current symptoms.",
+    # 8. Histology
+    "histo_necrose": "Necrosis presence in histological exam.",
+    "histo_pec": "Microvascular/endothelial proliferation presence.",
+    "histo_mitoses": "Number of mitoses or mitotic index.",
+    "aspect_cellulaire": "Tumor cellular aspect (astrocytic, oligodendroglial).",
+    # 9. IHC 1
+    "ihc_idh1": "IDH1 R132H protein expression via IHC.",
+    "ihc_atrx": "ATRX protein expression (retained/lost).",
+    "ihc_p53": "p53 protein expression level/mutation.",
+    "ihc_fgfr3": "FGFR3 protein expression status.",
+    "ihc_braf": "BRAF V600E protein expression.",
+    # 10. IHC 2
+    "ihc_gfap": "GFAP protein expression status (positive/negative).",
+    "ihc_olig2": "Olig2 protein expression status.",
+    "ihc_ki67": "Ki-67 proliferation index percentage (0-100).",
+    "ihc_hist_h3k27m": "Histone H3K27M protein expression.",
+    "ihc_hist_h3k27me3": "Histone H3K27me3 protein expression.",
+    "ihc_egfr_hirsch": "EGFR expression scored via Hirsch scoring system.",
+    "ihc_mmr": "Mismatch repair (MMR) proteins expression.",
+    # 11. Molecular 1
+    "mol_idh1": "IDH1 gene mutation status.",
+    "mol_idh2": "IDH2 gene mutation status.",
+    "mol_mgmt": "MGMT promoter methylation status.",
+    "mol_h3f3a": "H3F3A gene mutation status.",
+    "mol_hist1h3b": "HIST1H3B gene mutation status.",
+    "mol_tert": "TERT promoter mutation status.",
+    "mol_CDKN2A": "CDKN2A homozygous deletion status.",
+    # 12. Chromosomal
+    "ch1p": "Deletion status of chromosome 1p.",
+    "ch19q": "Deletion status of chromosome 19q.",
+    "ch1p19q_codel": "Combined 1p/19q co-deletion status.",
+    "ch7p": "Gain or loss of chromosome 7p.",
+    "ch7q": "Gain or loss of chromosome 7q.",
+    "ch10p": "Deletion status of chromosome 10p.",
+    "ch10q": "Deletion status of chromosome 10q.",
+    "ch9p": "Deletion status of chromosome 9p.",
+    "ch9q": "Deletion status of chromosome 9q.",
+    # 13. Molecular 2
+    "mol_p53": "TP53 gene mutation status.",
+    "mol_atrx": "ATRX gene mutation status.",
+    "mol_cic": "CIC gene mutation status.",
+    "mol_fubp1": "FUBP1 gene mutation status.",
+    "mol_fgfr1": "FGFR1 gene mutation status.",
+    "mol_egfr_mut": "EGFR gene mutation status.",
+    "mol_prkca": "PRKCA gene mutation status.",
+    "mol_pten": "PTEN gene mutation status.",
+    "mol_braf": "BRAF gene mutation status.",
+    # 14. Amplifications & Fusions
+    "ampli_egfr": "EGFR gene amplification status.",
+    "ampli_mdm2": "MDM2 gene amplification status.",
+    "ampli_cdk4": "CDK4 gene amplification status.",
+    "ampli_met": "MET gene amplification status.",
+    "ampli_mdm4": "MDM4 gene amplification status.",
+    "fusion_fgfr": "Fusion status involving FGFR.",
+    "fusion_ntrk": "Fusion status involving NTRK.",
+    "fusion_autre": "Any other relevant gene fusions.",
+    # 15. Treatment Surgery
+    "type_chirurgie": "Neurosurgical procedure type (biopsy, resection).",
+    "localisation_chir": "Brain region targeted by surgery.",
+    "qualite_exerese": "Tumor resection extent (total, partial).",
+    "chir_date": "Neurosurgery or tumor resection date.",
+    # 16. Treatment Chemo
+    "chimios": "Chemotherapy agents administered.",
+    "chimio_protocole": "Chemotherapy protocol name (e.g., Stupp).",
+    "chm_date_debut": "Chemotherapy start date.",
+    "chm_date_fin": "Chemotherapy end date.",
+    "chm_cycles": "Number of completed chemotherapy cycles.",
+    # 17. Treatment Radio
+    "rx_date_debut": "Radiotherapy start date.",
+    "rx_date_fin": "Radiotherapy end date.",
+    "rx_dose": "Total radiotherapy dose in Grays.",
+    "rx_fractionnement": "Number of radiotherapy fractions.",
+    "localisation_radiotherapie": "Brain area targeted by radiotherapy.",
+    # 18. Adjunct
+    "anti_epileptiques": "Anticonvulsant/antiepileptic treatments.",
+    "essai_therapeutique": "Clinical trial name.",
+    "corticoides": "Corticosteroids administered (e.g., Dexamethasone).",
+    "optune": "Mention of Optune/tumor treating fields.",
+    # 19. Evolution
+    "evol_clinique": "Overall clinical evolution (stable, progressing).",
+    "progress_clinique": "Mention of worsening clinical symptoms.",
+    "progress_radiologique": "Mention of tumor growth on imaging.",
+    "reponse_radiologique": "Tumor response on imaging (shrinkage, stability).",
+    "date_progression": "Tumor relapse or progression diagnosis date.",
+    # 20. Care Team
+    "neuroncologue": "Neuro-oncologist surname. Exclude titles/institutions.",
+    "neurochirurgien": "Neurosurgeon surname. Exclude titles/hospitals.",
+    "radiotherapeute": "Radiotherapy doctor surname. Exclude titles.",
+    "anatomo_pathologiste": "Pathologist surname. Exclude titles.",
+    # 21. Outcome
+    "infos_deces": "Circumstances or cause of death.",
+    "survie_globale": "Overall survival time in months/years.",
+}
+
+FIELD_DESCRIPTIONS_FR: dict[str, str] = {
+    # 1. Identifiers & Dates
+    "date_chir": "Date intervention neurochirurgicale ou résection.",
+    "num_labo": "Numéro échantillon laboratoire anatomopathologie.",
+    "date_rcp": "Date réunion concertation pluridisciplinaire.",
+    "dn_date": "Date dernières nouvelles ou dernier suivi.",
+    "date_deces": "Date décès patient.",
+    # 2. Demographics
+    "sexe": "Sexe ou genre patient.",
+    "annee_de_naissance": "Année naissance patient.",
+    "activite_professionnelle": "Profession ou métier patient.",
+    "antecedent_tumoral": "Antécédent personnel tumeur cérébrale.",
+    "ik_clinique": "Score performance Karnofsky (KPS) ou score performance OMS (PS).",
+    # 3. Diagnosis
+    "diag_histologique": "Diagnostic anatomopathologique tumeur cérébrale.",
+    "diag_integre": "Diagnostic intégré OMS 2021 combinant histologie et biologie moléculaire.",
+    "classification_oms": "Système de classification OMS utilisé. Référencé avec l'année. (2007, 2016 or 2021)",
+    "grade": "Grade tumoral OMS (1, 2, 3, 4).",
+    # 4. Tumor Location
+    "tumeur_lateralite": "Latéralité tumeur (gauche, droite, bilatérale).",
+    "tumeur_position": "Lobe ou structure cérébrale contenant tumeur.",
+    "dominance_cerebrale": "Dominance hémisphérique cérébrale (droitier/gaucher).",
+    # 5. Radiology
+    "exam_radio_date_decouverte": "Date premier examen radiologique découvrant tumeur (non spécifique IRM).",
+    "contraste_1er_symptome": "Prise contraste sur première imagerie.",
+    "prise_de_contraste": "Mention générale prise de contraste (non restreinte à imagerie actuelle).",
+    "oedeme_1er_symptome": "Présence œdème sur première imagerie.",
+    "calcif_1er_symptome": "Présence calcification sur première imagerie.",
+    # 6. Symptoms Onset
+    "date_1er_symptome": "Date apparition premiers symptômes cliniques.",
+    "epilepsie_1er_symptome": "Crises ou convulsions comme premier symptôme.",
+    "ceph_hic_1er_symptome": "Céphalées ou signes HIC comme premier symptôme.",
+    "deficit_1er_symptome": "Déficit neurologique initial (moteur, sensitif, visuel, phasique — pas uniquement moteur).",
+    "cognitif_1er_symptome": "Troubles cognitifs/confusion comme premier symptôme.",
+    "autre_trouble_1er_symptome": "Autres premiers symptômes cliniques non spécifiques.",
+    # 7. Symptoms Current
+    "epilepsie": "Mention épilepsie, crises ou convulsions.",
+    "ceph_hic": "Mention céphalées sévères ou signes HIC.",
+    "deficit": "Mention déficit neurologique (moteur, sensitif, visuel, phasique — pas uniquement moteur).",
+    "cognitif": "Mention troubles cognitifs, perte mémoire, confusion.",
+    "autre_trouble": "Mention autres symptômes actuels.",
+    # 8. Histology
+    "histo_necrose": "Présence nécrose dans examen histologique.",
+    "histo_pec": "Présence prolifération endothéliale ou microvasculaire.",
+    "histo_mitoses": "Nombre mitoses ou index mitotique.",
+    "aspect_cellulaire": "Aspect cellulaire tumoral (astrocytaire, oligodendroglial).",
+    # 9. IHC 1
+    "ihc_idh1": "Expression protéine IDH1 R132H par IHC.",
+    "ihc_atrx": "Expression protéine ATRX (conservée/perdue).",
+    "ihc_p53": "Niveau expression ou mutation protéine p53.",
+    "ihc_fgfr3": "Statut expression protéine FGFR3.",
+    "ihc_braf": "Expression protéine BRAF V600E.",
+    # 10. IHC 2
+    "ihc_gfap": "Statut expression protéine GFAP (positif/négatif).",
+    "ihc_olig2": "Statut expression protéine Olig2.",
+    "ihc_ki67": "Pourcentage index prolifération Ki-67 (0-100).",
+    "ihc_hist_h3k27m": "Expression protéine histone H3K27M.",
+    "ihc_hist_h3k27me3": "Expression protéine histone H3K27me3.",
+    "ihc_egfr_hirsch": "Expression EGFR évaluée par score de Hirsch.",
+    "ihc_mmr": "Expression protéines réparation mésappariements (MMR).",
+    # 11. Molecular 1
+    "mol_idh1": "Statut mutation gène IDH1.",
+    "mol_idh2": "Statut mutation gène IDH2.",
+    "mol_mgmt": "Statut méthylation promoteur MGMT.",
+    "mol_h3f3a": "Statut mutation gène H3F3A.",
+    "mol_hist1h3b": "Statut mutation gène HIST1H3B.",
+    "mol_tert": "Statut mutation promoteur TERT.",
+    "mol_CDKN2A": "Statut délétion homozygote gène CDKN2A.",
+    # 12. Chromosomal
+    "ch1p": "Statut délétion chromosome 1p.",
+    "ch19q": "Statut délétion chromosome 19q.",
+    "ch1p19q_codel": "Statut co-délétion 1p/19q.",
+    "ch7p": "Statut gain/perte chromosome 7p.",
+    "ch7q": "Statut gain/perte chromosome 7q.",
+    "ch10p": "Statut délétion chromosome 10p.",
+    "ch10q": "Statut délétion chromosome 10q.",
+    "ch9p": "Statut délétion chromosome 9p.",
+    "ch9q": "Statut délétion chromosome 9q.",
+    # 13. Molecular 2
+    "mol_p53": "Statut mutation gène TP53.",
+    "mol_atrx": "Statut mutation gène ATRX.",
+    "mol_cic": "Statut mutation gène CIC.",
+    "mol_fubp1": "Statut mutation gène FUBP1.",
+    "mol_fgfr1": "Statut mutation gène FGFR1.",
+    "mol_egfr_mut": "Statut mutation gène EGFR.",
+    "mol_prkca": "Statut mutation gène PRKCA.",
+    "mol_pten": "Statut mutation gène PTEN.",
+    "mol_braf": "Statut mutation gène BRAF.",
+    # 14. Amplifications & Fusions
+    "ampli_egfr": "Statut amplification gène EGFR.",
+    "ampli_mdm2": "Statut amplification gène MDM2.",
+    "ampli_cdk4": "Statut amplification gène CDK4.",
+    "ampli_met": "Statut amplification gène MET.",
+    "ampli_mdm4": "Statut amplification gène MDM4.",
+    "fusion_fgfr": "Statut fusion impliquant FGFR.",
+    "fusion_ntrk": "Statut fusion impliquant NTRK.",
+    "fusion_autre": "Autres fusions géniques pertinentes.",
+    # 15. Treatment Surgery
+    "type_chirurgie": "Type procédure neurochirurgicale (biopsie, exérèse).",
+    "localisation_chir": "Région cérébrale ciblée par chirurgie.",
+    "qualite_exerese": "Étendue résection tumorale (totale, partielle).",
+    "chir_date": "Date opération résection tumorale.",
+    # 16. Treatment Chemo
+    "chimios": "Agents chimiothérapeutiques administrés.",
+    "chimio_protocole": "Nom protocole chimiothérapie (ex: Stupp).",
+    "chm_date_debut": "Date début traitement chimiothérapie.",
+    "chm_date_fin": "Date fin traitement chimiothérapie.",
+    "chm_cycles": "Nombre cycles chimiothérapie complétés.",
+    # 17. Treatment Radio
+    "rx_date_debut": "Date début traitement radiothérapie.",
+    "rx_date_fin": "Date fin traitement radiothérapie.",
+    "rx_dose": "Dose totale radiothérapie en Grays.",
+    "rx_fractionnement": "Nombre fractions radiothérapie.",
+    "localisation_radiotherapie": "Zone cérébrale ciblée par radiothérapie.",
+    # 18. Adjunct
+    "anti_epileptiques": "Traitements anticonvulsivants/antiépileptiques.",
+    "essai_therapeutique": "Nom essai clinique ou thérapeutique.",
+    "corticoides": "Corticoïdes administrés (ex: Dexaméthasone).",
+    "optune": "Mention dispositif Optune/champs traitement tumoral.",
+    # 19. Evolution
+    "evol_clinique": "Évolution clinique globale (stable, progression).",
+    "progress_clinique": "Mention aggravation symptômes cliniques.",
+    "progress_radiologique": "Mention croissance tumorale sur imagerie.",
+    "reponse_radiologique": "Réponse tumorale sur imagerie (réduction, stabilité).",
+    "date_progression": "Date diagnostic récidive/progression tumorale.",
+    # 20. Care Team
+    "neuroncologue": "Nom neuro-oncologue traitant. Exclure titres/institutions.",
+    "neurochirurgien": "Nom neurochirurgien. Exclure titres/hôpitaux.",
+    "radiotherapeute": "Nom médecin radiothérapeute. Exclure titres.",
+    "anatomo_pathologiste": "Nom anatomo-pathologiste. Exclure titres.",
+    # 21. Outcome
+    "infos_deces": "Circonstances ou cause décès.",
+    "survie_globale": "Durée survie globale en mois/années.",
+}
+
+# Build reverse map: description_text → field_name (for both EN and FR)
+_REVERSE_DESC_MAP: dict[str, str] = {}
+for _f, _d in FIELD_DESCRIPTIONS_EN.items():
+    _REVERSE_DESC_MAP[_d] = _f
+for _f, _d in FIELD_DESCRIPTIONS_FR.items():
+    _REVERSE_DESC_MAP[_d] = _f
+
+
+# ---------------------------------------------------------------------------
 # Confidence thresholds
 # ---------------------------------------------------------------------------
 
@@ -550,7 +833,7 @@ def _build_heterogeneous_batches(
     *max_per_batch* fields, ensuring labels within each batch come from
     different semantic domains (maximising discrimination).
     """
-    label_key = "labels_fr" if language.startswith("fr") else "labels_en"
+    desc_map = FIELD_DESCRIPTIONS_FR if language.startswith("fr") else FIELD_DESCRIPTIONS_EN
 
     # Group target fields by their semantic domain
     domain_queues: dict[str, deque] = {}
@@ -578,10 +861,8 @@ def _build_heterogeneous_batches(
             field = q.popleft()
             batch_fields.add(field)
 
-            # Retrieve label from original semantic batch
-            orig_batch = SEMANTIC_BATCHES[domain_name]
-            label_map = orig_batch.get(label_key, orig_batch["labels_en"])
-            batch_labels[field] = label_map.get(field, field)
+            # Retrieve description for GLiNER
+            batch_labels[field] = desc_map.get(field, field)
 
         if batch_fields:
             batches.append({
@@ -708,6 +989,7 @@ class GlinerExtractor:
         text: str,
         feature_subset: list[str],
         language: str | None = None,
+        verbose: bool = False,
     ) -> dict[str, ExtractionValue]:
         if language is None:
             language = self.detect_language(text)
@@ -723,9 +1005,27 @@ class GlinerExtractor:
         use_context = self._batching_strategy == BatchingStrategy.SEMANTIC_CONTEXT
         batches = self._resolve_batches(target_fields, language)
         label_key = "labels_fr" if language.startswith("fr") else "labels_en"
+        desc_map = FIELD_DESCRIPTIONS_FR if language.startswith("fr") else FIELD_DESCRIPTIONS_EN
 
-        for chunk_text, _chunk_offset in chunks:
-            for batch_name, batch_config in batches:
+        # Optional tqdm progress bars
+        if verbose:
+            try:
+                from tqdm import tqdm
+            except ImportError:
+                tqdm = None
+        else:
+            tqdm = None
+
+        chunk_iter = enumerate(chunks)
+        if tqdm is not None:
+            chunk_iter = tqdm(chunk_iter, total=len(chunks), desc="GLiNER chunks", unit="chunk")
+
+        for chunk_idx, (chunk_text, _chunk_offset) in chunk_iter:
+            batch_iter = batches
+            if tqdm is not None:
+                batch_iter = tqdm(batches, desc=f"  Batches (chunk {chunk_idx+1}/{len(chunks)})", unit="batch", leave=False)
+
+            for batch_name, batch_config in batch_iter:
                 batch_fields = batch_config["fields"] & target_fields
                 if not batch_fields:
                     continue
@@ -737,12 +1037,8 @@ class GlinerExtractor:
                 else:
                     augmented_text = chunk_text
 
-                # Resolve labels: heterogeneous batches use "labels" key directly
-                if "labels" in batch_config:
-                    label_map = batch_config["labels"]
-                else:
-                    label_map = batch_config.get(label_key, batch_config["labels_en"])
-                labels = [label_map[f] for f in batch_fields if f in label_map]
+                # Resolve descriptions to pass to GLiNER
+                labels = [desc_map[f] for f in batch_fields if f in desc_map]
 
                 if not labels:
                     continue
@@ -754,7 +1050,7 @@ class GlinerExtractor:
                     score = ent["score"]
                     span_text = ent["text"]
 
-                    field_name = _REVERSE_LABEL_MAP.get(label_text)
+                    field_name = _REVERSE_DESC_MAP.get(label_text)
                     if not field_name or field_name not in batch_fields:
                         continue
 

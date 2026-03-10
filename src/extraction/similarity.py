@@ -6,7 +6,7 @@ controlled vocabulary option:
 1. Exact match (case-insensitive, accent-normalized)
 2. Normalisation map lookup (reuse validation tables)
 3. Fuzzy match (rapidfuzz Levenshtein)
-4. spaCy vector similarity (fr_core_news_lg)
+4. spaCy Vector similarity (routed by language detection)
 
 Falls back to ``"NA"`` when no tier produces a match.
 
@@ -20,33 +20,56 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+# Assumption: text_normalisation.py exists in the same package
 from .text_normalisation import fuzzy_match, normalise
+from .schema import vocab_has_autre
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Lazy-loaded spaCy model
+# Lazy-loaded spaCy models (Large models for better clinical word coverage)
 # ---------------------------------------------------------------------------
 
-_spacy_nlp = None
+_models: dict[str, any] = {}
 
 
-def _ensure_spacy():
-    """Load ``fr_core_news_lg`` on first call."""
-    global _spacy_nlp
-    if _spacy_nlp is not None:
-        return
+def _get_nlp_for_lang(text: str):
+    """Detect language and return the corresponding spaCy model.
+    
+    Defaults to 'en_core_web_lg' if detection fails or language is unsupported.
+    For clinical words, 'lg' models are preferred over 'md' or 'sm' because 
+    they contain significantly more unique vectors.
+    """
+    global _models
+    
+    lang = "en"  # Default
     try:
-        import spacy
-        _spacy_nlp = spacy.load("fr_core_news_lg")
-        logger.info("Loaded spaCy model fr_core_news_lg for similarity matching.")
-    except (ImportError, OSError) as exc:
-        logger.warning(
-            "spaCy model fr_core_news_lg not available (%s). "
-            "Tier 4 (vector similarity) will be skipped.",
-            exc,
-        )
-        _spacy_nlp = False  # sentinel: tried and failed
+        from langdetect import detect
+        lang = detect(text)
+    except Exception as e:
+        logger.warning("Language detection failed, defaulting to English: %s", e)
+
+    # Map detected language to specific spaCy models
+    model_map = {
+        "fr": "fr_core_news_lg",
+        "en": "en_core_web_lg"
+    }
+    
+    target_model = model_map.get(lang, "en_core_web_lg")
+
+    if target_model not in _models:
+        try:
+            import spacy
+            logger.info("Loading spaCy model: %s", target_model)
+            _models[target_model] = spacy.load(target_model)
+        except (ImportError, OSError) as exc:
+            logger.warning(
+                "spaCy model %s not available (%s). Tier 4 will be skipped.",
+                target_model, exc
+            )
+            _models[target_model] = None
+            
+    return _models.get(target_model)
 
 
 # ---------------------------------------------------------------------------
@@ -96,8 +119,11 @@ def match_to_vocab(
     if not span_text or not span_text.strip():
         return ("NA", 0.0)
 
-    # Candidates excluding "NA" (we only want to match real options)
-    candidates = {v for v in allowed_values if v != "NA"} if allowed_values else set()
+    # Candidates excluding "NA" and "autre" (we only want to match real options)
+    candidates = {v for v in allowed_values if v not in ("NA", "autre")} if allowed_values else set()
+
+    # Track best score across all tiers for "autre" fallback decision
+    _best_tier_score: float = 0.0
     if not candidates:
         return (span_text, 0.5)
 
@@ -154,31 +180,53 @@ def match_to_vocab(
             field_name, span_stripped, best_fuzzy, best_fuzzy_score,
         )
         return (best_fuzzy, best_fuzzy_score)
+    _best_tier_score = max(_best_tier_score, best_fuzzy_score)
 
     # ------------------------------------------------------------------
-    # Tier 4: spaCy vector similarity (no minimum threshold)
+    # Tier 4: Language-aware spaCy similarity
     # ------------------------------------------------------------------
-    _ensure_spacy()
-    if _spacy_nlp and _spacy_nlp is not False:
-        span_doc = _spacy_nlp(span_stripped)
+    nlp = _get_nlp_for_lang(span_stripped)
+    
+    if nlp:
+        span_doc = nlp(span_stripped)
         best_sim_candidate: Optional[str] = None
         best_sim_score: float = -1.0
+        
         for candidate in candidates:
-            cand_doc = _spacy_nlp(candidate)
-            sim = span_doc.similarity(cand_doc)
+            cand_doc = nlp(candidate)
+            if span_doc.has_vector and cand_doc.has_vector:
+                sim = span_doc.similarity(cand_doc)
+            else:
+                sim = 0.0 
+                
             if sim > best_sim_score:
                 best_sim_score = sim
                 best_sim_candidate = candidate
 
-        if best_sim_candidate is not None:
+        if best_sim_candidate is not None and best_sim_score > 0.45:
             logger.debug(
-                "Field '%s': Tier 4 spaCy similarity '%s' -> '%s' (sim=%.3f)",
+                "Field '%s': Tier 4 Vector similarity '%s' -> '%s' (sim=%.3f)",
                 field_name, span_stripped, best_sim_candidate, best_sim_score,
             )
             return (best_sim_candidate, round(best_sim_score, 4))
+        _best_tier_score = max(_best_tier_score, best_sim_score)
 
     # ------------------------------------------------------------------
-    # Tier 5: No match — return "NA"
+    # Tier 5: "autre" fallback — accept raw value as free text
+    # ------------------------------------------------------------------
+    # If the vocab has an "autre" category and no tier produced a decent
+    # match (best < 0.45), the extracted value is genuinely novel —
+    # accept it as-is with moderate confidence.
+    if vocab_has_autre(allowed_values) and _best_tier_score < 0.45:
+        logger.info(
+            "Field '%s': no vocab match for '%s' (best_score=%.2f) but "
+            "'autre' category present — accepting raw value.",
+            field_name, span_stripped, _best_tier_score,
+        )
+        return (span_stripped, 0.6)
+
+    # ------------------------------------------------------------------
+    # Tier 6: No match — return "NA"
     # ------------------------------------------------------------------
     logger.info(
         "Field '%s': no match for '%s' in %s. Returning 'NA'.",

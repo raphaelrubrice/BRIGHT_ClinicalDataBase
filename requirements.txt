@@ -6,6 +6,7 @@ portalocker
 pypdf
 edspdf
 rapidfuzz
+spacy
 
 huggingface_hub
 transformers

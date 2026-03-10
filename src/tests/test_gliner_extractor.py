@@ -17,6 +17,9 @@ from src.extraction.gliner_extractor import (
     _build_heterogeneous_batches,
     _ALL_GLINER_FIELDS,
     _FIELD_TO_DOMAIN,
+    FIELD_DESCRIPTIONS_EN,
+    FIELD_DESCRIPTIONS_FR,
+    _REVERSE_DESC_MAP,
 )
 from src.extraction.schema import MappingType, ALL_FIELDS_BY_NAME
 
@@ -332,7 +335,7 @@ class TestGlinerExtractWithMock:
             results = []
             if "crise d'épilepsie" in text:
                 for label in labels:
-                    if "épilepsie" in label.lower() or "seizure" in label.lower() or "epilep" in label.lower():
+                    if any(kw in label.lower() for kw in ("épilepsie", "seizure", "epilep", "crise", "convulsion")):
                         results.append({"text": "crise d'épilepsie", "label": label, "score": 0.95})
             if "positif" in text:
                 for label in labels:
@@ -340,7 +343,7 @@ class TestGlinerExtractWithMock:
                         results.append({"text": "positif", "label": label, "score": 0.92})
             if "glioblastome" in text:
                 for label in labels:
-                    if "diag" in label.lower() or "histol" in label.lower():
+                    if any(kw in label.lower() for kw in ("diag", "histol", "tumor diag", "tumeur")):
                         results.append({"text": "glioblastome", "label": label, "score": 0.98})
             return results
 
@@ -367,6 +370,38 @@ class TestGlinerExtractWithMock:
         ext = self._make_extractor()
         result = ext.extract("Some text", [])
         assert result == {}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Field descriptions coverage
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestFieldDescriptions:
+    """Verify FIELD_DESCRIPTIONS cover all 111 GLiNER fields."""
+
+    def test_en_covers_all_fields(self):
+        missing = _ALL_GLINER_FIELDS - set(FIELD_DESCRIPTIONS_EN.keys())
+        assert not missing, f"Missing EN descriptions: {missing}"
+
+    def test_fr_covers_all_fields(self):
+        missing = _ALL_GLINER_FIELDS - set(FIELD_DESCRIPTIONS_FR.keys())
+        assert not missing, f"Missing FR descriptions: {missing}"
+
+    def test_reverse_desc_map_covers_en(self):
+        for field, desc in FIELD_DESCRIPTIONS_EN.items():
+            assert _REVERSE_DESC_MAP.get(desc) == field, (
+                f"EN desc for '{field}' not in _REVERSE_DESC_MAP"
+            )
+
+    def test_reverse_desc_map_covers_fr(self):
+        for field, desc in FIELD_DESCRIPTIONS_FR.items():
+            assert _REVERSE_DESC_MAP.get(desc) == field, (
+                f"FR desc for '{field}' not in _REVERSE_DESC_MAP"
+            )
+
+    def test_descriptions_count(self):
+        assert len(FIELD_DESCRIPTIONS_EN) == 111
+        assert len(FIELD_DESCRIPTIONS_FR) == 111
 
 
 if __name__ == "__main__":

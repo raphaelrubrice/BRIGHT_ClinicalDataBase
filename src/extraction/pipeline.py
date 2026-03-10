@@ -131,6 +131,8 @@ class ExtractionPipeline:
         Whether to enable GLiNER primary extraction.
     gliner_model : str
         GLiNER model name (default ``"urchade/gliner_multi-v2.1"``).
+    verbose : bool
+        Whether to print step-by-step progress to stdout (default ``False``).
     """
 
     def __init__(
@@ -140,10 +142,12 @@ class ExtractionPipeline:
         use_gliner: bool = True,
         gliner_model: str = "urchade/gliner_multi-v2.1",
         batching_strategy: str = "heterogeneous",
+        verbose: bool = False,
     ):
         self.use_negation = use_negation
         self.use_eds = use_eds
         self.use_gliner = use_gliner
+        self.verbose = verbose
 
         # Sub-components
         self.classifier = DocumentClassifier()
@@ -198,16 +202,23 @@ class ExtractionPipeline:
             audit trail.
         """
         t_start = time.perf_counter()
+        _v = self.verbose  # local alias for brevity
 
         result = ExtractionResult(
             document_id=document_id,
             patient_id=patient_id,
         )
         result.add_log(f"Pipeline started for document '{document_id}'.")
+        if _v:
+            print(f"\n{'='*60}")
+            print(f"[PIPELINE] Starting extraction for document '{document_id}'")
+            print(f"{'='*60}")
 
         # -----------------------------------------------------------------
         # Step 1: Classify document type
         # -----------------------------------------------------------------
+        if _v:
+            print("[Step 1/11] Classifying document type...")
         classification = self.classifier.classify(text)
         result.document_type = classification.document_type
         result.classification_confidence = classification.confidence
@@ -217,6 +228,10 @@ class ExtractionPipeline:
             f"(confidence={classification.confidence:.2f}, "
             f"ambiguous={classification.is_ambiguous})."
         )
+        if _v:
+            print(f"           → type='{classification.document_type}', "
+                  f"confidence={classification.confidence:.2f}, "
+                  f"ambiguous={classification.is_ambiguous}")
 
         if classification.is_ambiguous:
             result.add_log(
@@ -227,21 +242,31 @@ class ExtractionPipeline:
         # -----------------------------------------------------------------
         # Step 2: Detect sections
         # -----------------------------------------------------------------
+        if _v:
+            print("[Step 2/11] Detecting sections...")
         sections = self.section_detector.detect(text)
         result.sections_detected = list(sections.keys())
         result.add_log(
             f"Sections detected: {result.sections_detected}"
         )
+        if _v:
+            print(f"           → {len(result.sections_detected)} sections: {result.sections_detected}")
 
         # -----------------------------------------------------------------
         # Step 3: Language detection
         # -----------------------------------------------------------------
+        if _v:
+            print("[Step 3/11] Detecting language...")
         language = self._detect_language(text)
         result.add_log(f"Detected language: '{language}'.")
+        if _v:
+            print(f"           → language='{language}'")
 
         # -----------------------------------------------------------------
         # Step 4: Determine extractable feature subset
         # -----------------------------------------------------------------
+        if _v:
+            print("[Step 4/11] Routing features for document type...")
         try:
             feature_subset = get_extractable_fields(result.document_type)
         except ValueError as exc:
@@ -254,10 +279,14 @@ class ExtractionPipeline:
         result.add_log(
             f"Feature subset: {len(feature_subset)} fields to extract."
         )
+        if _v:
+            print(f"           → {len(feature_subset)} fields targeted for extraction")
 
         # -----------------------------------------------------------------
         # Step 5: PRIMARY — GLiNER extraction (runs FIRST)
         # -----------------------------------------------------------------
+        if _v:
+            print("[Step 5/11] Running GLiNER primary extraction...")
         gliner_results: dict[str, ExtractionValue] = {}
         if self._gliner_extractor:
             t_gliner_start = time.perf_counter()
@@ -266,6 +295,7 @@ class ExtractionPipeline:
                     text=text,
                     feature_subset=feature_subset,
                     language=language,
+                    verbose=_v,
                 )
             except Exception as exc:
                 result.add_log(f"GLiNER extraction failed: {exc}")
@@ -277,10 +307,14 @@ class ExtractionPipeline:
                 f"GLiNER (primary): extracted {len(gliner_results)} fields "
                 f"in {t_gliner_elapsed:.0f}ms."
             )
+            if _v:
+                print(f"           → {len(gliner_results)} fields extracted in {t_gliner_elapsed:.0f}ms")
 
         # -----------------------------------------------------------------
         # Step 6: EDS-NLP Level 1 — Qualifier identification for GLiNER
         # -----------------------------------------------------------------
+        if _v:
+            print("[Step 6/11] Running EDS-NLP qualifier annotation...")
         if self._assertion_annotator and gliner_results:
             qualified_count = 0
             for field_name, ev in list(gliner_results.items()):
@@ -309,10 +343,14 @@ class ExtractionPipeline:
                 f"EDS-NLP Level 1 (qualifiers): {qualified_count} GLiNER "
                 f"entities qualified (negation/hypothesis/history)."
             )
+            if _v:
+                print(f"           → {qualified_count} entities qualified (negation/hypothesis/history)")
 
         # -----------------------------------------------------------------
         # Step 7: EDS-NLP Level 2 / Rules — Standalone extraction
         # -----------------------------------------------------------------
+        if _v:
+            print("[Step 7/11] Running EDS-NLP / Rules standalone extraction...")
         t_eds_start = time.perf_counter()
         if self.use_eds and self._eds_extractor:
             eds_results = self._eds_extractor.extract(
@@ -335,11 +373,16 @@ class ExtractionPipeline:
             f"EDS/Rules: extracted {len(eds_results)} fields "
             f"in {t_eds_elapsed:.0f}ms."
         )
+        if _v:
+            print(f"           → {len(eds_results)} fields extracted in {t_eds_elapsed:.0f}ms")
 
         # -----------------------------------------------------------------
         # Step 8: Merge GLiNER + EDS (GLiNER precedence)
         # -----------------------------------------------------------------
+        if _v:
+            print("[Step 8/11] Merging GLiNER + EDS results (GLiNER precedence)...")
         merged: dict[str, ExtractionValue] = {}
+        synergy_count = 0
 
         all_fields = set(list(gliner_results.keys()) + list(eds_results.keys()))
         for fname in all_fields:
@@ -355,6 +398,7 @@ class ExtractionPipeline:
                     base_conf = max(g.confidence or 0.0, e.confidence or 0.0)
                     g.confidence = min(1.0, round(base_conf + 0.1, 4))
                     merged[fname] = g
+                    synergy_count += 1
                 else:
                     # GLiNER takes precedence
                     merged[fname] = g
@@ -369,10 +413,17 @@ class ExtractionPipeline:
             f"Merged: {len(merged)} total features "
             f"({result.gliner_count} GLiNER + {result.tier1_count} EDS/Rules)."
         )
+        if _v:
+            eds_only = len(merged) - result.gliner_count
+            print(f"           → {len(merged)} total features "
+                  f"({result.gliner_count} GLiNER, {max(0, eds_only)} EDS-only fallback, "
+                  f"{synergy_count} synergy-boosted)")
 
         # -----------------------------------------------------------------
         # Step 9: Validate against controlled vocabularies
         # -----------------------------------------------------------------
+        if _v:
+            print("[Step 9/11] Validating against controlled vocabularies...")
         validate_extraction(merged)
         vocab_flagged = [
             fname for fname, ev in merged.items()
@@ -385,10 +436,14 @@ class ExtractionPipeline:
             )
         else:
             result.add_log("Vocabulary validation: all values valid.")
+        if _v:
+            print(f"           → {len(vocab_flagged)} fields flagged out of vocabulary")
 
         # -----------------------------------------------------------------
         # Step 10: Validate source spans
         # -----------------------------------------------------------------
+        if _v:
+            print("[Step 10/11] Validating source spans...")
         validate_source_spans(merged, text)
         span_flagged = [
             fname for fname, ev in merged.items()
@@ -401,10 +456,14 @@ class ExtractionPipeline:
             )
         else:
             result.add_log("Source span validation: all spans verified.")
+        if _v:
+            print(f"           → {len(span_flagged)} additional fields flagged")
 
         # -----------------------------------------------------------------
         # Step 11: Build flagged-for-review list
         # -----------------------------------------------------------------
+        if _v:
+            print("[Step 11/11] Building flagged-for-review list...")
         result.update_flagged_from_features()
         result.add_log(
             f"Total flagged for review: {len(result.flagged_for_review)} fields."
@@ -417,6 +476,11 @@ class ExtractionPipeline:
         result.add_log(
             f"Pipeline completed in {result.total_extraction_time_ms:.0f}ms."
         )
+        if _v:
+            print(f"           → {len(result.flagged_for_review)} fields flagged for review")
+            print(f"[PIPELINE] ✓ Completed in {result.total_extraction_time_ms:.0f}ms "
+                  f"— {len(merged)} features extracted")
+            print(f"{'='*60}\n")
 
         return result
 

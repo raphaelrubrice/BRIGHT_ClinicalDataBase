@@ -77,6 +77,20 @@ class TestNormaliseValue:
         assert normalise_value("sexe", "féminin") == "F"
         assert normalise_value("sexe", "h") == "M"
         assert normalise_value("sexe", "f") == "F"
+        # Titles / honorifics
+        assert normalise_value("sexe", "Mr") == "M"
+        assert normalise_value("sexe", "Mme") == "F"
+        assert normalise_value("sexe", "Monsieur") == "M"
+        assert normalise_value("sexe", "Madame") == "F"
+        assert normalise_value("sexe", "Mademoiselle") == "F"
+        # Mixed case
+        assert normalise_value("sexe", "MONSIEUR") == "M"
+        assert normalise_value("sexe", "madame") == "F"
+        assert normalise_value("sexe", "MR") == "M"
+        assert normalise_value("sexe", "MME") == "F"
+        # English gender words
+        assert normalise_value("sexe", "male") == "M"
+        assert normalise_value("sexe", "female") == "F"
 
     def test_laterality_normalisation(self):
         assert normalise_value("tumeur_lateralite", "bilatéral") == "bilateral"
