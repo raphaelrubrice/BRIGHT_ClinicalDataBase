@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 STATIC_FEATURES: set[str] = {
-    "date_rcp", "sexe", "date_de_naissance", "tumeur_lateralite",
+    "date_rcp", "sexe", "annee_de_naissance", "tumeur_lateralite",
     "tumeur_position", "dominance_cerebrale", "activite_professionnelle",
     "antecedent_tumoral",
     # Outcome (set when known, not forward-filled in the traditional sense,

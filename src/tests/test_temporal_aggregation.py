@@ -360,7 +360,7 @@ class TestSyntheticPatientTimeline:
         ext1 = _make_extraction(
             doc_id="consult_1", doc_date="15/01/2024", doc_type="consultation",
             sexe="M",
-            date_de_naissance="01/05/1960",
+            annee_de_naissance=1960,
             tumeur_lateralite="gauche",
             epilepsie="oui",
             ik_clinique=90,

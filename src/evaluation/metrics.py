@@ -229,7 +229,7 @@ def compute_aggregate_metrics(all_results: list[dict[str, dict[str, int]]]) -> p
 
 _FEATURE_CATEGORIES: dict[str, list[str]] = {
     "demographics": [
-        "date_rcp", "date_de_naissance", "sexe",
+        "date_rcp", "annee_de_naissance", "sexe",
         "activite_professionnelle", "antecedent_tumoral",
     ],
     "care_team": [

@@ -4,9 +4,9 @@ from src.extraction.eds_extractor import EDSExtractor
 def test_eds_extractor_demographics():
     extractor = EDSExtractor()
     text = "Le patient est né le 15/05/1980. | M | Patient pris en charge."
-    res = extractor.extract(text, {}, ["date_de_naissance", "sexe"])
+    res = extractor.extract(text, {}, ["annee_de_naissance", "sexe"])
     
-    assert "date_de_naissance" in res and res.get("date_de_naissance").value == "15/05/1980"
+    assert "annee_de_naissance" in res and res.get("annee_de_naissance").value == "1980"
     assert "sexe" in res and res.get("sexe").value == "M"
 
 def test_eds_extractor_dates():
@@ -103,7 +103,7 @@ def test_eds_extractor_end_to_end():
     )
     
     fields = [
-        "sexe", "date_de_naissance", "ceph_hic_1er_symptome", "epilepsie_1er_symptome",
+        "sexe", "annee_de_naissance", "ceph_hic_1er_symptome", "epilepsie_1er_symptome",
         "tumeur_lateralite", "chir_date", "type_chirurgie", "grade", "classification_oms", 
         "histo_mitoses", "ihc_p53", "ihc_ki67", "mol_idh1", "mol_mgmt", 
         "chm_date_debut", "ik_clinique"
@@ -113,6 +113,7 @@ def test_eds_extractor_end_to_end():
     
     # Assertions covering the full spectrum of the pipeline's capabilities
     assert res.get("sexe").value == "F"
+    assert res.get("annee_de_naissance").value == "1975"
     assert res.get("ceph_hic_1er_symptome").value == "oui"
     assert res.get("epilepsie_1er_symptome").value == "non"
     assert res.get("tumeur_lateralite").value == "gauche"

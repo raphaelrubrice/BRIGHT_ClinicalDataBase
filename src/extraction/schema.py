@@ -241,7 +241,7 @@ ALL_BIO_FIELD_NAMES: list[str] = [f.name for f in BIO_FIELDS]
 CLINIQUE_FIELDS: list[FieldDefinition] = [
     # ── Identifiers / demographics ──
     FieldDefinition(name="date_rcp",                   display_name="Date RCP",                    field_type=FieldType.DATE,        group="demographics"),
-    FieldDefinition(name="date_de_naissance",          display_name="Date de naissance",            field_type=FieldType.DATE,        group="demographics"),
+    FieldDefinition(name="annee_de_naissance",         display_name="Année de naissance",          field_type=FieldType.INTEGER,     group="demographics"),
     FieldDefinition(name="sexe",                       display_name="Sexe",                         field_type=FieldType.CATEGORICAL, group="demographics", allowed_values=ControlledVocab.SEX),
     FieldDefinition(name="activite_professionnelle",   display_name="Activité professionnelle",     field_type=FieldType.FREE_TEXT,   group="demographics"),
     FieldDefinition(name="antecedent_tumoral",         display_name="Antécédent tumoral",           field_type=FieldType.CATEGORICAL, group="demographics", allowed_values={"Oui", "Non", "oui", "non"}),
@@ -428,7 +428,7 @@ class ClinicalFeatures(BaseModel):
 
     # Demographics
     date_rcp: Optional[ExtractionValue] = None
-    date_de_naissance: Optional[ExtractionValue] = None
+    annee_de_naissance: Optional[ExtractionValue] = None
     sexe: Optional[ExtractionValue] = None
     activite_professionnelle: Optional[ExtractionValue] = None
     antecedent_tumoral: Optional[ExtractionValue] = None
@@ -571,7 +571,7 @@ _RCP_BIO_FIELDS = _resolve_patterns(BIO_FIELDS, [
 ])
 
 _RCP_CLINIQUE_FIELDS = _resolve_patterns(CLINIQUE_FIELDS, [
-    "date_rcp", "sexe", "date_de_naissance",
+    "date_rcp", "sexe", "annee_de_naissance",
     "chimios", "chimio_protocole", "chm_*",
     "rx_*",
     "chir_date", "type_chirurgie", "qualite_exerese",
@@ -650,7 +650,7 @@ FEATURE_GROUPS: dict[str, list[str]] = {
         "histo_necrose", "histo_pec", "histo_mitoses",
     ]),
     "demographics": _resolve_patterns(CLINIQUE_FIELDS, [
-        "date_rcp", "date_de_naissance", "sexe", "activite_professionnelle",
+        "date_rcp", "annee_de_naissance", "sexe", "activite_professionnelle",
         "antecedent_tumoral", "neuroncologue", "neurochirurgien",
         "radiotherapeute", "anatomo_pathologiste", "localisation_radiotherapie", "localisation_chir",
     ]),

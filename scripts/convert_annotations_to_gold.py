@@ -213,7 +213,7 @@ def main():
         has_clinique = any(
             v is not None
             for k, v in clinique.items()
-            if k not in ("nip", "date_de_naissance", "sexe", "date_deces", "infos_deces")
+            if k not in ("nip", "annee_de_naissance", "sexe", "date_deces", "infos_deces")
         )
 
         # Merge annotations

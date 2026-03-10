@@ -245,7 +245,7 @@ SECTION_TO_FEATURES: dict[str, list[str]] = {
         "cognitif_1er_symptome", "autre_trouble_1er_symptome",
         "antecedent_tumoral", "activite_professionnelle",
         # General demographics often stated in anamnesis
-        "date_de_naissance", "sexe", "date_rcp",
+        "annee_de_naissance", "sexe", "date_rcp",
     ],
     "treatment": [
         "chimios", "chimio_protocole", "chm_date_debut", "chm_date_fin", "chm_cycles",
@@ -272,7 +272,7 @@ SECTION_TO_FEATURES: dict[str, list[str]] = {
         "localisation_radiotherapie", "localisation_chir",
     ],
     "demographics": [
-        "date_rcp", "date_de_naissance", "sexe", "activite_professionnelle",
+        "date_rcp", "annee_de_naissance", "sexe", "activite_professionnelle",
     ],
     "summary": [
         "diag_histologique", "diag_integre", "grade",
@@ -289,7 +289,7 @@ SECTION_TO_FEATURES: dict[str, list[str]] = {
 # against the full text whenever section detection is used.
 _PREAMBLE_FEATURES: list[str] = [
     "date_rcp", "date_chir", "num_labo",
-    "date_de_naissance", "sexe",
+    "annee_de_naissance", "sexe",
     "neuroncologue", "neurochirurgien", "radiotherapeute", "anatomo_pathologiste",
     "localisation_radiotherapie", "localisation_chir",
     "date_deces", "infos_deces", "survie_globale",

@@ -30,7 +30,7 @@ The system dynamically routes language based on document content (`langdetect`):
 
 ## **Demo & Usage**
 
-### Launch the Desktop Interface to build the pseudonymized document database
+### Launch the Desktop Interface
 ```bash
 python -m src.ui.app_qt
 ```
@@ -113,7 +113,7 @@ The database extracts 111 specific clinical and biological features.
 | Field Name | Description | Group | Expected Values / Examples |
 |---|---|---|---|
 | `date_rcp` | Date RCP | demographics | DD/MM/YYYY or similar |
-| `date_de_naissance` | Date de naissance | demographics | DD/MM/YYYY or similar |
+| `annee_de_naissance` | Année de naissance | demographics | Year (YYYY) |
 | `sexe` | Sexe | demographics | 'F', 'M' |
 | `activite_professionnelle` | Activité professionnelle | demographics | Free text / String |
 | `antecedent_tumoral` | Antécédent tumoral | demographics | 'Non', 'Oui', 'non', 'oui' |

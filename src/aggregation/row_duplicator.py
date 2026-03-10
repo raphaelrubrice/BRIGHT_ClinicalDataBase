@@ -29,7 +29,7 @@ from ..extraction.schema import ExtractionValue
 # Fields that are shared across all rows (demographics, tumour location, etc.)
 SHARED_FEATURES: set[str] = {
     # Demographics
-    "date_rcp", "date_de_naissance", "sexe", "activite_professionnelle",
+    "date_rcp", "annee_de_naissance", "sexe", "activite_professionnelle",
     "antecedent_tumoral",
     # Care team
     "neuroncologue", "neurochirurgien", "radiotherapeute", "anatomo_pathologiste",

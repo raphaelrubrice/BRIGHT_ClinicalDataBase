@@ -46,15 +46,18 @@ from src.extraction.negation import AssertionAnnotator
 
 _RE_FLAGS = re.IGNORECASE | re.UNICODE
 
-# Pseudonymised birthdate: "né(e) le YYYY-??-??"
+# Pseudonymised birthdate: "YYYY-??-??"
 _PAT_PSEUDO_BIRTHDATE = re.compile(
-    r"(?:n[ée]e?\s+le\s+|date\s+de\s+naissance\s*[:\s]\s*)(\d{4})-\?\?-\?\?",
+    r"(\d{4})-\?\?-\?\?",
     _RE_FLAGS,
 )
 
 # Context keywords for date-field assignment (replaces positional matching)
 _DATE_CONTEXT_KEYWORDS: dict[str, list[str]] = {
-    "date_de_naissance": ["né(e) le", "naissance", "DDN", "date de naissance", "né le", "née le"],
+    "annee_de_naissance": [
+        "né(e) le", "naissance", "DDN", "date de naissance", "année de naissance",
+        "né le", "née le", "né en", "née en", "né(e) en"
+    ],
     "date_rcp": ["rcp", "réunion de concertation pluridisciplinaire", "concertation", "staff"],
     "chir_date": [
         "chirurgie", "opéré", "intervention", "opération", "exérèse", "biopsie",
@@ -2100,12 +2103,12 @@ def run_rule_extraction(
     all_results: dict[str, ExtractionValue] = {}
 
     # --- Phase 0.3: Pseudonymised birthdate extraction ---
-    if "date_de_naissance" in feature_set:
+    if "annee_de_naissance" in feature_set:
         m = _PAT_PSEUDO_BIRTHDATE.search(text)
         if m:
             year = m.group(1)
-            all_results["date_de_naissance"] = ExtractionValue(
-                value=f"01/01/{year}",
+            all_results["annee_de_naissance"] = ExtractionValue(
+                value=year,
                 source_span=m.group(0),
                 source_span_start=m.start(),
                 source_span_end=m.end(),
@@ -2143,6 +2146,8 @@ def run_rule_extraction(
                 date_results, date_fields_in_subset, section_text
             )
             for fname, ev in context_assigned.items():
+                if fname == "annee_de_naissance" and isinstance(ev.value, str):
+                    ev.value = ev.value[-4:]  # Only keep YYYY
                 ev.section = section_name
                 all_results[fname] = ev
 
@@ -2238,6 +2243,8 @@ def run_rule_extraction(
 
 def _is_date_field(field_name: str) -> bool:
     """Return True if the field is a date-type field."""
+    if field_name == "annee_de_naissance":
+        return True
     fd = ALL_FIELDS_BY_NAME.get(field_name)
     return fd is not None and fd.field_type == FieldType.DATE
 

@@ -296,7 +296,7 @@ class TestSharedFeaturesCopied:
         # Create extraction with representative shared features
         ext = _make_extraction(
             sexe="M",
-            date_de_naissance="01/01/1970",
+            annee_de_naissance=1970,
             tumeur_lateralite="gauche",
             tumeur_position="frontal",
             ihc_idh1="positif",

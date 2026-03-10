@@ -702,3 +702,67 @@ class TestRunRuleExtraction:
         sections = {"full_text": text}
         results = run_rule_extraction(text, sections, ["ihc_idh1"])
         assert results["ihc_idh1"].extraction_tier == "rule"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4.3.1  Birthdate specific extraction (Phase 0.3 + Fallback)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestBirthdateExtraction:
+    """Special handling for annee_de_naissance."""
+
+    def test_pseudo_birthdate_only(self):
+        """Test the YYYY-??-?? format without context words."""
+        text = "ID: 12345, Birth: 1955-??-??, Sex: M"
+        sections = {"full_text": text}
+        results = run_rule_extraction(text, sections, ["annee_de_naissance"])
+        assert "annee_de_naissance" in results
+        assert results["annee_de_naissance"].value == "1955"
+
+    def test_pseudo_birthdate_multiple(self):
+        """Only the first match should be kept in run_rule_extraction Phase 0.3."""
+        text = "1960-??-?? ... 1970-??-??"
+        sections = {"full_text": text}
+        results = run_rule_extraction(text, sections, ["annee_de_naissance"])
+        assert "annee_de_naissance" in results
+        assert results["annee_de_naissance"].value == "1960"
+
+    def test_fallback_to_context_date(self):
+        """Test fallback when pseudo-format is missing but context + date exists."""
+        text = "Le patient est né le 12/03/1945."
+        sections = {"full_text": text}
+        results = run_rule_extraction(text, sections, ["annee_de_naissance"])
+        assert "annee_de_naissance" in results
+        assert results["annee_de_naissance"].value == "1945"
+
+    def test_fallback_ddn_label(self):
+        text = "DDN : 01/01/1950"
+        sections = {"full_text": text}
+        results = run_rule_extraction(text, sections, ["annee_de_naissance"])
+        assert "annee_de_naissance" in results
+        assert results["annee_de_naissance"].value == "1950"
+
+    def test_fallback_year_le_prefix(self):
+        """Test fallback with supported full date format."""
+        text = "Né le 15/06/1982"
+        sections = {"full_text": text}
+        results = run_rule_extraction(text, sections, ["annee_de_naissance"])
+        assert "annee_de_naissance" in results
+        assert results["annee_de_naissance"].value == "1982"
+
+    def test_fallback_year_en_prefix(self):
+        """Test fallback with supported 'en YYYY' format."""
+        text = "Né en 1982"
+        sections = {"full_text": text}
+        results = run_rule_extraction(text, sections, ["annee_de_naissance"])
+        assert "annee_de_naissance" in results
+        assert results["annee_de_naissance"].value == "1982"
+
+    def test_pseudo_priority_over_fallback(self):
+        """Pseudo-format in Phase 0.3 should take priority over context match."""
+        text = "Né le 01/01/1950. Patient ID 1940-??-??"
+        sections = {"full_text": text}
+        # Actually Phase 0.3 runs first and populates all_results,
+        # then context assignment skip if already in all_results.
+        results = run_rule_extraction(text, sections, ["annee_de_naissance"])
+        assert "annee_de_naissance" in results
+        assert results["annee_de_naissance"].value == "1940"

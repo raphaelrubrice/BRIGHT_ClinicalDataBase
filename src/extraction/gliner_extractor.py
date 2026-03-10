@@ -14,7 +14,7 @@ Architecture
 Tracked Features (Total: 111)
 -----------------------------
 1.  Identifiers & Dates (5): date_chir, num_labo, date_rcp, dn_date, date_deces
-2.  Demographics (5): sexe, date_de_naissance, activite_professionnelle, antecedent_tumoral, ik_clinique
+2.  Demographics (5): sexe, annee_de_naissance, activite_professionnelle, antecedent_tumoral, ik_clinique
 3.  Diagnosis (4): diag_histologique, diag_integre, classification_oms, grade
 4.  Tumor Location (3): tumeur_lateralite, tumeur_position, dominance_cerebrale
 5.  Radiology (5): exam_radio_date_decouverte, contraste_1er_symptome, prise_de_contraste, oedeme_1er_symptome, calcif_1er_symptome
@@ -80,18 +80,18 @@ SEMANTIC_BATCHES: dict[str, dict] = {
 
     # 2. Demographics
     "demographics": {
-        "fields": {"sexe", "date_de_naissance", "activite_professionnelle", "antecedent_tumoral", "ik_clinique"},
-        "anchors": {"sexe", "date_de_naissance", "ik_clinique", "diag_histologique"},
+        "fields": {"sexe", "annee_de_naissance", "activite_professionnelle", "antecedent_tumoral", "ik_clinique"},
+        "anchors": {"sexe", "annee_de_naissance", "ik_clinique", "diag_histologique"},
         "labels_en": {
             "sexe": "patient sex or gender",
-            "date_de_naissance": "date of birth",
+            "annee_de_naissance": "year of birth",
             "activite_professionnelle": "patient occupation",
             "antecedent_tumoral": "prior history of brain tumor",
             "ik_clinique": "Karnofsky performance status or WHO performance status score",
         },
         "labels_fr": {
             "sexe": "sexe du patient",
-            "date_de_naissance": "date de naissance",
+            "annee_de_naissance": "année de naissance",
             "activite_professionnelle": "activité professionnelle",
             "antecedent_tumoral": "antécédent de tumeur cérébrale",
             "ik_clinique": "indice de Karnofsky ou score de performance OMS / PS",

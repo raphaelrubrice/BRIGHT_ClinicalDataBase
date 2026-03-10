@@ -118,7 +118,7 @@ class TestCliniqueFieldNames:
     """Verify all expected CLINIQUE field names from REQ_CLINIQUE.csv exist."""
 
     EXPECTED_CLINIQUE = [
-        "date_rcp", "date_de_naissance", "sexe", "activite_professionnelle",
+        "date_rcp", "annee_de_naissance", "sexe", "activite_professionnelle",
         "antecedent_tumoral",
         "neuroncologue", "neurochirurgien", "radiotherapeute", "anatomo_pathologiste",
         "localisation_radiotherapie", "localisation_chir",
@@ -641,7 +641,7 @@ class TestSampleExtractionParsing:
     def test_parse_clinique_sample(self):
         """Parse a sample CLINIQUE extraction matching REQ_CLINIQUE patient 1."""
         clin = ClinicalFeatures(
-            date_de_naissance=ExtractionValue(value="26/08/1977"),
+            annee_de_naissance=ExtractionValue(value=1977),
             sexe=ExtractionValue(value="M"),
             activite_professionnelle=ExtractionValue(value="Agent immobilier"),
             antecedent_tumoral=ExtractionValue(value="Non"),

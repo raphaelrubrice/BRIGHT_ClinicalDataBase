@@ -31,22 +31,22 @@ class TestDateContextAssignment:
     """Verify that dates are assigned to the correct field based on keywords."""
 
     def test_birth_date_keyword(self):
-        """'né(e) le' context → date_de_naissance."""
+        """'né(e) le' context → annee_de_naissance."""
         text = "Monsieur X, né le 15/06/1977, 47 ans"
         dates = extract_dates(text)
-        assigned = _assign_dates_by_context(dates, ["date_de_naissance", "chir_date"], text)
-        assert "date_de_naissance" in assigned
-        assert assigned["date_de_naissance"].value == "15/06/1977"
+        assigned = _assign_dates_by_context(dates, ["annee_de_naissance", "chir_date"], text)
+        assert "annee_de_naissance" in assigned
+        assert assigned["annee_de_naissance"].value == "1977"
         assert "chir_date" not in assigned  # Should NOT contaminate
 
     def test_surgery_date_keyword(self):
         """'opéré le' context → chir_date."""
         text = "Patient opéré le 20/03/2024 au bloc central"
         dates = extract_dates(text)
-        assigned = _assign_dates_by_context(dates, ["chir_date", "date_de_naissance"], text)
+        assigned = _assign_dates_by_context(dates, ["chir_date", "annee_de_naissance"], text)
         assert "chir_date" in assigned
         assert assigned["chir_date"].value == "20/03/2024"
-        assert "date_de_naissance" not in assigned
+        assert "annee_de_naissance" not in assigned
 
     def test_multi_date_no_cross_contamination(self):
         """Multiple dates with different contexts get separate field assignments."""
@@ -56,10 +56,10 @@ class TestDateContextAssignment:
             "Début radiothérapie le 15/03/2024."
         )
         dates = extract_dates(text)
-        fields = ["date_de_naissance", "chir_date", "rx_date_debut"]
+        fields = ["annee_de_naissance", "chir_date", "rx_date_debut"]
         assigned = _assign_dates_by_context(dates, fields, text)
 
-        assert assigned.get("date_de_naissance", ExtractionValue()).value == "12/04/1980"
+        assert assigned.get("annee_de_naissance", ExtractionValue()).value == "1980"
         assert assigned.get("chir_date", ExtractionValue()).value == "01/02/2024"
         assert assigned.get("rx_date_debut", ExtractionValue()).value == "15/03/2024"
 
