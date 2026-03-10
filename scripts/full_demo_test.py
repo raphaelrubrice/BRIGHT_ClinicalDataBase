@@ -34,18 +34,12 @@ DEFAULT_OUTPUT_DIR = REPO_ROOT / "demo_output"
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Full demo pipeline: extraction, benchmark & timeline.")
-    parser.add_argument("--model", type=str, default="qwen3:8b",
-                        help="Ollama model to use (default: qwen3:8b)")
-    parser.add_argument("--timeout", type=int, default=None,
-                        help="Request timeout in seconds for the extraction pipeline")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH,
                         help="Path to the document database CSV")
     parser.add_argument("--cli-annotations", type=Path, default=DEFAULT_CLI_ANN_PATH,
                         help="Path to clinical annotations CSV (REQ_CLINIQUE)")
     parser.add_argument("--bio-annotations", type=Path, default=DEFAULT_BIO_ANN_PATH,
                         help="Path to biological annotations CSV (REQ_BIO)")
-    parser.add_argument("--pipeline-version", type=str, choices=["v2", "v3"], default="v3",
-                        help="Pipeline version to run (default: v3)")
     parser.add_argument("--use-gliner", action=argparse.BooleanOptionalAction, default=True,
                         help="Enable or disable GLiNER extraction for v3 (default: enabled)")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_DIR,
@@ -151,8 +145,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Starting Full Demo Pipeline Test")
-    logger.info("Model: %s | Timeout: %s | DB: %s | Output: %s",
-                args.model, args.timeout, db_path, output_dir)
+    logger.info("DB: %s | Output: %s", db_path, output_dir)
 
     if not db_path.exists() or not cli_ann_path.exists() or not bio_ann_path.exists():
         logger.error("Missing necessary data files. Check paths:\n  DB: %s\n  CLI: %s\n  BIO: %s",
@@ -193,19 +186,12 @@ def main():
     # ------------------------------------------------------------------
     # 4. Initialise pipeline
     # ------------------------------------------------------------------
-    logger.info("Initializing ExtractionPipeline (version: %s)...", args.pipeline_version)
-    pipeline_kwargs = {"ollama_model": args.model}
-    if args.timeout is not None:
-        pipeline_kwargs["ollama_timeout"] = args.timeout
-    
-    if args.pipeline_version == "v2":
-        pipeline_kwargs["use_llm"] = True
-        pipeline_kwargs["use_gliner"] = False
-        pipeline_kwargs["use_eds"] = False # using rule_extraction.py
-    else:
-        pipeline_kwargs["use_llm"] = True
-        pipeline_kwargs["use_gliner"] = args.use_gliner
-        pipeline_kwargs["use_eds"] = True
+    logger.info("Initializing ExtractionPipeline (GLiNER First)...")
+    pipeline_kwargs = {
+        "use_gliner": args.use_gliner,
+        "use_eds": True,
+        "use_negation": True,
+    }
         
     pipeline = ExtractionPipeline(**pipeline_kwargs)
 
