@@ -42,6 +42,9 @@ def parse_args() -> argparse.Namespace:
                         help="Path to biological annotations CSV (REQ_BIO)")
     parser.add_argument("--use-gliner", action=argparse.BooleanOptionalAction, default=True,
                         help="Enable or disable GLiNER extraction for v3 (default: enabled)")
+    parser.add_argument("--batching-strategy", type=str, default="heterogeneous",
+                        choices=["semantic_context", "semantic_only", "heterogeneous"],
+                        help="GLiNER field batching strategy (default: heterogeneous)")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_DIR,
                         help="Path to output directory (created if missing)")
     return parser.parse_args()
@@ -186,13 +189,14 @@ def main():
     # ------------------------------------------------------------------
     # 4. Initialise pipeline
     # ------------------------------------------------------------------
-    logger.info("Initializing ExtractionPipeline (GLiNER First)...")
+    logger.info("Initializing ExtractionPipeline (GLiNER First, batching=%s)...", args.batching_strategy)
     pipeline_kwargs = {
         "use_gliner": args.use_gliner,
         "use_eds": True,
         "use_negation": True,
+        "batching_strategy": args.batching_strategy,
     }
-        
+
     pipeline = ExtractionPipeline(**pipeline_kwargs)
 
     # ------------------------------------------------------------------
