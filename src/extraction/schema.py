@@ -32,23 +32,23 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class ControlledVocab:
     """Namespace of allowed value sets for constrained fields."""
 
-    BINARY: set[str] = {"oui", "non"}
+    BINARY: set[str] = {"oui", "non", "NA"}
 
-    IHC_STATUS: set[str] = {"positif", "negatif", "maintenu"}
+    IHC_STATUS: set[str] = {"positif", "negatif", "maintenu", "NA"}
 
-    MOLECULAR_STATUS: set[str] = {"wt", "mute"}
+    MOLECULAR_STATUS: set[str] = {"wt", "mute", "NA"}
     # Note: free variant strings (e.g. "R132H", "C228T") are also accepted
     # for molecular fields.  ``is_valid_molecular`` performs the check.
 
-    CHROMOSOMAL: set[str] = {"gain", "perte", "perte partielle"}
+    CHROMOSOMAL: set[str] = {"gain", "perte", "perte partielle", "NA"}
 
-    METHYLATION: set[str] = {"methyle", "non methyle"}
+    METHYLATION: set[str] = {"methyle", "non methyle", "NA"}
     # MGMT also accepts "wt" and "mute" in the annotation data.
-    MGMT_STATUS: set[str] = {"methyle", "non methyle", "wt", "mute"}
+    MGMT_STATUS: set[str] = {"methyle", "non methyle", "wt", "mute", "NA"}
 
     GRADE: set[int] = {1, 2, 3, 4}
 
-    WHO_CLASSIFICATION: set[str] = {"2007", "2016", "2021"}
+    WHO_CLASSIFICATION: set[str] = {"2007", "2016", "2021", "NA"}
 
     SURGERY_TYPE: set[str] = {
         "exerese complete",
@@ -56,16 +56,17 @@ class ControlledVocab:
         "exerese",
         "biopsie",
         "en attente",
+        "NA",
     }
 
-    EVOLUTION: set[str] = {"initial", "terminal"}
+    EVOLUTION: set[str] = {"initial", "terminal", "NA"}
     # Plus P1, P2, P3, … (validated by ``is_valid_evolution``).
 
-    SEX: set[str] = {"M", "F"}
+    SEX: set[str] = {"M", "F", "NA"}
 
-    LATERALITY: set[str] = {"gauche", "droite", "bilateral", "median"}
+    LATERALITY: set[str] = {"gauche", "droite", "bilateral", "median", "NA"}
 
-    HANDEDNESS: set[str] = {"droitier", "gaucher", "ambidextre", "droitier contrarié", "gaucher contrarié"}
+    HANDEDNESS: set[str] = {"droitier", "gaucher", "ambidextre", "droitier contrarié", "gaucher contrarié", "NA"}
 
     @staticmethod
     def is_valid_evolution(value: str) -> bool:
@@ -74,7 +75,7 @@ class ControlledVocab:
         Accepted formats: ``initial``, ``terminal``, ``P<k>`` where *k* is a
         positive integer.
         """
-        if value in ("initial", "terminal"):
+        if value in ("initial", "terminal", "NA"):
             return True
         return bool(re.fullmatch(r"P\d+", value))
 
@@ -85,6 +86,8 @@ class ControlledVocab:
         Accepts ``wt``, ``mute``, or specific variant strings (e.g.
         ``R132H``, ``C228T``, ``V600E``, ``mute + delete``).
         """
+        if value == "NA":
+            return True
         if value in ControlledVocab.MOLECULAR_STATUS:
             return True
         # Accept specific variant patterns (alphanumeric + optional combinators)
@@ -139,6 +142,14 @@ class FieldType(str, Enum):
     FREE_TEXT = "free_text"
 
 
+class MappingType(str, Enum):
+    """Post-processing mapping mode for extracted spans."""
+
+    PRESENCE = "presence"      # Mode A: entity found + not negated -> "oui"
+    SIMILARITY = "similarity"  # Mode B: match extracted span to closest vocab option
+    DIRECT = "direct"          # No mapping (dates, free text, integers, molecular variants)
+
+
 class FieldDefinition(BaseModel):
     """Metadata for a single schema field."""
 
@@ -149,6 +160,7 @@ class FieldDefinition(BaseModel):
     nullable: bool = True
     group: str = ""  # feature group (e.g. "ihc", "molecular", "demographics")
     description: str = ""
+    mapping_type: MappingType = MappingType.DIRECT
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -165,26 +177,26 @@ BIO_FIELDS: list[FieldDefinition] = [
     # ── Diagnosis ──
     FieldDefinition(name="diag_histologique",   display_name="Diagnostic histologique",     field_type=FieldType.FREE_TEXT,     group="diagnosis"),
     FieldDefinition(name="diag_integre",        display_name="Diagnostic intégré",          field_type=FieldType.FREE_TEXT,     group="diagnosis"),
-    FieldDefinition(name="classification_oms",  display_name="Classification OMS",          field_type=FieldType.CATEGORICAL,  group="diagnosis",  allowed_values=ControlledVocab.WHO_CLASSIFICATION),
+    FieldDefinition(name="classification_oms",  display_name="Classification OMS",          field_type=FieldType.CATEGORICAL,  group="diagnosis",  allowed_values=ControlledVocab.WHO_CLASSIFICATION, mapping_type=MappingType.SIMILARITY),
     FieldDefinition(name="grade",               display_name="Grade OMS",                   field_type=FieldType.INTEGER,      group="diagnosis",  allowed_values=ControlledVocab.GRADE),
 
     # ── IHC ──
-    FieldDefinition(name="ihc_idh1",            display_name="IHC IDH1",             field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS),
-    FieldDefinition(name="ihc_p53",             display_name="IHC p53",              field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS),
-    FieldDefinition(name="ihc_atrx",            display_name="IHC ATRX",             field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS),
-    FieldDefinition(name="ihc_fgfr3",           display_name="IHC FGFR3",            field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS),
-    FieldDefinition(name="ihc_braf",            display_name="IHC BRAF",             field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS),
-    FieldDefinition(name="ihc_hist_h3k27m",     display_name="IHC H3K27M",           field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS),
-    FieldDefinition(name="ihc_hist_h3k27me3",   display_name="IHC H3K27me3",         field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS),
+    FieldDefinition(name="ihc_idh1",            display_name="IHC IDH1",             field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS, mapping_type=MappingType.SIMILARITY),
+    FieldDefinition(name="ihc_p53",             display_name="IHC p53",              field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS, mapping_type=MappingType.SIMILARITY),
+    FieldDefinition(name="ihc_atrx",            display_name="IHC ATRX",             field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS, mapping_type=MappingType.SIMILARITY),
+    FieldDefinition(name="ihc_fgfr3",           display_name="IHC FGFR3",            field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS, mapping_type=MappingType.SIMILARITY),
+    FieldDefinition(name="ihc_braf",            display_name="IHC BRAF",             field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS, mapping_type=MappingType.SIMILARITY),
+    FieldDefinition(name="ihc_hist_h3k27m",     display_name="IHC H3K27M",           field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS, mapping_type=MappingType.SIMILARITY),
+    FieldDefinition(name="ihc_hist_h3k27me3",   display_name="IHC H3K27me3",         field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS, mapping_type=MappingType.SIMILARITY),
     FieldDefinition(name="ihc_egfr_hirsch",     display_name="IHC EGFR (Hirsch / status)", field_type=FieldType.STRING, group="ihc"),  # can be score or status string
-    FieldDefinition(name="ihc_gfap",            display_name="IHC GFAP",             field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS),
-    FieldDefinition(name="ihc_olig2",           display_name="IHC Olig2",            field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS),
+    FieldDefinition(name="ihc_gfap",            display_name="IHC GFAP",             field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS, mapping_type=MappingType.SIMILARITY),
+    FieldDefinition(name="ihc_olig2",           display_name="IHC Olig2",            field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS, mapping_type=MappingType.SIMILARITY),
     FieldDefinition(name="ihc_ki67",            display_name="IHC Ki67 (%)",          field_type=FieldType.STRING,      group="ihc"),  # can be "15-20", "5", "<5%"
-    FieldDefinition(name="ihc_mmr",             display_name="IHC MMR",              field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS),
+    FieldDefinition(name="ihc_mmr",             display_name="IHC MMR",              field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS, mapping_type=MappingType.SIMILARITY),
 
     # ── Histology assessment ──
-    FieldDefinition(name="histo_necrose",  display_name="Nécrose",         field_type=FieldType.CATEGORICAL, group="histology", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="histo_pec",      display_name="Prise de contraste endothéliocapillaire", field_type=FieldType.CATEGORICAL, group="histology", allowed_values=ControlledVocab.BINARY),
+    FieldDefinition(name="histo_necrose",  display_name="Nécrose",         field_type=FieldType.CATEGORICAL, group="histology", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="histo_pec",      display_name="Prise de contraste endothéliocapillaire", field_type=FieldType.CATEGORICAL, group="histology", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
     FieldDefinition(name="histo_mitoses",  display_name="Mitoses (count)", field_type=FieldType.INTEGER,     group="histology"),
     FieldDefinition(name="aspect_cellulaire", display_name="Aspect cellulaire", field_type=FieldType.FREE_TEXT, group="histology"),
 
@@ -207,27 +219,27 @@ BIO_FIELDS: list[FieldDefinition] = [
     FieldDefinition(name="mol_atrx",       display_name="ATRX moléculaire",       field_type=FieldType.STRING, group="molecular"),
 
     # ── Chromosomal alterations ──
-    FieldDefinition(name="ch1p",   display_name="1p",  field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL),
-    FieldDefinition(name="ch19q",  display_name="19q", field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL),
-    FieldDefinition(name="ch10p",  display_name="10p", field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL),
-    FieldDefinition(name="ch10q",  display_name="10q", field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL),
-    FieldDefinition(name="ch7p",   display_name="7p",  field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL),
-    FieldDefinition(name="ch7q",   display_name="7q",  field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL),
-    FieldDefinition(name="ch9p",   display_name="9p",  field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL),
-    FieldDefinition(name="ch9q",   display_name="9q",  field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL),
-    FieldDefinition(name="ch1p19q_codel", display_name="Codélétion 1p/19q", field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.BINARY),
+    FieldDefinition(name="ch1p",   display_name="1p",  field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL, mapping_type=MappingType.SIMILARITY),
+    FieldDefinition(name="ch19q",  display_name="19q", field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL, mapping_type=MappingType.SIMILARITY),
+    FieldDefinition(name="ch10p",  display_name="10p", field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL, mapping_type=MappingType.SIMILARITY),
+    FieldDefinition(name="ch10q",  display_name="10q", field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL, mapping_type=MappingType.SIMILARITY),
+    FieldDefinition(name="ch7p",   display_name="7p",  field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL, mapping_type=MappingType.SIMILARITY),
+    FieldDefinition(name="ch7q",   display_name="7q",  field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL, mapping_type=MappingType.SIMILARITY),
+    FieldDefinition(name="ch9p",   display_name="9p",  field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL, mapping_type=MappingType.SIMILARITY),
+    FieldDefinition(name="ch9q",   display_name="9q",  field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.CHROMOSOMAL, mapping_type=MappingType.SIMILARITY),
+    FieldDefinition(name="ch1p19q_codel", display_name="Codélétion 1p/19q", field_type=FieldType.CATEGORICAL, group="chromosomal", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
 
     # ── Amplifications ──
-    FieldDefinition(name="ampli_mdm2",  display_name="Amplification MDM2", field_type=FieldType.CATEGORICAL, group="amplification", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="ampli_cdk4",  display_name="Amplification CDK4", field_type=FieldType.CATEGORICAL, group="amplification", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="ampli_egfr",  display_name="Amplification EGFR", field_type=FieldType.CATEGORICAL, group="amplification", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="ampli_met",   display_name="Amplification MET",  field_type=FieldType.CATEGORICAL, group="amplification", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="ampli_mdm4",  display_name="Amplification MDM4", field_type=FieldType.CATEGORICAL, group="amplification", allowed_values=ControlledVocab.BINARY),
+    FieldDefinition(name="ampli_mdm2",  display_name="Amplification MDM2", field_type=FieldType.CATEGORICAL, group="amplification", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="ampli_cdk4",  display_name="Amplification CDK4", field_type=FieldType.CATEGORICAL, group="amplification", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="ampli_egfr",  display_name="Amplification EGFR", field_type=FieldType.CATEGORICAL, group="amplification", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="ampli_met",   display_name="Amplification MET",  field_type=FieldType.CATEGORICAL, group="amplification", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="ampli_mdm4",  display_name="Amplification MDM4", field_type=FieldType.CATEGORICAL, group="amplification", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
 
     # ── Fusions ──
-    FieldDefinition(name="fusion_fgfr",   display_name="Fusion FGFR",   field_type=FieldType.CATEGORICAL, group="fusion", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="fusion_ntrk",   display_name="Fusion NTRK",   field_type=FieldType.CATEGORICAL, group="fusion", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="fusion_autre",  display_name="Fusion autre",   field_type=FieldType.CATEGORICAL, group="fusion", allowed_values=ControlledVocab.BINARY),
+    FieldDefinition(name="fusion_fgfr",   display_name="Fusion FGFR",   field_type=FieldType.CATEGORICAL, group="fusion", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="fusion_ntrk",   display_name="Fusion NTRK",   field_type=FieldType.CATEGORICAL, group="fusion", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="fusion_autre",  display_name="Fusion autre",   field_type=FieldType.CATEGORICAL, group="fusion", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
 ]
 
 # ── All BIO field names (convenience list) ──
@@ -242,9 +254,9 @@ CLINIQUE_FIELDS: list[FieldDefinition] = [
     # ── Identifiers / demographics ──
     FieldDefinition(name="date_rcp",                   display_name="Date RCP",                    field_type=FieldType.DATE,        group="demographics"),
     FieldDefinition(name="annee_de_naissance",         display_name="Année de naissance",          field_type=FieldType.INTEGER,     group="demographics"),
-    FieldDefinition(name="sexe",                       display_name="Sexe",                         field_type=FieldType.CATEGORICAL, group="demographics", allowed_values=ControlledVocab.SEX),
+    FieldDefinition(name="sexe",                       display_name="Sexe",                         field_type=FieldType.CATEGORICAL, group="demographics", allowed_values=ControlledVocab.SEX, mapping_type=MappingType.SIMILARITY),
     FieldDefinition(name="activite_professionnelle",   display_name="Activité professionnelle",     field_type=FieldType.FREE_TEXT,   group="demographics"),
-    FieldDefinition(name="antecedent_tumoral",         display_name="Antécédent tumoral",           field_type=FieldType.CATEGORICAL, group="demographics", allowed_values={"Oui", "Non", "oui", "non"}),
+    FieldDefinition(name="antecedent_tumoral",         display_name="Antécédent tumoral",           field_type=FieldType.CATEGORICAL, group="demographics", allowed_values={"Oui", "Non", "oui", "non", "NA"}, mapping_type=MappingType.PRESENCE),
 
     # ── Care team ──
     FieldDefinition(name="neuroncologue",              display_name="Neuro-oncologue",              field_type=FieldType.FREE_TEXT,   group="care_team"),
@@ -261,23 +273,23 @@ CLINIQUE_FIELDS: list[FieldDefinition] = [
 
     # ── First symptoms ──
     FieldDefinition(name="date_1er_symptome",          display_name="Date 1er symptôme",          field_type=FieldType.DATE,        group="first_symptoms"),
-    FieldDefinition(name="epilepsie_1er_symptome",     display_name="Épilepsie 1er symptôme",     field_type=FieldType.CATEGORICAL, group="first_symptoms", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="ceph_hic_1er_symptome",      display_name="Céphalées/HTIC 1er symptôme", field_type=FieldType.CATEGORICAL, group="first_symptoms", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="deficit_1er_symptome",       display_name="Déficit 1er symptôme",       field_type=FieldType.CATEGORICAL, group="first_symptoms", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="cognitif_1er_symptome",      display_name="Cognitif 1er symptôme",      field_type=FieldType.CATEGORICAL, group="first_symptoms", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="autre_trouble_1er_symptome", display_name="Autre trouble 1er symptôme", field_type=FieldType.CATEGORICAL, group="first_symptoms", allowed_values=ControlledVocab.BINARY),
+    FieldDefinition(name="epilepsie_1er_symptome",     display_name="Épilepsie 1er symptôme",     field_type=FieldType.CATEGORICAL, group="first_symptoms", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="ceph_hic_1er_symptome",      display_name="Céphalées/HTIC 1er symptôme", field_type=FieldType.CATEGORICAL, group="first_symptoms", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="deficit_1er_symptome",       display_name="Déficit 1er symptôme",       field_type=FieldType.CATEGORICAL, group="first_symptoms", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="cognitif_1er_symptome",      display_name="Cognitif 1er symptôme",      field_type=FieldType.CATEGORICAL, group="first_symptoms", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="autre_trouble_1er_symptome", display_name="Autre trouble 1er symptôme", field_type=FieldType.CATEGORICAL, group="first_symptoms", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
 
     # ── Radiology / imaging at discovery ──
     FieldDefinition(name="exam_radio_date_decouverte", display_name="Date découverte radiologique", field_type=FieldType.DATE,        group="radiology"),
-    FieldDefinition(name="contraste_1er_symptome",     display_name="Prise de contraste initiale",  field_type=FieldType.CATEGORICAL, group="radiology", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="prise_de_contraste",         display_name="Prise de contraste",           field_type=FieldType.CATEGORICAL, group="radiology", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="oedeme_1er_symptome",        display_name="Œdème initial",                field_type=FieldType.CATEGORICAL, group="radiology", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="calcif_1er_symptome",        display_name="Calcification initiale",       field_type=FieldType.CATEGORICAL, group="radiology", allowed_values=ControlledVocab.BINARY),
+    FieldDefinition(name="contraste_1er_symptome",     display_name="Prise de contraste initiale",  field_type=FieldType.CATEGORICAL, group="radiology", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="prise_de_contraste",         display_name="Prise de contraste",           field_type=FieldType.CATEGORICAL, group="radiology", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="oedeme_1er_symptome",        display_name="Œdème initial",                field_type=FieldType.CATEGORICAL, group="radiology", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="calcif_1er_symptome",        display_name="Calcification initiale",       field_type=FieldType.CATEGORICAL, group="radiology", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
 
     # ── Tumour location ──
-    FieldDefinition(name="tumeur_lateralite",  display_name="Latéralité tumeur",   field_type=FieldType.CATEGORICAL, group="tumour_location", allowed_values=ControlledVocab.LATERALITY),
+    FieldDefinition(name="tumeur_lateralite",  display_name="Latéralité tumeur",   field_type=FieldType.CATEGORICAL, group="tumour_location", allowed_values=ControlledVocab.LATERALITY, mapping_type=MappingType.SIMILARITY),
     FieldDefinition(name="tumeur_position",    display_name="Position tumeur",     field_type=FieldType.FREE_TEXT,   group="tumour_location"),
-    FieldDefinition(name="dominance_cerebrale", display_name="Dominance cérébrale", field_type=FieldType.CATEGORICAL, group="tumour_location", allowed_values=ControlledVocab.HANDEDNESS),
+    FieldDefinition(name="dominance_cerebrale", display_name="Dominance cérébrale", field_type=FieldType.CATEGORICAL, group="tumour_location", allowed_values=ControlledVocab.HANDEDNESS, mapping_type=MappingType.SIMILARITY),
 
     # ── Clinical timepoint ──
     FieldDefinition(name="dn_date",         display_name="Date dernière nouvelle",  field_type=FieldType.DATE,        group="evolution"),
@@ -293,23 +305,23 @@ CLINIQUE_FIELDS: list[FieldDefinition] = [
 
     # ── Current clinical state ──
     FieldDefinition(name="ik_clinique",             display_name="Indice de Karnofsky",    field_type=FieldType.INTEGER,     group="clinical_state"),
-    FieldDefinition(name="progress_clinique",       display_name="Progression clinique",   field_type=FieldType.CATEGORICAL, group="clinical_state", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="progress_radiologique",   display_name="Progression radiologique", field_type=FieldType.CATEGORICAL, group="clinical_state", allowed_values=ControlledVocab.BINARY),
+    FieldDefinition(name="progress_clinique",       display_name="Progression clinique",   field_type=FieldType.CATEGORICAL, group="clinical_state", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="progress_radiologique",   display_name="Progression radiologique", field_type=FieldType.CATEGORICAL, group="clinical_state", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
     FieldDefinition(name="date_progression",        display_name="Date progression",       field_type=FieldType.DATE,        group="clinical_state"),
 
-    FieldDefinition(name="epilepsie",     display_name="Épilepsie actuelle",      field_type=FieldType.CATEGORICAL, group="current_symptoms", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="ceph_hic",      display_name="Céphalées/HTIC actuelle", field_type=FieldType.CATEGORICAL, group="current_symptoms", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="deficit",       display_name="Déficit actuel",          field_type=FieldType.CATEGORICAL, group="current_symptoms", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="cognitif",      display_name="Trouble cognitif",        field_type=FieldType.CATEGORICAL, group="current_symptoms", allowed_values=ControlledVocab.BINARY),
+    FieldDefinition(name="epilepsie",     display_name="Épilepsie actuelle",      field_type=FieldType.CATEGORICAL, group="current_symptoms", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="ceph_hic",      display_name="Céphalées/HTIC actuelle", field_type=FieldType.CATEGORICAL, group="current_symptoms", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="deficit",       display_name="Déficit actuel",          field_type=FieldType.CATEGORICAL, group="current_symptoms", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="cognitif",      display_name="Trouble cognitif",        field_type=FieldType.CATEGORICAL, group="current_symptoms", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
     FieldDefinition(name="autre_trouble", display_name="Autre trouble",           field_type=FieldType.FREE_TEXT,   group="current_symptoms"),
 
     # ── Adjunct medications / devices ──
-    FieldDefinition(name="anti_epileptiques",       display_name="Anti-épileptiques",       field_type=FieldType.CATEGORICAL, group="adjunct", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="essai_therapeutique",      display_name="Essai thérapeutique",     field_type=FieldType.CATEGORICAL, group="adjunct", allowed_values=ControlledVocab.BINARY),
+    FieldDefinition(name="anti_epileptiques",       display_name="Anti-épileptiques",       field_type=FieldType.CATEGORICAL, group="adjunct", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="essai_therapeutique",      display_name="Essai thérapeutique",     field_type=FieldType.CATEGORICAL, group="adjunct", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
 
     # ── Surgery ──
     FieldDefinition(name="chir_date",       display_name="Date chirurgie",    field_type=FieldType.DATE,        group="surgery"),
-    FieldDefinition(name="type_chirurgie",  display_name="Type chirurgie",    field_type=FieldType.CATEGORICAL, group="surgery", allowed_values=ControlledVocab.SURGERY_TYPE),
+    FieldDefinition(name="type_chirurgie",  display_name="Type chirurgie",    field_type=FieldType.CATEGORICAL, group="surgery", allowed_values=ControlledVocab.SURGERY_TYPE, mapping_type=MappingType.SIMILARITY),
     FieldDefinition(name="qualite_exerese", display_name="Qualité de l'exérèse", field_type=FieldType.STRING,     group="surgery"),
 
     # ── Treatment — radiotherapy ──
@@ -319,8 +331,8 @@ CLINIQUE_FIELDS: list[FieldDefinition] = [
     FieldDefinition(name="rx_fractionnement", display_name="Fractionnement radiothérapie", field_type=FieldType.STRING, group="treatment_radio"),
 
     # ── Other ──
-    FieldDefinition(name="corticoides",  display_name="Corticoïdes",  field_type=FieldType.CATEGORICAL, group="adjunct", allowed_values=ControlledVocab.BINARY),
-    FieldDefinition(name="optune",       display_name="Optune (TTFields)", field_type=FieldType.CATEGORICAL, group="adjunct", allowed_values=ControlledVocab.BINARY),
+    FieldDefinition(name="corticoides",  display_name="Corticoïdes",  field_type=FieldType.CATEGORICAL, group="adjunct", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
+    FieldDefinition(name="optune",       display_name="Optune (TTFields)", field_type=FieldType.CATEGORICAL, group="adjunct", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
 ]
 
 # ── All CLINIQUE field names (convenience list) ──

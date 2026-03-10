@@ -158,7 +158,7 @@ def normalise_value(
         # For binary fields, 1/0 should map to oui/non
         # (covers the case where Pydantic coerced bool → int)
         if field_def and field_def.allowed_values is not None:
-            if set(field_def.allowed_values) == {"oui", "non"}:
+            if {"oui", "non"} <= set(field_def.allowed_values):
                 if value == 1:
                     return "oui"
                 if value == 0:
@@ -171,8 +171,10 @@ def normalise_value(
 
     # String normalisation
     val_str = str(value).strip()
-    if not val_str or val_str.lower() in ("null", "none", "n/a", "na", ""):
+    if not val_str or val_str.lower() in ("null", "none", "n/a", ""):
         return None
+    if val_str.upper() == "NA":
+        return "NA"
 
     val_lower = val_str.lower()
 
@@ -212,6 +214,10 @@ def _is_value_valid(
     """
     if normalised_value is None:
         return True  # Null is always acceptable for nullable fields
+
+    # "NA" is universally valid (low confidence / no span found marker)
+    if str(normalised_value).upper() == "NA":
+        return True
 
     # Fields with no vocabulary constraint → always valid
     if field_def.allowed_values is None:

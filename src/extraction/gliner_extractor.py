@@ -40,9 +40,11 @@ from __future__ import annotations
 
 import logging
 import re
+from collections import deque
+from enum import Enum
 from typing import Any
 
-from src.extraction.schema import ExtractionValue, ALL_FIELDS_BY_NAME
+from src.extraction.schema import ExtractionValue, ALL_FIELDS_BY_NAME, MappingType
 from src.extraction.rule_extraction import (
     _IHC_VALUE_NORM,
     _MOL_STATUS_NORM,
@@ -51,6 +53,14 @@ from src.extraction.rule_extraction import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class BatchingStrategy(str, Enum):
+    """GLiNER field batching strategy."""
+
+    SEMANTIC_CONTEXT = "semantic_context"    # Semantic batches + anchor context injection
+    SEMANTIC_ONLY = "semantic_only"          # Semantic batches, no context injection
+    HETEROGENEOUS = "heterogeneous"          # Mix fields from different domains for max discrimination
 
 
 # ---------------------------------------------------------------------------
@@ -518,6 +528,71 @@ _CONFIDENCE_THRESHOLDS: dict[str, float] = {
 _DEFAULT_THRESHOLD = 0.4
 
 
+# ---------------------------------------------------------------------------
+# Heterogeneous batch builder
+# ---------------------------------------------------------------------------
+
+# Reverse map: field_name → batch_name (domain)
+_FIELD_TO_DOMAIN: dict[str, str] = {}
+for _bname, _bconf in SEMANTIC_BATCHES.items():
+    for _fname in _bconf["fields"]:
+        _FIELD_TO_DOMAIN[_fname] = _bname
+
+
+def _build_heterogeneous_batches(
+    target_fields: set[str],
+    language: str,
+    max_per_batch: int = 5,
+) -> list[dict]:
+    """Build batches that maximise domain diversity per batch.
+
+    Round-robin picks one field from each domain to build batches of
+    *max_per_batch* fields, ensuring labels within each batch come from
+    different semantic domains (maximising discrimination).
+    """
+    label_key = "labels_fr" if language.startswith("fr") else "labels_en"
+
+    # Group target fields by their semantic domain
+    domain_queues: dict[str, deque] = {}
+    for field in sorted(target_fields):
+        domain = _FIELD_TO_DOMAIN.get(field)
+        if domain is None:
+            continue
+        domain_queues.setdefault(domain, deque()).append(field)
+
+    batches: list[dict] = []
+    domain_order = list(domain_queues.keys())
+
+    while any(domain_queues.values()):
+        batch_fields: set[str] = set()
+        batch_labels: dict[str, str] = {}
+
+        for domain_name in list(domain_order):
+            q = domain_queues.get(domain_name)
+            if not q:
+                domain_order.remove(domain_name)
+                continue
+            if len(batch_fields) >= max_per_batch:
+                break
+
+            field = q.popleft()
+            batch_fields.add(field)
+
+            # Retrieve label from original semantic batch
+            orig_batch = SEMANTIC_BATCHES[domain_name]
+            label_map = orig_batch.get(label_key, orig_batch["labels_en"])
+            batch_labels[field] = label_map.get(field, field)
+
+        if batch_fields:
+            batches.append({
+                "fields": batch_fields,
+                "labels": batch_labels,
+                "anchors": set(),  # no context injection
+            })
+
+    return batches
+
+
 class GlinerExtractor:
     """Primary entity extractor using GLiNER with consolidated 111-field tracking."""
 
@@ -528,11 +603,13 @@ class GlinerExtractor:
         model_name: str = "urchade/gliner_multi-v2.1",
         chunk_size: int = 180,
         chunk_overlap: int = 40,
+        batching_strategy: str = "heterogeneous",
     ):
         self._model_name = model_name
         self._model = None  # Lazy loading
         self._chunk_size = chunk_size
         self._chunk_overlap = chunk_overlap
+        self._batching_strategy = BatchingStrategy(batching_strategy)
 
     def _ensure_model(self) -> None:
         if self._model is not None:
@@ -576,36 +653,55 @@ class GlinerExtractor:
             return ""
         return "[Context: " + ", ".join(parts) + "]"
 
-    _BINARY_FIELDS = {
-        "ch1p19q_codel", "fusion_autre",
-        # symptoms onset
-        "epilepsie_1er_symptome", "ceph_hic_1er_symptome", "deficit_1er_symptome",
-        "cognitif_1er_symptome", "autre_trouble_1er_symptome",
-        # symptoms current
-        "epilepsie", "ceph_hic", "deficit", "cognitif",
-        # radiology
-        "contraste_1er_symptome", "prise_de_contraste", "oedeme_1er_symptome",
-        "calcif_1er_symptome",
-        # demographics
-        "antecedent_tumoral",
-    }
-
     def _postprocess_span(self, field_name: str, span_text: str) -> Any:
+        """Map extracted span to a value based on the field's mapping_type."""
+        field_def = ALL_FIELDS_BY_NAME.get(field_name)
+        if field_def is None:
+            return span_text
+
         text_lower = span_text.lower().strip()
 
-        # Binary logic for alterations, symptoms, radiology, etc.
-        if field_name.startswith("ampli_") or field_name.startswith("fusion_") or field_name in self._BINARY_FIELDS:
-            if any(neg in text_lower for neg in ["pas de", "absence", "non", "négatif", "neg"]):
+        # Mode A: Presence logic — entity found → "oui" / negation keywords → "non"
+        if field_def.mapping_type == MappingType.PRESENCE:
+            _FR_NEG = ["pas ", "pas de", "pas d'", "pas d\u2019", "absence", "manque", "non", "négatif", "neg"]
+            _EN_NEG = ["no ", "not ", "without", "absent", "negative", "lack"]
+            if any(neg in text_lower for neg in _FR_NEG + _EN_NEG):
                 return "non"
             return "oui"
 
-        # IHC normalization
-        if field_name.startswith("ihc_"):
-            for key, val in _IHC_VALUE_NORM.items():
-                if key in text_lower: return val
+        # Mode B: Similarity logic — match span to closest vocab option
+        if field_def.mapping_type == MappingType.SIMILARITY:
+            if field_def.allowed_values:
+                from src.extraction.similarity import match_to_vocab
+                matched, _score = match_to_vocab(
+                    span_text, {str(v) for v in field_def.allowed_values}, field_name,
+                )
+                return matched
             return span_text
 
+        # DIRECT: return as-is
         return span_text
+
+    def _resolve_batches(
+        self,
+        target_fields: set[str],
+        language: str,
+    ) -> list[tuple[str | None, dict]]:
+        """Return the batch list based on the selected batching strategy.
+
+        Returns a list of ``(batch_name_or_None, batch_config)`` tuples.
+        For HETEROGENEOUS strategy, batch_name is ``None``.
+        """
+        if self._batching_strategy == BatchingStrategy.HETEROGENEOUS:
+            return [
+                (None, batch)
+                for batch in _build_heterogeneous_batches(target_fields, language)
+            ]
+
+        # SEMANTIC_CONTEXT and SEMANTIC_ONLY both use SEMANTIC_BATCHES
+        return [
+            (name, config) for name, config in SEMANTIC_BATCHES.items()
+        ]
 
     def extract(
         self,
@@ -624,17 +720,28 @@ class GlinerExtractor:
         chunks = self._chunk_text(text)
         extraction_state: dict[str, tuple] = {}
 
+        use_context = self._batching_strategy == BatchingStrategy.SEMANTIC_CONTEXT
+        batches = self._resolve_batches(target_fields, language)
+        label_key = "labels_fr" if language.startswith("fr") else "labels_en"
+
         for chunk_text, _chunk_offset in chunks:
-            for batch_name, batch_config in SEMANTIC_BATCHES.items():
+            for batch_name, batch_config in batches:
                 batch_fields = batch_config["fields"] & target_fields
                 if not batch_fields:
                     continue
 
-                context_prefix = self._build_context_prefix(batch_config, extraction_state)
-                augmented_text = f"{context_prefix}\n\n{chunk_text}" if context_prefix else chunk_text
+                # Context injection only for SEMANTIC_CONTEXT strategy
+                if use_context:
+                    context_prefix = self._build_context_prefix(batch_config, extraction_state)
+                    augmented_text = f"{context_prefix}\n\n{chunk_text}" if context_prefix else chunk_text
+                else:
+                    augmented_text = chunk_text
 
-                label_key = "labels_fr" if language.startswith("fr") else "labels_en"
-                label_map = batch_config.get(label_key, batch_config["labels_en"])
+                # Resolve labels: heterogeneous batches use "labels" key directly
+                if "labels" in batch_config:
+                    label_map = batch_config["labels"]
+                else:
+                    label_map = batch_config.get(label_key, batch_config["labels_en"])
                 labels = [label_map[f] for f in batch_fields if f in label_map]
 
                 if not labels:

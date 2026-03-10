@@ -26,6 +26,7 @@ from .schema import (
     ExtractionValue,
     FEATURE_ROUTING,
     ALL_FIELDS_BY_NAME,
+    MappingType,
     get_extractable_fields,
 )
 from .section_detector import SectionDetector
@@ -35,60 +36,72 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Negation value flipping
+# Flip tables for SIMILARITY negation
 # ---------------------------------------------------------------------------
 
-def _flip_negated_value(field_name: str, value) -> str:
-    """Flip an extracted value when negation is detected.
+_SIMILARITY_FLIP: dict[str, str] = {
+    "positif": "negatif",
+    "negatif": "positif",
+    "positive": "negatif",
+    "negative": "positif",
+    "maintenu": "negatif",
+    "mute": "wt",
+    "muté": "wt",
+    "mutée": "wt",
+    "wt": "mute",
+    "methyle": "non methyle",
+    "méthylé": "non methyle",
+    "non methyle": "methyle",
+    "non méthylé": "methyle",
+    "gain": "perte",
+    "perte": "gain",
+    "perte partielle": "gain",
+}
 
-    Instead of discarding the entity, we invert it:
-    - Binary (oui/non) → flip
-    - IHC (positif/negatif/maintenu) → flip
-    - Molecular (mute/wt) → flip
-    - Other → prefix with "non"
+
+# ---------------------------------------------------------------------------
+# Negation: mapping_type-aware inversion
+# ---------------------------------------------------------------------------
+
+def _apply_negation(field_name: str, value, source_span: str | None = None) -> str:
+    """Invert an extracted value when negation is detected.
+
+    Dispatch based on the field's ``mapping_type``:
+
+    - **PRESENCE** → return ``"non"``
+    - **SIMILARITY** → flip value via ``_SIMILARITY_FLIP``
+    - **DIRECT** (free text) → prepend ``"non "`` before the span text
+
+    Special case: ``"en attente"`` is *never* negated.
     """
     val_str = str(value).strip().lower() if value is not None else ""
 
-    # Binary fields
-    if val_str == "oui":
+    # "en attente" is never negated
+    if val_str == "en attente":
+        return val_str
+
+    field_def = ALL_FIELDS_BY_NAME.get(field_name)
+    mapping = field_def.mapping_type if field_def else MappingType.DIRECT
+
+    # PRESENCE fields → always "non"
+    if mapping == MappingType.PRESENCE:
         return "non"
-    if val_str == "non":
-        return "oui"
 
-    # IHC fields
-    if field_name.startswith("ihc_"):
-        if val_str in ("positif", "positive", "maintenu"):
-            return "negatif"
-        if val_str in ("negatif", "negative"):
-            return "positif"
+    # SIMILARITY fields → flip via table
+    if mapping == MappingType.SIMILARITY:
+        flipped = _SIMILARITY_FLIP.get(val_str)
+        if flipped:
+            return flipped
+        # If no flip rule matches, return original
+        return val_str
 
-    # Molecular fields
-    if field_name.startswith("mol_"):
-        if val_str in ("mute", "muté", "mutée"):
-            return "wt"
-        if val_str == "wt":
-            return "mute"
-        if val_str in ("methyle", "méthylé"):
-            return "non methyle"
-        if val_str in ("non methyle", "non méthylé"):
-            return "methyle"
-
-    # Chromosomal fields
-    if field_name.startswith("ch") and field_name not in (
-        "chir_date", "chimios", "chm_date_debut", "chm_date_fin", "chm_cycles",
-    ):
-        if val_str == "gain":
-            return "perte"
-        if val_str in ("perte", "perte partielle"):
-            return "gain"
-
-    # Amplification / fusion fields
-    if field_name.startswith("ampli_") or field_name.startswith("fusion_"):
-        if val_str == "oui":
-            return "non"
-        if val_str == "non":
-            return "oui"
-
+    # DIRECT fields → prepend "non " if free text, else use flip table
+    flipped = _SIMILARITY_FLIP.get(val_str)
+    if flipped:
+        return flipped
+    # Free text: prepend "non "
+    if val_str:
+        return f"non {val_str}"
     return val_str
 
 
@@ -126,6 +139,7 @@ class ExtractionPipeline:
         use_eds: bool = True,
         use_gliner: bool = True,
         gliner_model: str = "urchade/gliner_multi-v2.1",
+        batching_strategy: str = "heterogeneous",
     ):
         self.use_negation = use_negation
         self.use_eds = use_eds
@@ -139,7 +153,10 @@ class ExtractionPipeline:
 
         self._gliner_extractor = None
         if use_gliner:
-            self._gliner_extractor = GlinerExtractor(model_name=gliner_model)
+            self._gliner_extractor = GlinerExtractor(
+                model_name=gliner_model,
+                batching_strategy=batching_strategy,
+            )
 
         self._assertion_annotator = AssertionAnnotator() if use_negation else None
 
@@ -279,7 +296,7 @@ class ExtractionPipeline:
 
                 ann = annotations[0]
                 if ann.is_negated:
-                    ev.value = _flip_negated_value(field_name, ev.value)
+                    ev.value = _apply_negation(field_name, ev.value, ev.source_span)
                     qualified_count += 1
                 if ann.is_hypothesis:
                     ev.confidence = round((ev.confidence or 0.5) * 0.7, 4)
