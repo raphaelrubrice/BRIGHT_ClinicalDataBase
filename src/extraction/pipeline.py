@@ -13,7 +13,9 @@ Public API
 from __future__ import annotations
 
 import logging
+import os
 import time
+from concurrent.futures import ProcessPoolExecutor
 from typing import Optional
 
 from .document_classifier import DocumentClassifier
@@ -105,6 +107,47 @@ def _apply_negation(field_name: str, value, source_span: str | None = None) -> s
     return val_str
 
 
+# ---------------------------------------------------------------------------
+# Multiprocessing Globals & Worker Functions
+# ---------------------------------------------------------------------------
+
+_WORKER_PIPELINE: ExtractionPipeline | None = None
+
+def _init_worker(pipeline_kwargs: dict):
+    """Initialise a global pipeline instance for each worker process.
+    This avoids pickling heavy ML models (GLiNER, spaCy) during cross-process calls.
+    """
+    global _WORKER_PIPELINE
+    _WORKER_PIPELINE = ExtractionPipeline(**pipeline_kwargs)
+
+def _process_single_doc(idx: int, doc: dict):
+    """Base function wrapped for multiprocessing map."""
+    global _WORKER_PIPELINE
+    text = doc.get("text", "")
+    doc_id = doc.get("document_id", f"doc_{idx}")
+    patient_id = doc.get("patient_id", "")
+
+    try:
+        result = _WORKER_PIPELINE.extract_document(
+            text=text,
+            document_id=doc_id,
+            patient_id=patient_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Failed to process document '%s': %s", doc_id, exc)
+        result = ExtractionResult(
+            document_id=doc_id,
+            patient_id=patient_id,
+        )
+        result.add_log(f"Pipeline failed with error: {exc}")
+
+    return idx, result
+
+
+# ---------------------------------------------------------------------------
+# Main Pipeline Class
+# ---------------------------------------------------------------------------
+
 class ExtractionPipeline:
     """End-to-end clinical feature extraction pipeline (GLiNER-first).
 
@@ -131,6 +174,8 @@ class ExtractionPipeline:
         Whether to enable GLiNER primary extraction.
     gliner_model : str
         GLiNER model name (default ``"urchade/gliner_multi-v2.1"``).
+    batching_strategy : str
+        Batching strategy to use in GLiNER (default ``"heterogeneous"``).
     verbose : bool
         Whether to print step-by-step progress to stdout (default ``False``).
     """
@@ -147,6 +192,8 @@ class ExtractionPipeline:
         self.use_negation = use_negation
         self.use_eds = use_eds
         self.use_gliner = use_gliner
+        self.gliner_model = gliner_model
+        self.batching_strategy = batching_strategy
         self.verbose = verbose
 
         # Sub-components
@@ -489,43 +536,94 @@ class ExtractionPipeline:
     def extract_batch(
         self,
         documents: list[dict],
+        n_jobs: int = -1,
     ) -> list[ExtractionResult]:
-        """Process a list of documents.
+        """Process a list of documents in parallel.
 
         Parameters
         ----------
         documents : list[dict]
             Each dict must have ``'text'``, and optionally
             ``'document_id'`` and ``'patient_id'``.
+        n_jobs : int, optional
+            Number of worker processes. If -1, defaults to max(1, N_CPU - 2).
 
         Returns
         -------
         list[ExtractionResult]
-            One ``ExtractionResult`` per input document.
+            One ``ExtractionResult`` per input document, preserving the input order.
         """
-        results: list[ExtractionResult] = []
+        n = len(documents)
+        if n == 0:
+            return []
 
-        for i, doc in enumerate(documents):
-            text = doc.get("text", "")
-            doc_id = doc.get("document_id", f"doc_{i}")
-            patient_id = doc.get("patient_id", "")
+        def run_sequential() -> list[ExtractionResult]:
+            """Helper to run the extraction sequentially as a fallback or baseline."""
+            logger.info("Starting sequential batch extraction of %d documents", n)
+            results: list[ExtractionResult] = []
+            for i, doc in enumerate(documents):
+                text = doc.get("text", "")
+                doc_id = doc.get("document_id", f"doc_{i}")
+                patient_id = doc.get("patient_id", "")
 
-            logger.info("Processing document %d/%d: %s", i + 1, len(documents), doc_id)
+                logger.info("Processing document %d/%d: %s", i + 1, n, doc_id)
 
-            try:
-                result = self.extract_document(
-                    text=text,
-                    document_id=doc_id,
-                    patient_id=patient_id,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.error("Failed to process document '%s': %s", doc_id, exc)
-                result = ExtractionResult(
-                    document_id=doc_id,
-                    patient_id=patient_id,
-                )
-                result.add_log(f"Pipeline failed with error: {exc}")
+                try:
+                    result = self.extract_document(text=text, document_id=doc_id, patient_id=patient_id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.error("Failed to process document '%s': %s", doc_id, exc)
+                    result = ExtractionResult(document_id=doc_id, patient_id=patient_id)
+                    result.add_log(f"Pipeline failed with error: {exc}")
 
-            results.append(result)
+                results.append(result)
+            return results
 
-        return results
+        if n_jobs == -1:
+            n_jobs = max(1, (os.cpu_count() or 1) - 2)
+
+        # Si 1 seul worker demandé ou un seul doc fourni, on exécute séquentiellement
+        if n_jobs <= 1 or n == 1:
+            return run_sequential()
+
+        # --- Parallélisation via Multiprocessing ---
+        logger.info("Starting parallel batch extraction of %d documents with %d workers", n, n_jobs)
+
+        # On extrait la configuration pour l'injecter dans chaque worker process
+        pipeline_kwargs = {
+            "use_negation": self.use_negation,
+            "use_eds": self.use_eds,
+            "use_gliner": self.use_gliner,
+            "gliner_model": self.gliner_model,
+            "batching_strategy": self.batching_strategy,
+            "verbose": self.verbose,
+        }
+
+        try:
+            # L'index permet de restituer les résultats exactement dans l'ordre de la liste `documents`
+            with ProcessPoolExecutor(
+                max_workers=n_jobs,
+                initializer=_init_worker,
+                initargs=(pipeline_kwargs,)
+            ) as executor:
+                
+                # Map exécute la fonction avec les tuples (index, dict_document)
+                mapped_results = list(executor.map(
+                    _process_single_doc, 
+                    list(range(n)), 
+                    documents
+                ))
+
+            # Re-ordonnancement explicite à partir des index retournés
+            final_results = [None] * n
+            for idx, res in mapped_results:
+                final_results[idx] = res
+
+            return final_results
+
+        except Exception as parallel_exc:
+            # Fallback en cas d'échec du multiprocessing (ex: erreur de pickling, manque de mémoire, etc.)
+            error_msg = f"⚠️ Parallelization failed ({type(parallel_exc).__name__}: {parallel_exc}). Falling back to sequential execution..."
+            print(error_msg)
+            logger.warning(error_msg)
+            
+            return run_sequential()

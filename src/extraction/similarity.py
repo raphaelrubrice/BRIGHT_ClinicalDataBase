@@ -33,23 +33,27 @@ logger = logging.getLogger(__name__)
 _models: dict[str, any] = {}
 
 
-def _get_nlp_for_lang(text: str):
-    """Detect language and return the corresponding spaCy model.
+def _get_nlp_for_lang(text: str, lang: Optional[str] = None):
+    """Detect language (if not provided) and return the corresponding spaCy model.
     
+    If `lang` is provided, bypasses expensive language detection.
     Defaults to 'en_core_web_lg' if detection fails or language is unsupported.
     For clinical words, 'lg' models are preferred over 'md' or 'sm' because 
     they contain significantly more unique vectors.
     """
     global _models
     
-    lang = "en"  # Default
-    try:
-        from langdetect import detect
-        lang = detect(text)
-    except Exception as e:
-        logger.warning("Language detection failed, defaulting to English: %s", e)
+    if not lang:
+        lang = "en"  # Default fallback
+        try:
+            from langdetect import detect
+            lang = detect(text)
+        except Exception as e:
+            logger.warning("Language detection failed, defaulting to English: %s", e)
+    else:
+        lang = lang.lower()
 
-    # Map detected language to specific spaCy models
+    # Map detected/provided language to specific spaCy models
     model_map = {
         "fr": "fr_core_news_lg",
         "en": "en_core_web_lg"
@@ -95,6 +99,7 @@ def match_to_vocab(
     span_text: str,
     allowed_values: set[str],
     field_name: str = "",
+    language: Optional[str] = None,
 ) -> tuple[str, float]:
     """Match *span_text* to the closest option in *allowed_values*.
 
@@ -109,6 +114,9 @@ def match_to_vocab(
         The controlled vocabulary options (may include ``"NA"``).
     field_name : str
         Optional field name for logging.
+    language : str, optional
+        Document language (e.g., 'en', 'fr') to bypass per-span language 
+        detection during Tier 4 semantic similarity matching.
 
     Returns
     -------
@@ -185,7 +193,7 @@ def match_to_vocab(
     # ------------------------------------------------------------------
     # Tier 4: Language-aware spaCy similarity
     # ------------------------------------------------------------------
-    nlp = _get_nlp_for_lang(span_stripped)
+    nlp = _get_nlp_for_lang(span_stripped, lang=language)
     
     if nlp:
         span_doc = nlp(span_stripped)

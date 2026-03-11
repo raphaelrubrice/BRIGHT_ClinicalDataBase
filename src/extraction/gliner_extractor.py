@@ -51,6 +51,7 @@ from src.extraction.rule_extraction import (
     _CHR_STATUS_NORM,
     _LATERALITY_NORM,
 )
+from src.extraction.similarity import match_to_vocab
 
 logger = logging.getLogger(__name__)
 
@@ -934,7 +935,7 @@ class GlinerExtractor:
             return ""
         return "[Context: " + ", ".join(parts) + "]"
 
-    def _postprocess_span(self, field_name: str, span_text: str) -> Any:
+    def _postprocess_span(self, field_name: str, span_text: str, language: str | None = None) -> Any:
         """Map extracted span to a value based on the field's mapping_type."""
         field_def = ALL_FIELDS_BY_NAME.get(field_name)
         if field_def is None:
@@ -953,9 +954,9 @@ class GlinerExtractor:
         # Mode B: Similarity logic — match span to closest vocab option
         if field_def.mapping_type == MappingType.SIMILARITY:
             if field_def.allowed_values:
-                from src.extraction.similarity import match_to_vocab
                 matched, _score = match_to_vocab(
-                    span_text, {str(v) for v in field_def.allowed_values}, field_name,
+                    span_text, {str(v) for v in field_def.allowed_values}, 
+                    field_name, language,
                 )
                 return matched
             return span_text
@@ -1058,7 +1059,7 @@ class GlinerExtractor:
                     if score < threshold:
                         continue
 
-                    norm_val = self._postprocess_span(field_name, span_text)
+                    norm_val = self._postprocess_span(field_name, span_text, language)
 
                     existing = extraction_state.get(field_name)
                     if existing is None or score > existing[1]:

@@ -48,7 +48,7 @@ class ControlledVocab:
     MGMT_STATUS: set[str] = {"methyle", "non methyle", "wt", "mute", "NA"}
 
     # Changed to allow "autre" (Type hint updated to include str)
-    GRADE: set[int | str] = {1, 2, 3, 4, "autre"}
+    GRADE: set[int | str] = {1, 2, 3, 4, "autre", "NA"}
 
     WHO_CLASSIFICATION: set[str] = {"2007", "2016", "2021", "NA"}
 
@@ -58,6 +58,7 @@ class ControlledVocab:
         "exerese",
         "biopsie",
         "en attente",
+        "autre",
         "NA",
     }
 
@@ -617,6 +618,8 @@ _RADIOLOGY_CLINIQUE_FIELDS = _resolve_patterns(CLINIQUE_FIELDS, [
     "progress_radiologique", "reponse_radiologique",
 ])
 
+# ALl fields
+ALL_FIELDS = ALL_BIO_FIELD_NAMES + ALL_CLINIQUE_FIELD_NAMES
 
 FEATURE_ROUTING: dict[str, dict[str, list[str]]] = {
     "anapath": {
@@ -651,8 +654,11 @@ FEATURE_ROUTING: dict[str, dict[str, list[str]]] = {
 }
 
 
-def get_extractable_fields(document_type: str) -> list[str]:
+def get_extractable_fields(document_type: str, use_all: bool = True) -> list[str]:
     """Return the list of field names extractable from *document_type*."""
+    if use_all:
+        return sorted(set(ALL_BIO_FIELD_NAMES + ALL_CLINIQUE_FIELD_NAMES))
+
     if document_type not in FEATURE_ROUTING:
         raise ValueError(
             f"Unknown document type: {document_type!r}. "
