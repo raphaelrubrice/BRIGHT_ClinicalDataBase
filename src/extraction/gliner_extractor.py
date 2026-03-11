@@ -751,10 +751,10 @@ class GlinerExtractor:
     def __init__(
         self,
         model_name: str = "urchade/gliner_multi-v2.1",
-        chunk_size: int = 220,
+        chunk_size: int = 180,
         chunk_overlap: int = 40,
         batching_strategy: str = "heterogeneous",
-        backend: str = "gliner2_onnx",
+        backend: str = "pytorch", # "gliner2_onnx",
     ):
         self._model_name = model_name
         self._model = None  # Lazy loading
@@ -773,6 +773,7 @@ class GlinerExtractor:
                 logger.info("Loading gliner2_onnx engine")
                 self._model = GLiNER2ONNXRuntime.from_pretrained("lmo3/gliner2-multi-v1-onnx")
                 return
+
         except Exception as e:
             logger.warning("Failed to load gliner2_onnx backend, falling back to pytorch: %s", e)
             self._backend = "pytorch"
@@ -951,11 +952,11 @@ class GlinerExtractor:
                     continue
 
                 if self._backend == "gliner2_onnx":
-                    entities = self._model.extract_entities(augmented_text, labels, threshold=0.35)
+                    entities = self._model.extract_entities(augmented_text, labels, threshold=0.1)
                     for ent in entities:
                         self._process_entity(ent.label, ent.score, ent.text, batch_fields, language, extraction_state)
                 else:
-                    entities = self._model.predict_entities(augmented_text, labels, threshold=0.35)
+                    entities = self._model.predict_entities(augmented_text, labels, threshold=0.1)
                     for ent in entities:
                         self._process_entity(ent["label"], ent["score"], ent["text"], batch_fields, language, extraction_state)
 

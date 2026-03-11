@@ -77,20 +77,32 @@ The system dynamically routes language based on document content (`langdetect`):
 - **Alternative Extractor**: Extracts deterministic fields (dates, simple regex patterns, specific drug names) via highly tuned rule-based pipelines.
 - Results from GLiNER and EDS-NLP are subsequently merged: if both agree, confidence is boosted; if they conflict, rule-based logic or confidence scores dictate the final output.
 
-## **Demo & Usage**
+## **Usage**
 
-### Launch the Desktop Interface
+The repository exposes a centralized CLI entry point `main.py` offering two major commands: `pseudo` (pseudonymization) and `extract` (features extraction).
+
+### 1. Database Creation & Pseudonymization (`pseudo`)
+
+**Launch the Desktop Interface:**
 ```bash
-python -m src.ui.app_qt
+python main.py pseudo --gui
 ```
 
-### Run the CLI Demo
-Run the full extraction pipeline from the command line:
+**Run purely via CLI:**
 ```bash
-python scripts/full_demo_test.py
+python main.py pseudo --db path/to/clinical_db.csv --pdfs path/to/clinical_report_pdfs/
 ```
+*(Optional) Provide `--eds_path` to use a custom local model for `eds-pseudo`, and `--no_pseudo_only` to prevent the creation of a `_pseudo_only` copy.*
 
-### Run Tests
+### 2. Features Extraction (`extract`)
+
+Run the full extraction pipeline over the pseudonymized DB and generate standard `bio.csv` and `clinique.csv` tables (with timeline-based duplication):
+```bash
+python main.py extract --db path/to/clinical_db_pseudo_only.csv --output path/to/output_dir/
+```
+*(Optional) Configure the pipeline with `--parallel <workers>`, `--batching-strategy <strategy>`, and `--no-use-gliner` to fall back to backup extraction exclusively.*
+
+### 3. Run Tests
 ```bash
 pytest src/tests/
 ```
