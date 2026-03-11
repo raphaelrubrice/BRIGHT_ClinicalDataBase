@@ -751,10 +751,11 @@ class GlinerExtractor:
     def __init__(
         self,
         model_name: str = "urchade/gliner_multi-v2.1",
-        chunk_size: int = 180,
+        chunk_size: int = 220,
         chunk_overlap: int = 40,
         batching_strategy: str = "heterogeneous",
         backend: str = "pytorch", # "gliner2_onnx",
+        quantize_int8: bool = True,
     ):
         self._model_name = model_name
         self._model = None  # Lazy loading
@@ -762,6 +763,7 @@ class GlinerExtractor:
         self._chunk_overlap = chunk_overlap
         self._batching_strategy = BatchingStrategy(batching_strategy)
         self._backend = backend
+        self._quantize_int8 = quantize_int8
 
     def _ensure_model(self) -> None:
         if self._model is not None:
@@ -772,6 +774,8 @@ class GlinerExtractor:
                 from gliner2_onnx import GLiNER2ONNXRuntime
                 logger.info("Loading gliner2_onnx engine")
                 self._model = GLiNER2ONNXRuntime.from_pretrained("lmo3/gliner2-multi-v1-onnx")
+                if self._quantize_int8:
+                    logger.warning("Dynamic INT8 quantization via initialization arg is currently optimized for the PyTorch backend.")
                 return
 
         except Exception as e:
@@ -782,6 +786,15 @@ class GlinerExtractor:
         logger.info("Loading pytorch engine")
         from gliner import GLiNER
         self._model = GLiNER.from_pretrained(self._model_name, load_onnx_model=False)
+        
+        # Apply dynamic quantization if enabled
+        if self._quantize_int8:
+            import torch
+            logger.info("Applying dynamic INT8 quantization to PyTorch backend")
+            self._model = torch.quantization.quantize_dynamic(
+                self._model, {torch.nn.Linear}, dtype=torch.qint8
+            )
+            
         self._model.eval()
 
     @staticmethod

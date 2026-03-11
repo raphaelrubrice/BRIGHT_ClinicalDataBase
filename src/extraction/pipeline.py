@@ -122,7 +122,26 @@ _WORKER_PIPELINE: ExtractionPipeline | None = None
 def _init_worker(pipeline_kwargs: dict):
     """Initialise a global pipeline instance for each worker process.
     This avoids pickling heavy ML models (GLiNER, spaCy) during cross-process calls.
+    It also enforces single-threading at the C++/backend level to prevent CPU thrashing.
     """
+    # 1. Force C++ backend math libraries to use a single thread per process
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+    os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+    os.environ["NUMEXPR_NUM_THREADS"] = "1"
+    
+    # Prevent HuggingFace tokenizers from deadlocking in child processes
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+    # 2. Force PyTorch to use a single thread per process
+    try:
+        import torch
+        torch.set_num_threads(1)
+        torch.set_num_interop_threads(1)
+    except ImportError:
+        pass
+
     global _WORKER_PIPELINE
     _WORKER_PIPELINE = ExtractionPipeline(**pipeline_kwargs)
 
