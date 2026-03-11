@@ -6,34 +6,14 @@ chunking to handle long documents within the 512-token limit.
 
 Architecture
 ------------
-- **Semantic Batches**: 21 batches optimized via advanced semantic anchoring.
-- **Anchor Matrix**: Max 4 fields per batch (Intra-batch, Prior-context, Correlative-pivot).
+- **Semantic Macro-Batches**: 7 combined batches (11-18 labels each) to optimize computation speed while remaining safely under a 20-label cap.
+- **Anchor Context**: Optimized anchors to inject key findings (e.g. diagnosis) into subsequent chunks.
 - **Language Routing**: Detects language and selects EN/FR label maps.
 - **Sliding Window**: 150-200 word chunks with 30-50 word overlap.
 
 Tracked Features (Total: 111)
 -----------------------------
-1.  Identifiers & Dates (5): date_chir, num_labo, date_rcp, dn_date, date_deces
-2.  Demographics (5): sexe, annee_de_naissance, activite_professionnelle, antecedent_tumoral, ik_clinique
-3.  Diagnosis (4): diag_histologique, diag_integre, classification_oms, grade
-4.  Tumor Location (3): tumeur_lateralite, tumeur_position, dominance_cerebrale
-5.  Radiology (5): exam_radio_date_decouverte, contraste_1er_symptome, prise_de_contraste, oedeme_1er_symptome, calcif_1er_symptome
-6.  Symptoms Onset (6): date_1er_symptome, epilepsie_1er_symptome, ceph_hic_1er_symptome, deficit_1er_symptome, cognitif_1er_symptome, autre_trouble_1er_symptome
-7.  Symptoms Current (5): epilepsie, ceph_hic, deficit, cognitif, autre_trouble
-8.  Histology (4): histo_necrose, histo_pec, histo_mitoses, aspect_cellulaire
-9.  IHC 1 (5): ihc_idh1, ihc_atrx, ihc_p53, ihc_fgfr3, ihc_braf
-10. IHC 2 (7): ihc_gfap, ihc_olig2, ihc_ki67, ihc_hist_h3k27m, ihc_hist_h3k27me3, ihc_egfr_hirsch, ihc_mmr
-11. Molecular 1 (7): mol_idh1, mol_idh2, mol_mgmt, mol_h3f3a, mol_hist1h3b, mol_tert, mol_CDKN2A
-12. Chromosomal (9): ch1p, ch19q, ch1p19q_codel, ch7p, ch7q, ch10p, ch10q, ch9p, ch9q
-13. Molecular 2 (9): mol_p53, mol_atrx, mol_cic, mol_fubp1, mol_fgfr1, mol_egfr_mut, mol_prkca, mol_pten, mol_braf
-14. Amplifications & Fusions (8): ampli_egfr, ampli_mdm2, ampli_cdk4, ampli_met, ampli_mdm4, fusion_fgfr, fusion_ntrk, fusion_autre
-15. Treatment Surgery (4): type_chirurgie, localisation_chir, qualite_exerese, chir_date
-16. Treatment Chemo (5): chimios, chimio_protocole, chm_date_debut, chm_date_fin, chm_cycles
-17. Treatment Radio (5): rx_date_debut, rx_date_fin, rx_dose, rx_fractionnement, localisation_radiotherapie
-18. Adjunct (4): anti_epileptiques, essai_therapeutique, corticoides, optune
-19. Evolution (5): evol_clinique, progress_clinique, progress_radiologique, reponse_radiologique, date_progression
-20. Care Team (4): neuroncologue, neurochirurgien, radiotherapeute, anatomo_pathologiste
-21. Outcome (2): infos_deces, survie_globale
+Organized into 7 computational macro-batches of <= 20 labels.
 """
 
 from __future__ import annotations
@@ -59,26 +39,43 @@ logger = logging.getLogger(__name__)
 class BatchingStrategy(str, Enum):
     """GLiNER field batching strategy."""
 
-    SEMANTIC_CONTEXT = "semantic_context"    # Semantic batches + anchor context injection
-    SEMANTIC_ONLY = "semantic_only"          # Semantic batches, no context injection
+    SEMANTIC_CONTEXT = "semantic_context"    # Semantic macro-batches + anchor context injection
+    SEMANTIC_ONLY = "semantic_only"          # Semantic macro-batches, no context injection
     HETEROGENEOUS = "heterogeneous"          # Mix fields from different domains for max discrimination
 
 
 # ---------------------------------------------------------------------------
-# Semantic Batches — Consolidated 111 Fields (nip removed)
+# Semantic Macro-Batches — Combined domains capped at 20 labels max
 # ---------------------------------------------------------------------------
 
 SEMANTIC_BATCHES: dict[str, dict] = {
-    # 1. Identifiers & Dates
-    "identifiers_dates": {
-        "fields": {"date_chir", "num_labo", "date_rcp", "dn_date", "date_deces"},
-        "anchors": {"date_chir", "num_labo", "date_rcp", "diag_histologique"},
+    # Batch 1: Identifiers, Demographics, Diagnosis, Location (17 fields)
+    "identifiers_demographics_diagnosis_location": {
+        "fields": {
+            "date_chir", "num_labo", "date_rcp", "dn_date", "date_deces",
+            "sexe", "annee_de_naissance", "activite_professionnelle", "antecedent_tumoral", "ik_clinique",
+            "diag_histologique", "diag_integre", "classification_oms", "grade",
+            "tumeur_lateralite", "tumeur_position", "dominance_cerebrale"
+        },
+        "anchors": {"diag_histologique", "tumeur_position", "date_chir", "sexe"},
         "labels_en": {
             "date_chir": "neurosurgery operation date",
             "num_labo": "pathology lab number",
             "date_rcp": "MDT meeting date",
             "dn_date": "date of last news or follow-up",
             "date_deces": "patient death date",
+            "sexe": "patient gender",
+            "annee_de_naissance": "patient birth year",
+            "activite_professionnelle": "patient occupation",
+            "antecedent_tumoral": "prior brain tumor history",
+            "ik_clinique": "Karnofsky or WHO performance score",
+            "diag_histologique": "histological tumor diagnosis",
+            "diag_integre": "integrated WHO 2021 diagnosis",
+            "classification_oms": "WHO classification edition year",
+            "grade": "CNS WHO tumor grade 1 to 4",
+            "tumeur_lateralite": "tumor laterality",
+            "tumeur_position": "tumor anatomical position",
+            "dominance_cerebrale": "brain hemisphere dominance",
         },
         "labels_fr": {
             "date_chir": "date intervention chirurgicale",
@@ -86,110 +83,41 @@ SEMANTIC_BATCHES: dict[str, dict] = {
             "date_rcp": "date RCP",
             "dn_date": "date dernières nouvelles ou suivi",
             "date_deces": "date décès patient",
-        },
-    },
-
-    # 2. Demographics
-    "demographics": {
-        "fields": {"sexe", "annee_de_naissance", "activite_professionnelle", "antecedent_tumoral", "ik_clinique"},
-        "anchors": {"sexe", "annee_de_naissance", "ik_clinique", "diag_histologique"},
-        "labels_en": {
-            "sexe": "patient gender",
-            "annee_de_naissance": "patient birth year",
-            "activite_professionnelle": "patient occupation",
-            "antecedent_tumoral": "prior brain tumor history",
-            "ik_clinique": "Karnofsky or WHO performance score",
-        },
-        "labels_fr": {
             "sexe": "sexe patient",
             "annee_de_naissance": "année naissance patient",
             "activite_professionnelle": "profession patient",
             "antecedent_tumoral": "antécédent tumeur cérébrale",
             "ik_clinique": "indice Karnofsky ou score performance OMS",
-        },
-    },
-
-    # 3. Diagnosis
-    "diagnosis": {
-        "fields": {"diag_histologique", "diag_integre", "classification_oms", "grade"},
-        "anchors": {"diag_histologique", "grade", "diag_integre", "sexe"},
-        "labels_en": {
-            "diag_histologique": "histological tumor diagnosis",
-            "diag_integre": "integrated WHO 2021 diagnosis",
-            "classification_oms": "WHO classification edition year",
-            "grade": "CNS WHO tumor grade 1 to 4",
-        },
-        "labels_fr": {
             "diag_histologique": "diagnostic histologique tumoral",
             "diag_integre": "diagnostic intégré OMS 2021",
             "classification_oms": "année classification OMS",
             "grade": "grade tumoral OMS de 1 à 4",
-        },
-    },
-
-    # 4. Tumor Location
-    "tumor_location": {
-        "fields": {"tumeur_lateralite", "tumeur_position", "dominance_cerebrale"},
-        "anchors": {"tumeur_position", "tumeur_lateralite", "dominance_cerebrale", "diag_histologique"},
-        "labels_en": {
-            "tumeur_lateralite": "tumor laterality",
-            "tumeur_position": "tumor anatomical position",
-            "dominance_cerebrale": "brain hemisphere dominance",
-        },
-        "labels_fr": {
             "tumeur_lateralite": "latéralité tumorale",
             "tumeur_position": "position anatomique tumorale",
             "dominance_cerebrale": "dominance hémisphérique",
         },
     },
 
-    # 5. Radiology
-    "radiology": {
-        "fields": {"exam_radio_date_decouverte", "contraste_1er_symptome", "prise_de_contraste", "oedeme_1er_symptome", "calcif_1er_symptome"},
-        "anchors": {"contraste_1er_symptome", "prise_de_contraste", "tumeur_position", "diag_histologique"},
+    # Batch 2: Radiology & Symptoms (16 fields)
+    "radiology_symptoms": {
+        "fields": {
+            "exam_radio_date_decouverte", "contraste_1er_symptome", "prise_de_contraste", "oedeme_1er_symptome", "calcif_1er_symptome",
+            "date_1er_symptome", "epilepsie_1er_symptome", "ceph_hic_1er_symptome", "deficit_1er_symptome", "cognitif_1er_symptome", "autre_trouble_1er_symptome",
+            "epilepsie", "ceph_hic", "deficit", "cognitif", "autre_trouble"
+        },
+        "anchors": {"diag_histologique", "tumeur_position", "contraste_1er_symptome", "epilepsie", "deficit"},
         "labels_en": {
             "exam_radio_date_decouverte": "tumor discovery imaging date",
             "contraste_1er_symptome": "initial contrast enhancement",
             "prise_de_contraste": "general contrast enhancement mention",
             "oedeme_1er_symptome": "initial peritumoral edema",
             "calcif_1er_symptome": "initial tumor calcification",
-        },
-        "labels_fr": {
-            "exam_radio_date_decouverte": "date imagerie découverte",
-            "contraste_1er_symptome": "prise contraste initiale",
-            "prise_de_contraste": "mention générale prise de contraste",
-            "oedeme_1er_symptome": "œdème péritumoral initial",
-            "calcif_1er_symptome": "calcification tumorale initiale",
-        },
-    },
-
-    # 6. Symptoms Onset
-    "symptoms_onset": {
-        "fields": {"date_1er_symptome", "epilepsie_1er_symptome", "ceph_hic_1er_symptome", "deficit_1er_symptome", "cognitif_1er_symptome", "autre_trouble_1er_symptome"},
-        "anchors": {"epilepsie_1er_symptome", "ceph_hic_1er_symptome", "tumeur_position", "diag_histologique"},
-        "labels_en": {
             "date_1er_symptome": "first symptom onset date",
             "epilepsie_1er_symptome": "initial seizure symptom",
             "ceph_hic_1er_symptome": "initial intracranial hypertension",
             "deficit_1er_symptome": "initial neurological deficit",
             "cognitif_1er_symptome": "initial cognitive impairment",
             "autre_trouble_1er_symptome": "other initial clinical symptom",
-        },
-        "labels_fr": {
-            "date_1er_symptome": "date apparition premier symptôme",
-            "epilepsie_1er_symptome": "crise épilepsie initiale",
-            "ceph_hic_1er_symptome": "hypertension intracrânienne initiale",
-            "deficit_1er_symptome": "déficit neurologique initial",
-            "cognitif_1er_symptome": "trouble cognitif initial",
-            "autre_trouble_1er_symptome": "autre symptôme clinique initial",
-        },
-    },
-
-    # 7. Symptoms Current
-    "symptoms_current": {
-        "fields": {"epilepsie", "ceph_hic", "deficit", "cognitif", "autre_trouble"},
-        "anchors": {"epilepsie", "deficit", "epilepsie_1er_symptome", "tumeur_position"},
-        "labels_en": {
             "epilepsie": "seizure or epilepsy mention",
             "ceph_hic": "intracranial hypertension sign",
             "deficit": "current neurological deficit",
@@ -197,6 +125,17 @@ SEMANTIC_BATCHES: dict[str, dict] = {
             "autre_trouble": "other clinical symptom",
         },
         "labels_fr": {
+            "exam_radio_date_decouverte": "date imagerie découverte",
+            "contraste_1er_symptome": "prise contraste initiale",
+            "prise_de_contraste": "mention générale prise de contraste",
+            "oedeme_1er_symptome": "œdème péritumoral initial",
+            "calcif_1er_symptome": "calcification tumorale initiale",
+            "date_1er_symptome": "date apparition premier symptôme",
+            "epilepsie_1er_symptome": "crise épilepsie initiale",
+            "ceph_hic_1er_symptome": "hypertension intracrânienne initiale",
+            "deficit_1er_symptome": "déficit neurologique initial",
+            "cognitif_1er_symptome": "trouble cognitif initial",
+            "autre_trouble_1er_symptome": "autre symptôme clinique initial",
             "epilepsie": "mention épilepsie ou crise",
             "ceph_hic": "signe hypertension intracrânienne",
             "deficit": "déficit neurologique actuel",
@@ -205,49 +144,24 @@ SEMANTIC_BATCHES: dict[str, dict] = {
         },
     },
 
-    # 8. Histology
-    "histology": {
-        "fields": {"histo_necrose", "histo_pec", "histo_mitoses", "aspect_cellulaire"},
-        "anchors": {"histo_necrose", "histo_pec", "aspect_cellulaire", "diag_histologique"},
+    # Batch 3: Histology & IHC (16 fields)
+    "histology_ihc": {
+        "fields": {
+            "histo_necrose", "histo_pec", "histo_mitoses", "aspect_cellulaire",
+            "ihc_idh1", "ihc_atrx", "ihc_p53", "ihc_fgfr3", "ihc_braf",
+            "ihc_gfap", "ihc_olig2", "ihc_ki67", "ihc_hist_h3k27m", "ihc_hist_h3k27me3", "ihc_egfr_hirsch", "ihc_mmr"
+        },
+        "anchors": {"diag_histologique", "histo_necrose", "ihc_idh1", "ihc_p53", "ihc_ki67"},
         "labels_en": {
             "histo_necrose": "tumor necrosis presence",
             "histo_pec": "microvascular proliferation",
             "histo_mitoses": "mitotic count",
             "aspect_cellulaire": "cellular morphology",
-        },
-        "labels_fr": {
-            "histo_necrose": "présence nécrose tumorale",
-            "histo_pec": "prolifération microvasculaire",
-            "histo_mitoses": "compte mitotique",
-            "aspect_cellulaire": "morphologie cellulaire",
-        },
-    },
-
-    # 9. IHC 1
-    "ihc_1": {
-        "fields": {"ihc_idh1", "ihc_atrx", "ihc_p53", "ihc_fgfr3", "ihc_braf"},
-        "anchors": {"ihc_idh1", "ihc_atrx", "ihc_p53", "diag_histologique"},
-        "labels_en": {
             "ihc_idh1": "IDH1 IHC expression",
             "ihc_atrx": "ATRX IHC expression",
             "ihc_p53": "p53 IHC expression",
             "ihc_fgfr3": "FGFR3 IHC expression",
             "ihc_braf": "BRAF V600E IHC expression",
-        },
-        "labels_fr": {
-            "ihc_idh1": "expression IHC IDH1",
-            "ihc_atrx": "expression IHC ATRX",
-            "ihc_p53": "expression IHC p53",
-            "ihc_fgfr3": "expression IHC FGFR3",
-            "ihc_braf": "expression IHC BRAF V600E",
-        },
-    },
-
-    # 10. IHC 2
-    "ihc_2": {
-        "fields": {"ihc_gfap", "ihc_olig2", "ihc_ki67", "ihc_hist_h3k27m", "ihc_hist_h3k27me3", "ihc_egfr_hirsch", "ihc_mmr"},
-        "anchors": {"ihc_gfap", "ihc_olig2", "ihc_ki67", "ihc_idh1"},
-        "labels_en": {
             "ihc_gfap": "GFAP protein expression",
             "ihc_olig2": "Olig2 IHC expression",
             "ihc_ki67": "Ki-67 proliferation index",
@@ -257,6 +171,15 @@ SEMANTIC_BATCHES: dict[str, dict] = {
             "ihc_mmr": "MMR proteins IHC",
         },
         "labels_fr": {
+            "histo_necrose": "présence nécrose tumorale",
+            "histo_pec": "prolifération microvasculaire",
+            "histo_mitoses": "compte mitotique",
+            "aspect_cellulaire": "morphologie cellulaire",
+            "ihc_idh1": "expression IHC IDH1",
+            "ihc_atrx": "expression IHC ATRX",
+            "ihc_p53": "expression IHC p53",
+            "ihc_fgfr3": "expression IHC FGFR3",
+            "ihc_braf": "expression IHC BRAF V600E",
             "ihc_gfap": "expression protéine GFAP",
             "ihc_olig2": "expression IHC Olig2",
             "ihc_ki67": "index prolifération Ki-67",
@@ -267,10 +190,13 @@ SEMANTIC_BATCHES: dict[str, dict] = {
         },
     },
 
-    # 11. Molecular 1
-    "molecular_1": {
-        "fields": {"mol_idh1", "mol_idh2", "mol_mgmt", "mol_h3f3a", "mol_hist1h3b", "mol_tert", "mol_CDKN2A"},
-        "anchors": {"mol_idh1", "mol_idh2", "ihc_idh1", "diag_histologique"},
+    # Batch 4: Molecular Mutations (16 fields)
+    "molecular_basic": {
+        "fields": {
+            "mol_idh1", "mol_idh2", "mol_mgmt", "mol_h3f3a", "mol_hist1h3b", "mol_tert", "mol_CDKN2A",
+            "mol_p53", "mol_atrx", "mol_cic", "mol_fubp1", "mol_fgfr1", "mol_egfr_mut", "mol_prkca", "mol_pten", "mol_braf"
+        },
+        "anchors": {"diag_histologique", "mol_idh1", "ihc_idh1", "mol_p53", "mol_atrx"},
         "labels_en": {
             "mol_idh1": "IDH1 gene mutation",
             "mol_idh2": "IDH2 gene mutation",
@@ -279,51 +205,6 @@ SEMANTIC_BATCHES: dict[str, dict] = {
             "mol_hist1h3b": "HIST1H3B gene mutation",
             "mol_tert": "TERT promoter mutation",
             "mol_CDKN2A": "CDKN2A gene deletion",
-        },
-        "labels_fr": {
-            "mol_idh1": "mutation gène IDH1",
-            "mol_idh2": "mutation gène IDH2",
-            "mol_mgmt": "méthylation promoteur MGMT",
-            "mol_h3f3a": "mutation gène H3F3A",
-            "mol_hist1h3b": "mutation gène HIST1H3B",
-            "mol_tert": "mutation promoteur TERT",
-            "mol_CDKN2A": "délétion gène CDKN2A",
-        },
-    },
-
-    # 12. Chromosomal
-    "chromosomal": {
-        "fields": {"ch1p", "ch19q", "ch1p19q_codel", "ch7p", "ch7q", "ch10p", "ch10q", "ch9p", "ch9q"},
-        "anchors": {"ch1p", "ch19q", "ch1p19q_codel", "diag_histologique"},
-        "labels_en": {
-            "ch1p": "1p chromosome status",
-            "ch19q": "19q chromosome status",
-            "ch1p19q_codel": "1p/19q co-deletion",
-            "ch7p": "7p chromosome status",
-            "ch7q": "7q chromosome status",
-            "ch10p": "10p chromosome status",
-            "ch10q": "10q chromosome status",
-            "ch9p": "9p chromosome status",
-            "ch9q": "9q chromosome status",
-        },
-        "labels_fr": {
-            "ch1p": "statut chromosome 1p",
-            "ch19q": "statut chromosome 19q",
-            "ch1p19q_codel": "co-délétion 1p/19q",
-            "ch7p": "statut chromosome 7p",
-            "ch7q": "statut chromosome 7q",
-            "ch10p": "statut chromosome 10p",
-            "ch10q": "statut chromosome 10q",
-            "ch9p": "statut chromosome 9p",
-            "ch9q": "statut chromosome 9q",
-        },
-    },
-
-    # 13. Molecular 2
-    "molecular_2": {
-        "fields": {"mol_p53", "mol_atrx", "mol_cic", "mol_fubp1", "mol_fgfr1", "mol_egfr_mut", "mol_prkca", "mol_pten", "mol_braf"},
-        "anchors": {"mol_p53", "mol_atrx", "ihc_p53", "mol_idh1"},
-        "labels_en": {
             "mol_p53": "TP53 gene mutation",
             "mol_atrx": "ATRX gene mutation",
             "mol_cic": "CIC gene mutation",
@@ -335,6 +216,13 @@ SEMANTIC_BATCHES: dict[str, dict] = {
             "mol_braf": "BRAF gene mutation",
         },
         "labels_fr": {
+            "mol_idh1": "mutation gène IDH1",
+            "mol_idh2": "mutation gène IDH2",
+            "mol_mgmt": "méthylation promoteur MGMT",
+            "mol_h3f3a": "mutation gène H3F3A",
+            "mol_hist1h3b": "mutation gène HIST1H3B",
+            "mol_tert": "mutation promoteur TERT",
+            "mol_CDKN2A": "délétion gène CDKN2A",
             "mol_p53": "mutation gène TP53",
             "mol_atrx": "mutation gène ATRX",
             "mol_cic": "mutation gène CIC",
@@ -347,11 +235,23 @@ SEMANTIC_BATCHES: dict[str, dict] = {
         },
     },
 
-    # 14. Amplifications & Fusions
-    "amplifications_fusions": {
-        "fields": {"ampli_egfr", "ampli_mdm2", "ampli_cdk4", "ampli_met", "ampli_mdm4", "fusion_fgfr", "fusion_ntrk", "fusion_autre"},
-        "anchors": {"ampli_egfr", "mol_tert", "diag_histologique", "mol_idh1"},
+    # Batch 5: Chromosomal & Amplifications/Fusions (17 fields)
+    "chromosomal_amplifications": {
+        "fields": {
+            "ch1p", "ch19q", "ch1p19q_codel", "ch7p", "ch7q", "ch10p", "ch10q", "ch9p", "ch9q",
+            "ampli_egfr", "ampli_mdm2", "ampli_cdk4", "ampli_met", "ampli_mdm4", "fusion_fgfr", "fusion_ntrk", "fusion_autre"
+        },
+        "anchors": {"diag_histologique", "ch1p19q_codel", "ampli_egfr", "mol_idh1"},
         "labels_en": {
+            "ch1p": "1p chromosome status",
+            "ch19q": "19q chromosome status",
+            "ch1p19q_codel": "1p/19q co-deletion",
+            "ch7p": "7p chromosome status",
+            "ch7q": "7q chromosome status",
+            "ch10p": "10p chromosome status",
+            "ch10q": "10q chromosome status",
+            "ch9p": "9p chromosome status",
+            "ch9q": "9q chromosome status",
             "ampli_egfr": "EGFR gene amplification",
             "ampli_mdm2": "MDM2 gene amplification",
             "ampli_cdk4": "CDK4 gene amplification",
@@ -362,6 +262,15 @@ SEMANTIC_BATCHES: dict[str, dict] = {
             "fusion_autre": "other gene fusion",
         },
         "labels_fr": {
+            "ch1p": "statut chromosome 1p",
+            "ch19q": "statut chromosome 19q",
+            "ch1p19q_codel": "co-délétion 1p/19q",
+            "ch7p": "statut chromosome 7p",
+            "ch7q": "statut chromosome 7q",
+            "ch10p": "statut chromosome 10p",
+            "ch10q": "statut chromosome 10q",
+            "ch9p": "statut chromosome 9p",
+            "ch9q": "statut chromosome 9q",
             "ampli_egfr": "amplification gène EGFR",
             "ampli_mdm2": "amplification gène MDM2",
             "ampli_cdk4": "amplification gène CDK4",
@@ -373,75 +282,50 @@ SEMANTIC_BATCHES: dict[str, dict] = {
         },
     },
 
-    # 15. Treatment Surgery
-    "treatment_surgery": {
-        "fields": {"type_chirurgie", "localisation_chir", "qualite_exerese", "chir_date"},
-        "anchors": {"type_chirurgie", "qualite_exerese", "tumeur_position", "diag_histologique"},
+    # Batch 6: Treatments (18 fields)
+    "treatments": {
+        "fields": {
+            "type_chirurgie", "localisation_chir", "qualite_exerese", "chir_date",
+            "chimios", "chimio_protocole", "chm_date_debut", "chm_date_fin", "chm_cycles",
+            "rx_date_debut", "rx_date_fin", "rx_dose", "rx_fractionnement", "localisation_radiotherapie",
+            "anti_epileptiques", "essai_therapeutique", "corticoides", "optune"
+        },
+        "anchors": {"diag_histologique", "type_chirurgie", "qualite_exerese", "chimios", "rx_dose"},
         "labels_en": {
             "type_chirurgie": "neurosurgery type",
             "localisation_chir": "surgery anatomical location",
             "qualite_exerese": "resection completeness",
             "chir_date": "tumor resection surgery date",
-        },
-        "labels_fr": {
-            "type_chirurgie": "type chirurgie",
-            "localisation_chir": "localisation anatomique chirurgie",
-            "qualite_exerese": "qualité exérèse",
-            "chir_date": "date opération résection tumorale",
-        },
-    },
-
-    # 16. Treatment Chemo
-    "treatment_chemo": {
-        "fields": {"chimios", "chimio_protocole", "chm_date_debut", "chm_date_fin", "chm_cycles"},
-        "anchors": {"chimios", "chimio_protocole", "mol_mgmt", "diag_histologique"},
-        "labels_en": {
             "chimios": "chemotherapy drugs",
             "chimio_protocole": "chemotherapy protocol",
             "chm_date_debut": "chemotherapy start date",
             "chm_date_fin": "chemotherapy end date",
             "chm_cycles": "chemotherapy cycles count",
-        },
-        "labels_fr": {
-            "chimios": "médicaments chimiothérapie",
-            "chimio_protocole": "protocole chimiothérapie",
-            "chm_date_debut": "date début chimiothérapie",
-            "chm_date_fin": "date fin chimiothérapie",
-            "chm_cycles": "nombre cycles chimiothérapie",
-        },
-    },
-
-    # 17. Treatment Radio
-    "treatment_radio": {
-        "fields": {"rx_date_debut", "rx_date_fin", "rx_dose", "rx_fractionnement", "localisation_radiotherapie"},
-        "anchors": {"rx_dose", "rx_fractionnement", "localisation_radiotherapie", "chimios"},
-        "labels_en": {
             "rx_date_debut": "radiotherapy start date",
             "rx_date_fin": "radiotherapy end date",
             "rx_dose": "radiotherapy total dose",
             "rx_fractionnement": "radiotherapy fractions count",
             "localisation_radiotherapie": "radiotherapy targeted region",
-        },
-        "labels_fr": {
-            "rx_date_debut": "date début radiothérapie",
-            "rx_date_fin": "date fin radiothérapie",
-            "rx_dose": "dose totale radiothérapie",
-            "rx_fractionnement": "nombre fractions radiothérapie",
-            "localisation_radiotherapie": "région ciblée radiothérapie",
-        },
-    },
-
-    # 18. Adjunct
-    "adjunct": {
-        "fields": {"anti_epileptiques", "essai_therapeutique", "corticoides", "optune"},
-        "anchors": {"anti_epileptiques", "corticoides", "epilepsie", "chimios"},
-        "labels_en": {
             "anti_epileptiques": "antiepileptic drugs",
             "essai_therapeutique": "clinical trial name",
             "corticoides": "corticosteroid treatment",
             "optune": "Optune treatment mention",
         },
         "labels_fr": {
+            "type_chirurgie": "type chirurgie",
+            "localisation_chir": "localisation anatomique chirurgie",
+            "qualite_exerese": "qualité exérèse",
+            "chir_date": "date opération résection tumorale",
+            "chimios": "médicaments chimiothérapie",
+            "chimio_protocole": "protocole chimiothérapie",
+            "chm_date_debut": "date début chimiothérapie",
+            "chm_date_fin": "date fin chimiothérapie",
+            "chm_cycles": "nombre cycles chimiothérapie",
+            "rx_date_debut": "date début radiothérapie",
+            "rx_date_fin": "date fin radiothérapie",
+            "rx_dose": "dose totale radiothérapie",
+            "rx_fractionnement": "nombre fractions radiothérapie",
+            "localisation_radiotherapie": "région ciblée radiothérapie",
             "anti_epileptiques": "médicaments antiépileptiques",
             "essai_therapeutique": "nom essai thérapeutique",
             "corticoides": "traitement corticoïde",
@@ -449,16 +333,26 @@ SEMANTIC_BATCHES: dict[str, dict] = {
         },
     },
 
-    # 19. Evolution
-    "evolution": {
-        "fields": {"evol_clinique", "progress_clinique", "progress_radiologique", "reponse_radiologique", "date_progression"},
-        "anchors": {"evol_clinique", "progress_radiologique", "diag_histologique", "type_chirurgie"},
+    # Batch 7: Evolution, Team & Outcome (11 fields)
+    "evolution_team_outcome": {
+        "fields": {
+            "evol_clinique", "progress_clinique", "progress_radiologique", "reponse_radiologique", "date_progression",
+            "neuroncologue", "neurochirurgien", "radiotherapeute", "anatomo_pathologiste",
+            "infos_deces", "survie_globale"
+        },
+        "anchors": {"diag_histologique", "evol_clinique", "progress_radiologique", "type_chirurgie"},
         "labels_en": {
             "evol_clinique": "clinical evolution status",
             "progress_clinique": "clinical progression mention",
             "progress_radiologique": "radiological progression mention",
             "reponse_radiologique": "radiological response status",
             "date_progression": "cancer progression date",
+            "neuroncologue": "neuro-oncologist family name",
+            "neurochirurgien": "neurosurgeon surname",
+            "radiotherapeute": "radiotherapist surname",
+            "anatomo_pathologiste": "pathologist surname",
+            "infos_deces": "death context or cause",
+            "survie_globale": "overall survival duration",
         },
         "labels_fr": {
             "evol_clinique": "statut évolution clinique",
@@ -466,36 +360,10 @@ SEMANTIC_BATCHES: dict[str, dict] = {
             "progress_radiologique": "mention progression radiologique",
             "reponse_radiologique": "statut réponse radiologique",
             "date_progression": "date progression tumorale",
-        },
-    },
-
-    # 20. Care Team
-    "care_team": {
-        "fields": {"neuroncologue", "neurochirurgien", "radiotherapeute", "anatomo_pathologiste"},
-        "anchors": {"neuroncologue", "neurochirurgien", "anatomo_pathologiste", "type_chirurgie"},
-        "labels_en": {
-            "neuroncologue": "neuro-oncologist family name",
-            "neurochirurgien": "neurosurgeon surname",
-            "radiotherapeute": "radiotherapist surname",
-            "anatomo_pathologiste": "pathologist surname",
-        },
-        "labels_fr": {
             "neuroncologue": "nom du neuro-oncologue",
             "neurochirurgien": "nom du neurochirurgien",
             "radiotherapeute": "nom du radiothérapeute",
             "anatomo_pathologiste": "nom anatomo-pathologiste",
-        },
-    },
-
-    # 21. Outcome
-    "outcome": {
-        "fields": {"infos_deces", "survie_globale"},
-        "anchors": {"infos_deces", "survie_globale", "evol_clinique", "diag_histologique"},
-        "labels_en": {
-            "infos_deces": "death context or cause",
-            "survie_globale": "overall survival duration",
-        },
-        "labels_fr": {
             "infos_deces": "contexte ou cause décès",
             "survie_globale": "durée survie globale",
         },
@@ -826,7 +694,7 @@ for _bname, _bconf in SEMANTIC_BATCHES.items():
 def _build_heterogeneous_batches(
     target_fields: set[str],
     language: str,
-    max_per_batch: int = 5,
+    max_per_batch: int = 20,  # Maintained at 20 for optimal performance within context limits
 ) -> list[dict]:
     """Build batches that maximise domain diversity per batch.
 
