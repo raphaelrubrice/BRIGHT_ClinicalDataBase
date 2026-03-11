@@ -201,7 +201,7 @@ class ExtractionPipeline:
         gliner_model: str = "urchade/gliner_multi-v2.1",
         batching_strategy: str = "heterogeneous",
         verbose: bool = False,
-        n_jobs: int = -1,
+        n_jobs: int = max(1,os.cpu_count()-2),
     ):
         self.use_negation = use_negation
         self.use_eds = use_eds
@@ -619,6 +619,9 @@ class ExtractionPipeline:
         n = len(documents)
         if n == 0:
             return []
+
+        if n_jobs == 0 :
+            n_jobs = None
 
         n_jobs_to_use = n_jobs if n_jobs is not None else self.n_jobs
 
