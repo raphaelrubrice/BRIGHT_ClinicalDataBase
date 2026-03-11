@@ -47,9 +47,6 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 pip install -r requirements.txt
 ```
 
-### 4. PyTorch Fallback
-The `gliner2-onnx` backend is configured to automatically download and run the ONNX model optimized for inference. If downloading or loading the ONNX model fails for any reason, the pipeline is designed to gracefully fall back to standard `gliner` via PyTorch eager-execution automatically.
-
 ## **Architecture: GLiNER-First Extraction**
 
 The extraction pipeline leverages a **GLiNER-first** approach, operating purely on discriminative encoder models and rule-based NLP to ensure fast, deterministic, and resource-efficient processing on standard hardware.
