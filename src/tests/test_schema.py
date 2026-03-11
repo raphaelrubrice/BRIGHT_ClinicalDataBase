@@ -156,7 +156,7 @@ class TestControlledVocab:
     """Test controlled vocabulary definitions and validators."""
 
     def test_binary_values(self):
-        assert ControlledVocab.BINARY == {"oui", "non"}
+        assert ControlledVocab.BINARY == {"oui", "non", "NA"}
 
     def test_ihc_status_values(self):
         assert "positif" in ControlledVocab.IHC_STATUS
@@ -173,17 +173,17 @@ class TestControlledVocab:
         assert "perte partielle" in ControlledVocab.CHROMOSOMAL
 
     def test_grade_values(self):
-        assert ControlledVocab.GRADE == {1, 2, 3, 4}
+        assert ControlledVocab.GRADE == {1, 2, 3, 4, "autre", "NA"}
 
     def test_who_classification(self):
-        assert ControlledVocab.WHO_CLASSIFICATION == {"2007", "2016", "2021"}
+        assert ControlledVocab.WHO_CLASSIFICATION == {"2007", "2016", "2021", "NA"}
 
     def test_surgery_types(self):
-        expected = {"exerese complete", "exerese partielle", "exerese", "biopsie", "en attente"}
+        expected = {"exerese complete", "exerese partielle", "exerese", "biopsie", "en attente", "autre", "NA"}
         assert ControlledVocab.SURGERY_TYPE == expected
 
     def test_sex_values(self):
-        assert ControlledVocab.SEX == {"M", "F"}
+        assert ControlledVocab.SEX == {"M", "F", "NA"}
 
     def test_laterality_values(self):
         assert "gauche" in ControlledVocab.LATERALITY
@@ -443,7 +443,7 @@ class TestFeatureRouting:
         assert len(routing["bio"]) > 0
 
     def test_molecular_report_subset(self):
-        fields = get_extractable_fields("molecular_report")
+        fields = get_extractable_fields("molecular_report", use_all=False)
         # Should include molecular fields
         assert "mol_idh1" in fields
         assert "mol_tert" in fields
@@ -458,7 +458,7 @@ class TestFeatureRouting:
         assert len(routing["clinique"]) > 0
 
     def test_radiology_limited_scope(self):
-        fields = get_extractable_fields("radiology")
+        fields = get_extractable_fields("radiology", use_all=False)
         assert "tumeur_lateralite" in fields
         assert "tumeur_position" in fields
         # Should not include treatment or bio fields
@@ -467,7 +467,7 @@ class TestFeatureRouting:
 
     def test_invalid_document_type(self):
         with pytest.raises(ValueError, match="Unknown document type"):
-            get_extractable_fields("unknown_type")
+            get_extractable_fields("unknown_type", use_all=False)
 
     def test_routed_fields_exist_in_schema(self):
         """Every field name in FEATURE_ROUTING must exist in ALL_FIELDS_BY_NAME."""

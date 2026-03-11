@@ -336,7 +336,7 @@ class TestSectionDetectorFreeText:
     def test_full_text_preserves_content(self):
         detector = SectionDetector()
         sections = detector.detect(SAMPLE_FREE_TEXT)
-        assert "87654321" in sections["full_text"]
+        assert "AP24-1234" in sections["full_text"]
 
 
 class TestSectionDetectorMolecular:

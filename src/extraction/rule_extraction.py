@@ -162,8 +162,14 @@ def _assign_dates_by_context(
             # Keep nearest match per field (overwrite if closer)
             existing = results.get(best_field)
             if existing is None or best_distance < getattr(existing, "_ctx_distance", 999999):
+                assigned_value = norm
+                # For annee_de_naissance, extract year only from DD/MM/YYYY
+                if best_field == "annee_de_naissance":
+                    parts = norm.split("/")
+                    if len(parts) == 3:
+                        assigned_value = parts[2]
                 ev = ExtractionValue(
-                    value=norm,
+                    value=assigned_value,
                     source_span=raw,
                     source_span_start=start,
                     source_span_end=end,

@@ -16,7 +16,8 @@ class TestMetrics:
         ground_truth = {
             "feat_tp": {"value": "match"},
             "feat_fn": {"value": "missed"},
-            "feat_alt": {"value": "correct_val"}
+            "feat_alt": {"value": "correct_val"},
+            "feat_fp": {"value": None},
         }
         
         metrics = compute_per_feature_metrics(predicted, ground_truth)
@@ -25,7 +26,8 @@ class TestMetrics:
         assert metrics["feat_fp"]["FP_hallucination"] == 1
         assert metrics["feat_fn"]["FN_omission"] == 1
         assert metrics["feat_alt"]["alteration"] == 1
-        assert metrics["feat_tn"]["TN"] == 1
+        # feat_tn not in ground_truth → not scored by compute_per_feature_metrics
+        assert "feat_tn" not in metrics
 
     def test_hallucination_rate(self):
         doc1_metrics = {

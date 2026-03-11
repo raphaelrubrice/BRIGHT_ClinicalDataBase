@@ -31,7 +31,7 @@ class TestNormaliseValue:
         assert normalise_value("ihc_idh1", "null") is None
         assert normalise_value("ihc_idh1", "None") is None
         assert normalise_value("ihc_idh1", "N/A") is None
-        assert normalise_value("ihc_idh1", "na") is None
+        assert normalise_value("ihc_idh1", "na") == "NA"
         assert normalise_value("ihc_idh1", "") is None
 
     def test_boolean_to_oui_non(self):

@@ -361,7 +361,10 @@ class EDSExtractor:
                     for t_field, keywords in _DATE_CONTEXT_KEYWORDS.items():
                         for kw in keywords:
                             if kw in surrounding_text:
-                                fmt_date = f"{dt.day:02d}/{dt.month:02d}/{dt.year}" if dt.month and dt.day else str(dt.year)
+                                if t_field == "annee_de_naissance":
+                                    fmt_date = str(dt.year)
+                                else:
+                                    fmt_date = f"{dt.day:02d}/{dt.month:02d}/{dt.year}" if dt.month and dt.day else str(dt.year)
                                 emits.append((t_field, fmt_date))
                                 break
             elif field_name in ["rx_dose", "histo_mitoses", "chm_cycles", "ik_clinique"]:

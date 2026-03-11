@@ -125,7 +125,7 @@ class TestConsultationBioRouting:
 
     def test_radiology_excludes_bio(self):
         """Radiology documents should NOT include bio-only fields."""
-        fields = get_extractable_fields("radiology")
+        fields = get_extractable_fields("radiology", use_all=False)
         assert "fusion_fgfr" not in fields
         assert "mol_idh1" not in fields
 
