@@ -20,6 +20,8 @@ from contextlib import redirect_stdout
 from concurrent.futures import ProcessPoolExecutor
 from typing import Optional
 
+from .controlled_extractor import ControlledExtractor
+from .controlled_vocab_data import CONTROLLED_REGISTRY_FR, CONTROLLED_REGISTRY_EN
 from .date_extractor import DateExtractor
 from .document_classifier import DocumentClassifier
 from .provenance import ExtractionResult
@@ -201,7 +203,7 @@ class ExtractionPipeline:
         gliner_model: str = "urchade/gliner_multi-v2.1",
         batching_strategy: str = "heterogeneous",
         verbose: bool = False,
-        n_jobs: int = max(1,os.cpu_count()-2),
+        n_jobs: int = -1,
     ):
         self.use_negation = use_negation
         self.use_eds = use_eds
@@ -226,6 +228,7 @@ class ExtractionPipeline:
 
         self._assertion_annotator = AssertionAnnotator() if use_negation else None
         self._date_extractor = DateExtractor()
+        self._controlled_extractor = ControlledExtractor()
 
     # -- Language detection ---------------------------------------------------
 
@@ -388,6 +391,39 @@ class ExtractionPipeline:
                 print(f"           → {len(date_results)} date fields in {t_date_elapsed:.0f}ms")
 
         # -----------------------------------------------------------------
+        # Step 5.5: ControlledExtractor (Find & Check for controlled-vocab)
+        # -----------------------------------------------------------------
+        controlled_results: dict[str, ExtractionValue] = {}
+        ctrl_registry = (CONTROLLED_REGISTRY_FR if language.startswith("fr")
+                         else CONTROLLED_REGISTRY_EN)
+        controlled_fields = [f for f in non_date_fields if f in ctrl_registry]
+        if controlled_fields and self._controlled_extractor:
+            if _v:
+                print("[Step 5.5/12] Running ControlledExtractor (Find & Check)...")
+            t_ctrl_start = time.perf_counter()
+            try:
+                controlled_results = self._controlled_extractor.extract(
+                    text=text,
+                    feature_subset=controlled_fields,
+                    language=language,
+                )
+            except Exception as exc:
+                result.add_log(f"ControlledExtractor failed: {exc}")
+                logger.error("ControlledExtractor failed: %s", exc)
+
+            t_ctrl_elapsed = (time.perf_counter() - t_ctrl_start) * 1000
+            result.add_log(
+                f"ControlledExtractor: extracted {len(controlled_results)} "
+                f"fields in {t_ctrl_elapsed:.0f}ms."
+            )
+            if _v:
+                print(f"           → {len(controlled_results)} fields in {t_ctrl_elapsed:.0f}ms")
+
+        # Fields filled by ControlledExtractor are removed from GLiNER subset
+        gliner_fields = [f for f in non_date_fields
+                         if f not in controlled_results]
+
+        # -----------------------------------------------------------------
         # Step 6: PRIMARY — GLiNER extraction (non-date fields)
         # -----------------------------------------------------------------
         if _v:
@@ -398,7 +434,7 @@ class ExtractionPipeline:
             try:
                 gliner_results = self._gliner_extractor.extract(
                     text=text,
-                    feature_subset=non_date_fields,
+                    feature_subset=gliner_fields,
                     language=language,
                     verbose=_v,
                 )
@@ -513,6 +549,11 @@ class ExtractionPipeline:
                 # EDS fallback for fields GLiNER missed
                 merged[fname] = e
 
+        # Inject controlled-vocab results (fill gaps not covered by GLiNER/EDS)
+        for fname, ev in controlled_results.items():
+            if fname not in merged:
+                merged[fname] = ev
+
         # Inject date results (DateExtractor has sole authority over date fields)
         merged.update(date_results)
 
@@ -520,12 +561,13 @@ class ExtractionPipeline:
         result.add_log(
             f"Merged: {len(merged)} total features "
             f"({result.gliner_count} GLiNER + {result.tier1_count} EDS/Rules "
-            f"+ {len(date_results)} dates)."
+            f"+ {len(controlled_results)} controlled + {len(date_results)} dates)."
         )
         if _v:
-            eds_only = len(merged) - result.gliner_count - len(date_results)
+            eds_only = len(merged) - result.gliner_count - len(date_results) - len(controlled_results)
             print(f"           → {len(merged)} total features "
                   f"({result.gliner_count} GLiNER, {max(0, eds_only)} EDS-only fallback, "
+                  f"{len(controlled_results)} controlled, "
                   f"{len(date_results)} dates, {synergy_count} synergy-boosted)")
 
         # -----------------------------------------------------------------
@@ -619,9 +661,6 @@ class ExtractionPipeline:
         n = len(documents)
         if n == 0:
             return []
-
-        if n_jobs == 0 :
-            n_jobs = None
 
         n_jobs_to_use = n_jobs if n_jobs is not None else self.n_jobs
 
