@@ -72,6 +72,9 @@ _IHC_CATS_FR: dict[str, tuple[str, ...]] = {
         "positif", "positive", "positifs", "+",
         "surexprime", "surexpression", "exprime", "present",
         "surexprimé", "exprimé", "présent",
+        "marquage diffus", "marquage intense",
+        "forte reactivite", "forte réactivité",
+        "marquage net", "marquage franc", "expression franche",
     ),
     "negatif": (
         "negatif", "negative", "négatif", "négative", "-",
@@ -79,6 +82,10 @@ _IHC_CATS_FR: dict[str, tuple[str, ...]] = {
         "perte", "non exprime", "non exprimé",
         "non detecte", "non détecté", "non retrouve", "non retrouvé",
         "perdu",
+        "perte du marquage nucleaire", "perte du marquage nucléaire",
+        "perte d'expression nucleaire", "perte d'expression nucléaire",
+        "negativation", "négativation",
+        "extinction", "perte totale", "marquage negatif", "marquage négatif",
     ),
     "maintenu": (
         "maintenu", "maintenue", "conserve", "conservé",
@@ -86,6 +93,10 @@ _IHC_CATS_FR: dict[str, tuple[str, ...]] = {
         "expression conservee", "expression conservée",
         "expression maintenue",
         "preserve", "préservé", "normal",
+        "marquage nucleaire conserve", "marquage nucléaire conservé",
+        "expression nucleaire conservee", "expression nucléaire conservée",
+        "marquage preserve", "marquage préservé",
+        "marquage non altere", "marquage non altéré", "sans anomalie de marquage",
     ),
     # "autre" intentionally empty
 }
@@ -99,6 +110,14 @@ _MOL_CATS_FR: dict[str, tuple[str, ...]] = {
         "pas de mutation detectee", "pas de mutation détectée",
         "absence de mutation detectee", "absence de mutation détectée",
         "statut wt", "status wt",
+        "sans argument pour une mutation",
+        "ne met pas en evidence de mutation", "ne met pas en évidence de mutation",
+        "aucun variant pathogene", "aucun variant pathogène",
+        "absence d'anomalie",
+        "profil non mute", "profil non muté",
+        "aucune mutation",
+        "sans anomalie", "profil sauvage", "non porteuse", "non porteur",
+        "aucun variant détecté", "aucun variant detecte",
     ),
     "mute": (
         "mute", "muté", "mutée", "mutee", "mutation",
@@ -107,6 +126,13 @@ _MOL_CATS_FR: dict[str, tuple[str, ...]] = {
         "mutation identifiee", "mutation identifiée",
         "variant pathogene", "variant pathogène",
         "altere", "altéré", "alteree", "altérée",
+        "mutation faux sens", "mutation non sens", "positif pour la mutation",
+    ),
+    "vus": (
+        "vus", "variant de signification indeterminee", "variant de signification indéterminée",
+        "variant de signification incertaine", "polymorphisme",
+        "non pathogene", "non pathogène",
+        "variante de signification inconnue", "variant atypique", "signification clinique incertaine",
     ),
     # "autre" intentionally empty
 }
@@ -119,6 +145,7 @@ _MOL_MGMT_CATS_FR: dict[str, tuple[str, ...]] = {
         "promoteur methyle", "promoteur méthylé",
         "methylation du promoteur", "méthylation du promoteur",
         "hypermethyle", "hyperméthylé",
+        "hyperméthylation", "hypermethylation", "profil methylé", "profil méthylé",
     ),
     "non methyle": (
         "non methyle", "non méthylé", "non methylé",
@@ -130,13 +157,15 @@ _MOL_MGMT_CATS_FR: dict[str, tuple[str, ...]] = {
         "methylation absente", "méthylation absente",
         "non hypermethyle", "non hyperméthylé",
         "promoteur non methyle", "promoteur non méthylé",
+        "profil non methylé", "profil non méthylé", 
+        "absence d'hyperméthylation", "absence d'hypermethylation",
     ),
 }
 
 _CHR_CATS_FR: dict[str, tuple[str, ...]] = {
     "gain": (
         "gain", "gain de signal", "polysomie", "trisomie",
-        "normal", "normale",
+        "normal", "normale", "sur-représentation", "sur-representation",
     ),
     "perte": (
         "perte", "deletion", "délétion", "deleted", "del",
@@ -144,6 +173,8 @@ _CHR_CATS_FR: dict[str, tuple[str, ...]] = {
         "perte d'heterozygotie", "perte d'hétérozygotie",
         "loh", "perte allelique", "perte allélique",
         "perte homozygote",
+        "perte d'un allele", "perte d'un allèle",
+        "sous-représentation", "sous-representation",
     ),
     "perte partielle": (
         "perte partielle", "perte heterozygote", "perte hétérozygote",
@@ -159,11 +190,16 @@ _AMPLI_CATS_FR: dict[str, tuple[str, ...]] = {
         "amplification", "amplifie", "amplifié", "amplifiée",
         "amplification detectee", "amplification détectée",
         "presence d'amplification", "présence d'amplification",
+        "sur-amplification", "co-amplification",
     ),
     "non": (
         "pas d'amplification", "absence d'amplification",
         "non amplifie", "non amplifié",
         "pas d'amplification detectee", "pas d'amplification détectée",
+        "sans argument pour une amplification",
+        "ne met pas en evidence d'amplification", "ne met pas en évidence d'amplification",
+        "aucune amplification", "absence d'anomalie",
+        "pas de sur-amplification", "non amplifiee", "non amplifiée",
     ),
 }
 
@@ -177,6 +213,7 @@ _FUSION_CATS_FR: dict[str, tuple[str, ...]] = {
         "pas de fusion", "absence de fusion",
         "pas de rearrangement", "pas de réarrangement",
         "absence de rearrangement", "absence de réarrangement",
+        "aucune fusion", "sans argument pour une fusion",
     ),
 }
 
@@ -200,13 +237,19 @@ _IHC_CATS_EN: dict[str, tuple[str, ...]] = {
     "positif": (
         "positive", "pos", "+", "overexpressed", "overexpression",
         "expressed", "present", "detected",
+        "diffuse staining", "intense staining", "strong reactivity",
+        "frank expression", "strong expression", "positive staining",
     ),
     "negatif": (
         "negative", "neg", "-", "loss of expression", "absent",
         "not expressed", "not detected", "lost", "loss",
+        "loss of nuclear expression", "loss of staining", "negative staining",
+        "loss of reactivity", "no staining",
     ),
     "maintenu": (
         "retained", "preserved", "maintained", "intact", "normal",
+        "retained nuclear expression", "preserved nuclear expression",
+        "ubiquitous expression", "wild-type expression", "unaltered staining",
     ),
 }
 
@@ -215,11 +258,22 @@ _MOL_CATS_EN: dict[str, tuple[str, ...]] = {
         "wt", "wild-type", "wild type", "wildtype",
         "not mutated", "no mutation", "no mutation detected",
         "absence of mutation", "unmutated",
+        "no evidence of mutation", "failed to demonstrate a mutation",
+        "negative for mutation", "no pathogenic variant",
+        "no alterations", "wild type profile", "negative for pathogenic variants", 
+        "no variants detected",
     ),
     "mute": (
         "mutated", "mutant", "mutation", "mutation detected",
         "mutation identified", "pathogenic variant",
         "altered", "alteration",
+        "missense mutation", "nonsense mutation", "frameshift", "positive for mutation",
+    ),
+    "vus": (
+        "vus", "variant of uncertain significance",
+        "variant of unknown significance", "polymorphism",
+        "non-pathogenic", "non pathogenic",
+        "variant of unknown clinical significance", "atypical variant",
     ),
 }
 
@@ -229,22 +283,26 @@ _MOL_MGMT_CATS_EN: dict[str, tuple[str, ...]] = {
         "methylated", "methylation positive",
         "promoter methylated", "promoter methylation",
         "hypermethylated",
+        "hypermethylation", "methylated profile",
     ),
     "non methyle": (
         "unmethylated", "not methylated", "methylation negative",
         "no methylation", "absence of methylation",
         "promoter unmethylated",
+        "unmethylated profile", "no hypermethylation",
     ),
 }
 
 _CHR_CATS_EN: dict[str, tuple[str, ...]] = {
     "gain": (
         "gain", "gain of signal", "polysomy", "trisomy", "normal",
+        "overrepresentation",
     ),
     "perte": (
         "loss", "deletion", "deleted", "del", "monosomy",
         "loss of signal", "loss of heterozygosity", "loh",
         "allelic loss", "homozygous loss",
+        "underrepresentation", "loss of one allele",
     ),
     "perte partielle": (
         "partial loss", "heterozygous loss",
@@ -259,7 +317,7 @@ _AMPLI_CATS_EN: dict[str, tuple[str, ...]] = {
     ),
     "non": (
         "no amplification", "not amplified",
-        "absence of amplification",
+        "absence of amplification", "no evidence of amplification",
     ),
 }
 
@@ -271,6 +329,7 @@ _FUSION_CATS_EN: dict[str, tuple[str, ...]] = {
     "non": (
         "no fusion", "absence of fusion",
         "no rearrangement", "absence of rearrangement",
+        "no evidence of fusion",
     ),
 }
 
@@ -302,11 +361,11 @@ CONTROLLED_REGISTRY_FR: dict[str, FieldVocabConfig] = {
         cats=_IHC_CATS_FR),
 
     "ihc_p53": _cfg("ihc_p53",
-        ids=("p53", "tp53", "proteine p53", "protéine p53"),
+        ids=("p53", "tp53", "proteine p53", "protéine p53", "anti-p53"),
         cats=_IHC_CATS_FR),
 
     "ihc_atrx": _cfg("ihc_atrx",
-        ids=("atrx",),
+        ids=("atrx", "anti-atrx"),
         cats=_IHC_CATS_FR),
 
     "ihc_fgfr3": _cfg("ihc_fgfr3",
@@ -340,7 +399,7 @@ CONTROLLED_REGISTRY_FR: dict[str, FieldVocabConfig] = {
 
     "ihc_ki67": _cfg("ihc_ki67",
         ids=("ki67", "ki-67", "ki 67", "index de proliferation",
-             "index de prolifération"),
+             "index de prolifération", "mib1", "mib-1"),
         cats=_IHC_CATS_FR),
 
     "ihc_mmr": _cfg("ihc_mmr",
@@ -383,7 +442,7 @@ CONTROLLED_REGISTRY_FR: dict[str, FieldVocabConfig] = {
 
     "mol_mgmt": _cfg("mol_mgmt",
         ids=("mgmt", "promoteur mgmt", "promoteur du mgmt",
-             "methylation mgmt", "méthylation mgmt"),
+             "methylation mgmt", "méthylation mgmt", "o6-methylguanine"),
         cats=_MOL_MGMT_CATS_FR),
 
     "mol_fgfr1": _cfg("mol_fgfr1",
@@ -421,12 +480,14 @@ CONTROLLED_REGISTRY_FR: dict[str, FieldVocabConfig] = {
     # ── Chromosomal fields ────────────────────────────────────────────
     "ch1p": _cfg("ch1p",
         ids=("1p", "chromosome 1p", "del(1p)", "bras court du chromosome 1",
-             "codeletion 1p", "codélétion 1p"),
+             "codeletion 1p", "codélétion 1p",
+             "1p/19q", "1p19q", "codeletion 1p/19q", "codélétion 1p/19q"),
         cats=_CHR_CATS_FR),
 
     "ch19q": _cfg("ch19q",
         ids=("19q", "chromosome 19q", "del(19q)", "bras long du chromosome 19",
-             "codeletion 19q", "codélétion 19q"),
+             "codeletion 19q", "codélétion 19q",
+             "1p/19q", "1p19q", "codeletion 1p/19q", "codélétion 1p/19q"),
         cats=_CHR_CATS_FR),
 
     "ch10p": _cfg("ch10p",
@@ -527,6 +588,11 @@ CONTROLLED_REGISTRY_FR: dict[str, FieldVocabConfig] = {
                 "resection totale", "résection totale",
                 "exerese en totalite", "exérèse en totalité",
                 "gtr", "complete", "complète", "totale",
+                "exerese macroscopiquement complete", "exérèse macroscopiquement complète",
+                "resection macroscopiquement complete", "résection macroscopiquement complète",
+                "absence de residu", "absence de résidu",
+                "resection supramarginale", "résection supramarginale",
+                "résection macroscopique complète", "exérèse totale", "macroscopiquement complet",
             ),
             "exerese partielle": (
                 "exerese partielle", "exérèse partielle",
@@ -535,11 +601,20 @@ CONTROLLED_REGISTRY_FR: dict[str, FieldVocabConfig] = {
                 "exerese incomplete", "exérèse incomplète",
                 "str", "partielle", "subtotale", "incomplete",
                 "incomplète",
+                "resection partielle avec reliquat", "résection partielle avec reliquat",
+                "exerese sub-totale", "exérèse sub-totale",
+                "debulking", "morcellement",
+                "exerese fragmentee", "exérèse fragmentée",
+                "exérèse incomplète", "exerese incomplete", 
+                "réduction tumorale", "reduction tumorale",
             ),
             "biopsie": (
                 "biopsie", "biopsie stereotaxique",
                 "biopsie stéréotaxique", "bst",
                 "biopsie chirurgicale",
+                "biopsie en conditions stereotaxiques", "biopsie en conditions stéréotaxiques",
+                "biopsie a l'aiguille", "biopsie à l'aiguille",
+                "stereotaxie", "stéréotaxie",
             ),
             "exerese": (
                 "exerese", "exérèse", "resection", "résection",
@@ -563,10 +638,26 @@ CONTROLLED_REGISTRY_FR: dict[str, FieldVocabConfig] = {
                 "initial", "initiale", "premiere consultation",
                 "première consultation", "bilan initial",
                 "diagnostic initial",
+                "diagnostic de certitude", "pre-operatoire", "pré-opératoire",
+                "presentation initiale", "présentation initiale",
+                "découverte", "decouverte", "diagnostic de novo", "primo-diagnostic",
+            ),
+            "progression": (
+                "progression", "recidive", "récidive", "rechute",
+                "echappement", "échappement", "aggravation",
+                "évolution péjorative", "evolution pejorative", "reprise évolutive",
+                "reprise evolutive", "majoration",
+            ),
+            "reponse / stable": (
+                "maladie stable", "reponse partielle", "réponse partielle",
+                "pseudo-progression", "radionecrose", "radionécrose",
+                "réponse complète", "reponse complete", "rémission", "remission", "stabilisation",
             ),
             "terminal": (
                 "terminal", "terminale", "fin de vie",
                 "soins palliatifs", "phase terminale",
+                "deces", "décès", "exitus", "soins de confort",
+                "soins de support", "dégradation de l'état général", "degradation de l'etat general",
             ),
             # "autre" intentionally empty
         },
@@ -612,11 +703,11 @@ CONTROLLED_REGISTRY_EN: dict[str, FieldVocabConfig] = {
         cats=_IHC_CATS_EN),
 
     "ihc_p53": _cfg("ihc_p53",
-        ids=("p53", "tp53", "p53 protein"),
+        ids=("p53", "tp53", "p53 protein", "anti-p53"),
         cats=_IHC_CATS_EN),
 
     "ihc_atrx": _cfg("ihc_atrx",
-        ids=("atrx",),
+        ids=("atrx", "anti-atrx"),
         cats=_IHC_CATS_EN),
 
     "ihc_fgfr3": _cfg("ihc_fgfr3",
@@ -649,7 +740,7 @@ CONTROLLED_REGISTRY_EN: dict[str, FieldVocabConfig] = {
         cats=_IHC_CATS_EN),
 
     "ihc_ki67": _cfg("ihc_ki67",
-        ids=("ki67", "ki-67", "ki 67", "proliferation index"),
+        ids=("ki67", "ki-67", "ki 67", "proliferation index", "mib1", "mib-1"),
         cats=_IHC_CATS_EN),
 
     "ihc_mmr": _cfg("ihc_mmr",
@@ -688,7 +779,7 @@ CONTROLLED_REGISTRY_EN: dict[str, FieldVocabConfig] = {
         cats=_MOL_CATS_EN),
 
     "mol_mgmt": _cfg("mol_mgmt",
-        ids=("mgmt", "mgmt promoter", "mgmt methylation"),
+        ids=("mgmt", "mgmt promoter", "mgmt methylation", "o6-methylguanine"),
         cats=_MOL_MGMT_CATS_EN),
 
     "mol_fgfr1": _cfg("mol_fgfr1",
@@ -726,12 +817,12 @@ CONTROLLED_REGISTRY_EN: dict[str, FieldVocabConfig] = {
     # ── Chromosomal fields ────────────────────────────────────────────
     "ch1p": _cfg("ch1p",
         ids=("1p", "chromosome 1p", "del(1p)", "short arm of chromosome 1",
-             "1p codeletion"),
+             "1p codeletion", "1p/19q", "1p19q", "1p/19q codeletion"),
         cats=_CHR_CATS_EN),
 
     "ch19q": _cfg("ch19q",
         ids=("19q", "chromosome 19q", "del(19q)", "long arm of chromosome 19",
-             "19q codeletion"),
+             "19q codeletion", "1p/19q", "1p19q", "1p/19q codeletion"),
         cats=_CHR_CATS_EN),
 
     "ch10p": _cfg("ch10p",
@@ -811,7 +902,7 @@ CONTROLLED_REGISTRY_EN: dict[str, FieldVocabConfig] = {
         cats={
             "gauche": ("left",),
             "droite": ("right",),
-            "bilateral": ("bilateral", "both sides", "bilateral"),
+            "bilateral": ("bilateral", "both sides"),
             "median": ("midline", "median", "central"),
         },
         half_win=100),
@@ -823,10 +914,14 @@ CONTROLLED_REGISTRY_EN: dict[str, FieldVocabConfig] = {
             "exerese complete": (
                 "gross total resection", "gtr", "complete resection",
                 "total resection", "complete excision",
+                "macroscopically complete",
+                "gross total excision",
             ),
             "exerese partielle": (
                 "subtotal resection", "str", "partial resection",
                 "incomplete resection", "partial excision",
+                "near total resection", "ntr", "debulking",
+                "tumor reduction", "incomplete excision",
             ),
             "biopsie": (
                 "biopsy", "stereotactic biopsy", "needle biopsy",
@@ -848,10 +943,21 @@ CONTROLLED_REGISTRY_EN: dict[str, FieldVocabConfig] = {
             "initial": (
                 "initial", "first consultation",
                 "initial workup", "initial diagnosis",
+                "newly diagnosed", "de novo",
+            ),
+            "progression": (
+                "progression", "recurrence", "relapse", "worsening",
+                "disease progression", "tumor growth", "clinical deterioration",
+            ),
+            "reponse / stable": (
+                "stable disease", "partial response",
+                "pseudoprogression", "radionecrosis",
+                "stable", "complete response", "remission", "disease stabilization",
             ),
             "terminal": (
                 "terminal", "end of life", "palliative care",
                 "terminal phase",
+                "supportive care", "hospice",
             ),
         },
         half_win=100),
