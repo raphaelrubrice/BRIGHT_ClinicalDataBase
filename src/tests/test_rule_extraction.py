@@ -185,12 +185,12 @@ class TestMolecularExtraction:
     def test_idh1_r132h(self):
         results = extract_molecular("IDH1 : R132H")
         assert "mol_idh1" in results
-        assert results["mol_idh1"].value == "mute"
+        assert results["mol_idh1"].value.startswith("mute")
 
     def test_tert_mute_c228t(self):
         results = extract_molecular("TERT muté C228T")
         assert "mol_tert" in results
-        assert results["mol_tert"].value == "mute"
+        assert results["mol_tert"].value.startswith("mute")
 
     def test_mgmt_non_methyle(self):
         results = extract_molecular("MGMT : non méthylé")
@@ -215,7 +215,7 @@ class TestMolecularExtraction:
     def test_pten_mute(self):
         results = extract_molecular("PTEN muté")
         assert "mol_pten" in results
-        assert results["mol_pten"].value == "mute"
+        assert results["mol_pten"].value.startswith("mute")
 
     def test_pas_de_mutation_idh1(self):
         """Negated mutation pattern -> wt."""
@@ -226,7 +226,7 @@ class TestMolecularExtraction:
     def test_mutation_du_promoteur_tert(self):
         results = extract_molecular("mutation du promoteur TERT (C228T)")
         assert "mol_tert" in results
-        assert results["mol_tert"].value == "mute"
+        assert results["mol_tert"].value.startswith("mute")
 
     # --- Negative examples ---
 
@@ -603,7 +603,7 @@ class TestRunRuleExtraction:
         assert results["ihc_atrx"].value == "negatif"
 
         assert "mol_idh1" in results
-        assert results["mol_idh1"].value == "mute"
+        assert results["mol_idh1"].value.startswith("mute")
 
         assert "mol_tert" in results
         assert results["mol_tert"].value == "wt"

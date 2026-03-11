@@ -683,6 +683,9 @@ def extract_molecular(text: str) -> dict[str, ExtractionValue]:
 
     def _set(field_name: str, value: str, raw: str, start: int, end: int) -> None:
         if field_name not in results:
+            if value == "mute":
+                value = f"mute ({raw.strip()})"
+            
             results[field_name] = ExtractionValue(
                 value=value,
                 source_span=raw,
@@ -706,10 +709,7 @@ def extract_molecular(text: str) -> dict[str, ExtractionValue]:
             # Check for variant pattern
             variant_match = _VARIANT_PATTERN.search(status_raw)
             if variant_match:
-                if field_name == "mol_braf":
-                    normalised = variant_match.group()
-                else:
-                    normalised = "mute"
+                normalised = "mute"
             else:
                 normalised = status_raw
 

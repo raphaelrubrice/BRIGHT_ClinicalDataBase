@@ -542,7 +542,7 @@ class TestMolecularExtendedAliases:
         """'mutation identifiée' should map to mute."""
         result = extract_molecular("BRAF : mutation identifiée")
         assert "mol_braf" in result
-        assert result["mol_braf"].value == "mute"
+        assert result["mol_braf"].value.startswith("mute")
 
     def test_mgmt_methyle(self):
         """MGMT méthylé should be captured."""
@@ -564,7 +564,7 @@ class TestMolecularExtendedAliases:
         """IDH1 R132H variant should be detected as mute."""
         result = extract_molecular("IDH1 : R132H")
         assert "mol_idh1" in result
-        assert result["mol_idh1"].value == "mute"
+        assert result["mol_idh1"].value.startswith("mute")
 
     def test_statut_wt(self):
         result = extract_molecular("IDH1 : statut WT")

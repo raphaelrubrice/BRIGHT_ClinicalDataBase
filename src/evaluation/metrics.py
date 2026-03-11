@@ -126,6 +126,15 @@ def compute_per_feature_metrics(
             elif " + " in p_val_norm and " + " in g_val_norm:
                 p_val_norm = " + ".join(sorted(p_val_norm.split(" + ")))
                 g_val_norm = " + ".join(sorted(g_val_norm.split(" + ")))
+            elif p_val_norm.startswith("mute (") and g_val_norm.startswith("mute ("):
+                p_span = p_val_norm[6:-1]
+                g_span = g_val_norm[6:-1]
+                if fuzz.ratio(p_span, g_span) >= _FUZZY_THRESHOLD:
+                    p_val_norm = g_val_norm
+            elif g_val_norm == "mute" and p_val_norm.startswith("mute ("):
+                # Backwards compatibility: GS assumes "mute" without span
+                p_val_norm = g_val_norm
+
         
         if p_val_norm == g_val_norm:
             if p_val_norm is not None:

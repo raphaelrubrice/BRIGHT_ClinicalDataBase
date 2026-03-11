@@ -86,15 +86,17 @@ class ControlledVocab:
     def is_valid_molecular(value: str) -> bool:
         """Return *True* if *value* is an accepted molecular status.
 
-        Accepts ``wt``, ``mute``, ``autre``, or specific variant strings (e.g.
-        ``R132H``, ``C228T``, ``V600E``, ``mute + delete``).
+        Accepts ``wt``, ``mute``, ``autre``, specific variant strings (e.g.
+        ``R132H``, ``C228T``, ``V600E``, ``mute + delete``), or ``mute ({span})``.
         """
         if value == "NA":
             return True
         if value in ControlledVocab.MOLECULAR_STATUS:
             return True
+        if str(value).startswith("mute (") and str(value).endswith(")"):
+            return True
         # Accept specific variant patterns (alphanumeric + optional combinators)
-        if re.fullmatch(r"[A-Za-z0-9_+/ .-]+", value) and len(value) <= 50:
+        if re.fullmatch(r"[A-Za-z0-9_+/ .-]+", str(value)) and len(str(value)) <= 200:
             return True
         return False
 
