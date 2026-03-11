@@ -95,7 +95,22 @@ def _get_norm_map() -> dict[str, str]:
 # Main matching function
 # ---------------------------------------------------------------------------
 
+_match_cache: dict[tuple, tuple] = {}
+
 def match_to_vocab(
+    span_text: str,
+    allowed_values: set[str],
+    field_name: str = "",
+    language: Optional[str] = None,
+) -> tuple[str, float]:
+    key = (span_text.lower().strip(), frozenset(allowed_values), field_name)
+    if key in _match_cache:
+        return _match_cache[key]
+    result = _match_to_vocab_impl(span_text, allowed_values, field_name, language)
+    _match_cache[key] = result
+    return result
+
+def _match_to_vocab_impl(
     span_text: str,
     allowed_values: set[str],
     field_name: str = "",

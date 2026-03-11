@@ -1,6 +1,55 @@
 # **BRIGHT Clinical Features DataBase**
 To build a clinical database from medical reports for the BRIGHT team at Institut de Neurologie at Hopital Pitié-Salpêtrière.
 
+## **Installation**
+
+The extraction pipeline uses `onnxruntime` and `gliner2-onnx` for maximum inference speed compared to standard PyTorch.
+
+### 1. Prerequisites
+- **conda** and **pip** installed.
+- **Git** installed.
+- Access to Hugging Face models (you will be prompted for an HF token).
+
+### 2. Base Environment
+
+Create and activate a virtual environment:
+```bash
+conda create -n bright_db python=3.12
+conda activate bright_db
+conda config --add channels conda-forge
+```
+
+Clone this repository:
+```bash
+git clone https://github.com/raphaelrubrice/BRIGHT_ClinicalDataBase.git
+cd BRIGHT_ClinicalDataBase
+```
+
+### 3. Setup Scripts
+
+Run the appropriate setup script for your operating system. These scripts will:
+- Install base Python dependencies (PyTorch, PyMuPDF, `edsnlp`, etc.)
+- Prompt for your Hugging Face token.
+- Clone and install `eds-pseudo`.
+
+**For UNIX (Linux / macOS):**
+```bash
+bash scripts/setup.sh
+pip install -r requirements.txt
+```
+
+**For Windows (PowerShell):**
+```powershell
+# Ensure execution of scripts is allowed
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+
+.\scripts\setup.ps1
+pip install -r requirements.txt
+```
+
+### 4. PyTorch Fallback
+The `gliner2-onnx` backend is configured to automatically download and run the ONNX model optimized for inference. If downloading or loading the ONNX model fails for any reason, the pipeline is designed to gracefully fall back to standard `gliner` via PyTorch eager-execution automatically.
+
 ## **Architecture: GLiNER-First Extraction**
 
 The extraction pipeline leverages a **GLiNER-first** approach, operating purely on discriminative encoder models and rule-based NLP to ensure fast, deterministic, and resource-efficient processing on standard hardware.
@@ -168,26 +217,3 @@ The database extracts 111 specific clinical and biological features.
 | `rx_fractionnement` | Fractionnement radiothérapie | treatment_radio | Free text / String |
 | `corticoides` | Corticoïdes | adjunct | 'non', 'oui' |
 | `optune` | Optune (TTFields) | adjunct | 'non', 'oui' |
-
-## **Installation**
-1) Ensure you have a working `conda` and `pip` installed.
-2) Create a virtual environment and activate it:
-```bash
-conda create -n bright_db python=3.12
-conda activate bright_db
-```
-3) Clone this repo:
-```bash
-git clone https://github.com/raphaelrubrice/BRIGHT_ClinicalDataBase.git
-cd BRIGHT_ClinicalDataBase
-```
-4) Ensure that you have the appropriate channels ready first:
-```bash
-conda config --add channels conda-forge
-```
-5) Run the setup script to install dependencies (PyMuPDF, PyTorch, EDS-pseudo, GLiNER, EDS-NLP):
-```bash
-bash scripts/setup.sh
-pip install -r requirements.txt
-```
-> **Note:** You may need access to specific Hugging Face models (like AP-HP/eds-pseudo-public) depending on your pseudonymization usage.

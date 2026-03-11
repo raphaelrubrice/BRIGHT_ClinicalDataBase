@@ -751,21 +751,37 @@ class GlinerExtractor:
     def __init__(
         self,
         model_name: str = "urchade/gliner_multi-v2.1",
-        chunk_size: int = 180,
+        chunk_size: int = 220,
         chunk_overlap: int = 40,
         batching_strategy: str = "heterogeneous",
+        backend: str = "gliner2_onnx",
     ):
         self._model_name = model_name
         self._model = None  # Lazy loading
         self._chunk_size = chunk_size
         self._chunk_overlap = chunk_overlap
         self._batching_strategy = BatchingStrategy(batching_strategy)
+        self._backend = backend
 
     def _ensure_model(self) -> None:
         if self._model is not None:
             return
+            
+        try:
+            if self._backend == "gliner2_onnx":
+                from gliner2_onnx import GLiNER2ONNXRuntime
+                logger.info("Loading gliner2_onnx engine")
+                self._model = GLiNER2ONNXRuntime.from_pretrained("lmo3/gliner2-multi-v1-onnx")
+                return
+        except Exception as e:
+            logger.warning("Failed to load gliner2_onnx backend, falling back to pytorch: %s", e)
+            self._backend = "pytorch"
+
+        # PyTorch fallback
+        logger.info("Loading pytorch engine")
         from gliner import GLiNER
         self._model = GLiNER.from_pretrained(self._model_name, load_onnx_model=False)
+        self._model.eval()
 
     @staticmethod
     def detect_language(text: str) -> str:
@@ -853,6 +869,21 @@ class GlinerExtractor:
             (name, config) for name, config in SEMANTIC_BATCHES.items()
         ]
 
+    def _process_entity(self, label_text: str, score: float, span_text: str, batch_fields: set[str], language: str, extraction_state: dict[str, tuple]):
+        field_name = _REVERSE_DESC_MAP.get(label_text)
+        if not field_name or field_name not in batch_fields:
+            return
+
+        threshold = _CONFIDENCE_THRESHOLDS.get(field_name, _DEFAULT_THRESHOLD)
+        if score < threshold:
+            return
+
+        norm_val = self._postprocess_span(field_name, span_text, language)
+
+        existing = extraction_state.get(field_name)
+        if existing is None or score > existing[1]:
+            extraction_state[field_name] = (norm_val, score, span_text, None, None)
+
     def extract(
         self,
         text: str,
@@ -873,7 +904,6 @@ class GlinerExtractor:
 
         use_context = self._batching_strategy == BatchingStrategy.SEMANTIC_CONTEXT
         batches = self._resolve_batches(target_fields, language)
-        label_key = "labels_fr" if language.startswith("fr") else "labels_en"
         desc_map = FIELD_DESCRIPTIONS_FR if language.startswith("fr") else FIELD_DESCRIPTIONS_EN
 
         # Optional tqdm progress bars
@@ -885,6 +915,7 @@ class GlinerExtractor:
         else:
             tqdm = None
 
+        # Sequential processing for other backends
         chunk_iter = enumerate(chunks)
         if tqdm is not None:
             chunk_iter = tqdm(chunk_iter, total=len(chunks), desc="GLiNER chunks", unit="chunk")
@@ -896,6 +927,13 @@ class GlinerExtractor:
 
             for batch_name, batch_config in batch_iter:
                 batch_fields = batch_config["fields"] & target_fields
+
+                # Skip fields already extracted with high confidence
+                batch_fields = {
+                    f for f in batch_fields
+                    if f not in extraction_state or extraction_state[f][1] < 0.8
+                }
+
                 if not batch_fields:
                     continue
 
@@ -912,26 +950,14 @@ class GlinerExtractor:
                 if not labels:
                     continue
 
-                entities = self._model.predict_entities(augmented_text, labels, threshold=0.1)
-
-                for ent in entities:
-                    label_text = ent["label"]
-                    score = ent["score"]
-                    span_text = ent["text"]
-
-                    field_name = _REVERSE_DESC_MAP.get(label_text)
-                    if not field_name or field_name not in batch_fields:
-                        continue
-
-                    threshold = _CONFIDENCE_THRESHOLDS.get(field_name, _DEFAULT_THRESHOLD)
-                    if score < threshold:
-                        continue
-
-                    norm_val = self._postprocess_span(field_name, span_text, language)
-
-                    existing = extraction_state.get(field_name)
-                    if existing is None or score > existing[1]:
-                        extraction_state[field_name] = (norm_val, score, span_text, None, None)
+                if self._backend == "gliner2_onnx":
+                    entities = self._model.extract_entities(augmented_text, labels, threshold=0.35)
+                    for ent in entities:
+                        self._process_entity(ent.label, ent.score, ent.text, batch_fields, language, extraction_state)
+                else:
+                    entities = self._model.predict_entities(augmented_text, labels, threshold=0.35)
+                    for ent in entities:
+                        self._process_entity(ent["label"], ent["score"], ent["text"], batch_fields, language, extraction_state)
 
         results = {}
         for f, (v, s, span, _, _) in extraction_state.items():
