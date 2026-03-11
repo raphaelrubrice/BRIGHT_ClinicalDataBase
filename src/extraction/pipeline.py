@@ -18,6 +18,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor
 from typing import Optional
 
+from .date_extractor import DateExtractor
 from .document_classifier import DocumentClassifier
 from .provenance import ExtractionResult
 from .eds_extractor import EDSExtractor
@@ -26,6 +27,7 @@ from .negation import AssertionAnnotator
 from .rule_extraction import run_rule_extraction
 from .schema import (
     ExtractionValue,
+    FieldType,
     FEATURE_ROUTING,
     ALL_FIELDS_BY_NAME,
     MappingType,
@@ -210,6 +212,7 @@ class ExtractionPipeline:
             )
 
         self._assertion_annotator = AssertionAnnotator() if use_negation else None
+        self._date_extractor = DateExtractor()
 
     # -- Language detection ---------------------------------------------------
 
@@ -230,6 +233,7 @@ class ExtractionPipeline:
         text: str,
         document_id: str = "",
         patient_id: str = "",
+        consultation_date: str | None = None,
     ) -> ExtractionResult:
         """Run the full extraction pipeline on a single document.
 
@@ -241,6 +245,10 @@ class ExtractionPipeline:
             Unique document identifier.
         patient_id : str
             Patient identifier (pseudonymised).
+        consultation_date : str | None
+            Consultation / document date in DD/MM/YYYY format.  Used by
+            the ``DateExtractor`` to exclude it from clinical date
+            assignment.  If ``None``, auto-detected via regex.
 
         Returns
         -------
@@ -323,24 +331,61 @@ class ExtractionPipeline:
                 set(ALL_BIO_FIELD_NAMES + ALL_CLINIQUE_FIELD_NAMES)
             )
 
+        # Split date fields from non-date fields
+        date_fields = [
+            f for f in feature_subset
+            if f in ALL_FIELDS_BY_NAME
+            and ALL_FIELDS_BY_NAME[f].field_type == FieldType.DATE
+        ]
+        non_date_fields = [f for f in feature_subset if f not in date_fields]
+
         result.add_log(
-            f"Feature subset: {len(feature_subset)} fields to extract."
+            f"Feature subset: {len(feature_subset)} fields to extract "
+            f"({len(date_fields)} date, {len(non_date_fields)} non-date)."
         )
         if _v:
-            print(f"           → {len(feature_subset)} fields targeted for extraction")
+            print(f"           → {len(feature_subset)} fields targeted "
+                  f"({len(date_fields)} date, {len(non_date_fields)} non-date)")
 
         # -----------------------------------------------------------------
-        # Step 5: PRIMARY — GLiNER extraction (runs FIRST)
+        # Step 5: Date extraction (dedicated DateExtractor)
         # -----------------------------------------------------------------
         if _v:
-            print("[Step 5/11] Running GLiNER primary extraction...")
+            print("[Step 5/12] Running dedicated date extraction...")
+        date_results: dict[str, ExtractionValue] = {}
+        if date_fields and self._date_extractor:
+            t_date_start = time.perf_counter()
+            try:
+                date_results = self._date_extractor.extract(
+                    text=text,
+                    feature_subset=date_fields,
+                    language=language,
+                    consultation_date=consultation_date,
+                )
+            except Exception as exc:
+                result.add_log(f"DateExtractor failed: {exc}")
+                logger.error("DateExtractor failed: %s", exc)
+
+            t_date_elapsed = (time.perf_counter() - t_date_start) * 1000
+            result.add_log(
+                f"DateExtractor: extracted {len(date_results)} date fields "
+                f"in {t_date_elapsed:.0f}ms."
+            )
+            if _v:
+                print(f"           → {len(date_results)} date fields in {t_date_elapsed:.0f}ms")
+
+        # -----------------------------------------------------------------
+        # Step 6: PRIMARY — GLiNER extraction (non-date fields)
+        # -----------------------------------------------------------------
+        if _v:
+            print("[Step 6/12] Running GLiNER primary extraction...")
         gliner_results: dict[str, ExtractionValue] = {}
         if self._gliner_extractor:
             t_gliner_start = time.perf_counter()
             try:
                 gliner_results = self._gliner_extractor.extract(
                     text=text,
-                    feature_subset=feature_subset,
+                    feature_subset=non_date_fields,
                     language=language,
                     verbose=_v,
                 )
@@ -358,10 +403,10 @@ class ExtractionPipeline:
                 print(f"           → {len(gliner_results)} fields extracted in {t_gliner_elapsed:.0f}ms")
 
         # -----------------------------------------------------------------
-        # Step 6: EDS-NLP Level 1 — Qualifier identification for GLiNER
+        # Step 7: EDS-NLP Level 1 — Qualifier identification for GLiNER
         # -----------------------------------------------------------------
         if _v:
-            print("[Step 6/11] Running EDS-NLP qualifier annotation...")
+            print("[Step 7/12] Running EDS-NLP qualifier annotation...")
         if self._assertion_annotator and gliner_results:
             qualified_count = 0
             for field_name, ev in list(gliner_results.items()):
@@ -394,23 +439,23 @@ class ExtractionPipeline:
                 print(f"           → {qualified_count} entities qualified (negation/hypothesis/history)")
 
         # -----------------------------------------------------------------
-        # Step 7: EDS-NLP Level 2 / Rules — Standalone extraction
+        # Step 8: EDS-NLP Level 2 / Rules — Standalone extraction (non-date)
         # -----------------------------------------------------------------
         if _v:
-            print("[Step 7/11] Running EDS-NLP / Rules standalone extraction...")
+            print("[Step 8/12] Running EDS-NLP / Rules standalone extraction...")
         t_eds_start = time.perf_counter()
         if self.use_eds and self._eds_extractor:
             eds_results = self._eds_extractor.extract(
                 text=text,
                 sections=sections,
-                feature_subset=feature_subset,
+                feature_subset=non_date_fields,
             )
             result.add_log("EDS-NLP Level 2: standalone extraction.")
         else:
             eds_results = run_rule_extraction(
                 text=text,
                 sections=sections,
-                feature_subset=feature_subset,
+                feature_subset=non_date_fields,
             )
             result.add_log("EDS-NLP Level 2: Regex fallback (legacy logic).")
         t_eds_elapsed = (time.perf_counter() - t_eds_start) * 1000
@@ -424,10 +469,10 @@ class ExtractionPipeline:
             print(f"           → {len(eds_results)} fields extracted in {t_eds_elapsed:.0f}ms")
 
         # -----------------------------------------------------------------
-        # Step 8: Merge GLiNER + EDS (GLiNER precedence)
+        # Step 9: Merge GLiNER + EDS + Dates (GLiNER precedence for non-date)
         # -----------------------------------------------------------------
         if _v:
-            print("[Step 8/11] Merging GLiNER + EDS results (GLiNER precedence)...")
+            print("[Step 9/12] Merging GLiNER + EDS + Date results...")
         merged: dict[str, ExtractionValue] = {}
         synergy_count = 0
 
@@ -455,22 +500,26 @@ class ExtractionPipeline:
                 # EDS fallback for fields GLiNER missed
                 merged[fname] = e
 
+        # Inject date results (DateExtractor has sole authority over date fields)
+        merged.update(date_results)
+
         result.features = merged
         result.add_log(
             f"Merged: {len(merged)} total features "
-            f"({result.gliner_count} GLiNER + {result.tier1_count} EDS/Rules)."
+            f"({result.gliner_count} GLiNER + {result.tier1_count} EDS/Rules "
+            f"+ {len(date_results)} dates)."
         )
         if _v:
-            eds_only = len(merged) - result.gliner_count
+            eds_only = len(merged) - result.gliner_count - len(date_results)
             print(f"           → {len(merged)} total features "
                   f"({result.gliner_count} GLiNER, {max(0, eds_only)} EDS-only fallback, "
-                  f"{synergy_count} synergy-boosted)")
+                  f"{len(date_results)} dates, {synergy_count} synergy-boosted)")
 
         # -----------------------------------------------------------------
-        # Step 9: Validate against controlled vocabularies
+        # Step 10: Validate against controlled vocabularies
         # -----------------------------------------------------------------
         if _v:
-            print("[Step 9/11] Validating against controlled vocabularies...")
+            print("[Step 10/12] Validating against controlled vocabularies...")
         validate_extraction(merged)
         vocab_flagged = [
             fname for fname, ev in merged.items()
@@ -487,10 +536,10 @@ class ExtractionPipeline:
             print(f"           → {len(vocab_flagged)} fields flagged out of vocabulary")
 
         # -----------------------------------------------------------------
-        # Step 10: Validate source spans
+        # Step 11: Validate source spans
         # -----------------------------------------------------------------
         if _v:
-            print("[Step 10/11] Validating source spans...")
+            print("[Step 11/12] Validating source spans...")
         validate_source_spans(merged, text)
         span_flagged = [
             fname for fname, ev in merged.items()
@@ -507,10 +556,10 @@ class ExtractionPipeline:
             print(f"           → {len(span_flagged)} additional fields flagged")
 
         # -----------------------------------------------------------------
-        # Step 11: Build flagged-for-review list
+        # Step 12: Build flagged-for-review list
         # -----------------------------------------------------------------
         if _v:
-            print("[Step 11/11] Building flagged-for-review list...")
+            print("[Step 12/12] Building flagged-for-review list...")
         result.update_flagged_from_features()
         result.add_log(
             f"Total flagged for review: {len(result.flagged_for_review)} fields."
