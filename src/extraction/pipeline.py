@@ -596,8 +596,10 @@ class ExtractionPipeline:
             # --- NEW: Print detailed field-by-field breakdown ---
             if merged:
                 print("\n           ▼ Extracted Values Breakdown:")
-                print(f"             {'Field Name':<30} | {'Value':<38} | {'Source':<12} | {'Conf':<5}")
-                print(f"             {'-'*30}-+-{'-'*38}-+-{'-'*12}-+-{'-'*5}")
+                # We reduced the widths of the columns slightly here to prevent standard 
+                # terminal windows from wrapping the text to the next line.
+                print(f"             {'Field Name':<28} | {'Value':<30} | {'Source':<11} | {'Conf'}")
+                print(f"             {'-'*28}-+-{'-'*30}-+-{'-'*11}-+-{'-'*4}")
                 for fname, ev in sorted(merged.items()):
                     # Determine exact source of the extraction for logging
                     if fname in date_results:
@@ -616,11 +618,11 @@ class ExtractionPipeline:
                         src = "Unknown"
 
                     val_repr = repr(ev.value)
-                    if len(val_repr) > 38:
-                        val_repr = val_repr[:35] + "..."
+                    if len(val_repr) > 30:
+                        val_repr = val_repr[:27] + "..."
                     
                     conf_str = f"{ev.confidence:.2f}" if ev.confidence is not None else "N/A"
-                    print(f"             {fname:<30} | {val_repr:<38} | {src:<12} | {conf_str:<5}")
+                    print(f"             {fname:<28} | {val_repr:<30} | {src:<11} | {conf_str}")
                 print()
 
         # -----------------------------------------------------------------
@@ -799,3 +801,78 @@ class ExtractionPipeline:
             logger.warning(error_msg)
             
             return run_sequential()
+
+if __name__ == "__main__":
+    # Toy example to demonstrate pipeline execution
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    
+    print("--- Initializing Pipeline ---")
+    pipeline = ExtractionPipeline(verbose=True, n_jobs=1)
+    
+    sample_text = (
+        """
+[PHI_VILLE_00C6D50AEF]
+[PHI_DATE_NAISSANCE_0468266DDC]
+Références : MTO/MRO
+Compte-Rendu de consultation du [DATE_ABA2C99D41]
+Monsieur [PERSON_FBBA500A85] [PERSON_97E34FEF2C], né le [PHI_DATE_NAISSANCE_9688CD0E2B], âgé de 48 ans, a été vu en consultation.
+Motif
+Prise en charge d'un glioblastome pariétal gauche IDH 1/2 non muté
+Antécédents et allergies
+Allergies :
+- Pas d'allergie connue
+Antécédents familiaux :
+- Grand-mère paternelle : glioblastome
+Père : cancer prostate
+Mère : [PERSON_A2BE91B1B5]
+2 frères : [PERSON_9BF0B566F1], cancer testicule
+2 enfants : [PERSON_A2BE91B1B5]
+- Biologie ([DATE_2887B29EC2]) : Hb 15.9 g/dl, PNN 2830/mm 3, lymphocytes 2500/mm 3, plaquettes
+171763.000/mm 3, créatininémie 87 µmol/l, iono, bilan hépatique sans anomalie notable.
+- IRM cérébrale ([DATE_EE0A5608C5]) : poursuite d'une lente majoration de la lésion rehaussée pariétale
+gauche, dont les caractéristiques perfusionnelles sont en faveur d'une pseudo-progression (sous
+réserve d'une perfusion ASL non interprétable) : rupture de barrière sans néoangiogenèse en
+perfusion DSC, ni signe d'hypercellularité.
+Imprimé le [DATE_EB2281C628] 16:59
+CR CONSULTATION PSL CONSULT NEURO-ONCO
+Pat.: [PERSON_97E34FEF2C] [PERSON_FBBA500A85] | M | [PHI_DATE_NAISSANCE_9688CD0E2B] | INS/NIR : [ID_2C2E3C6F13] | [PHI_NDA_F33890BBBC] | [PHI_NDA_F4416A9037]
+Courrier non validé
+* Prochaine cs avec IRM cérébrale dans 2 mois.
+Consultation du [DATE_ABA2C99D41] :
+- Vu avec son épouse.
+- Stabilité des troubles phasiques résiduels (paraphasies, manque du mot, compréhension
+préservée). Pas de signe d'HTIC. Pas de crise comitiale récente.
+- Pas de fièvre ni évènement intercurrent récent.
+- Cliniquement, KPS 90%, 95 kg, 193 cm. Examen neurologique : orientation temporo-spatiale
+normale, discrètes paraphasies, marche possible sans aide, pas de déficit moteur ni sensitif,
+quadranopsie latérale homonyme inférieure droite partielle, pas de syndrome cérébelleux ni
+atteinte des autres paires crâniennes. Examen général sans particularité.
+- Biologie ([DATE_4F3012EC77]) : NFS, iono, bilan hépatique sans anomalie notable.
+- IRM cérébrale ([DATE_0F861C83AC]) : très minime majoration de la plage hypersignal FLAIR péri-
+cavitaire le long du corps calleux à gauche. Stabilité du petit rehaussement punctiforme
+précédemment apparu.
+- Conclusion :
+* Stabilité clinique et radiologique.
+* Prochaine cs avec IRM cérébrale dans 2 mois.
+Examen clinique
+Poids : 93 kg ([DATE_135A327D58]), Taille : 193 cm ([DATE_135A327D58]), IMC : 25 kg/m 2, SC 2.2 m 2
+Rendez-vous pris
+Planification des soins / Suites à donner
+- [DATE_62751A3490] à 14:30 : ([PHI_HOPITAL_A994C995ED])
+"""
+    )
+    
+    print("\n--- Running Extraction ---")
+    result = pipeline.extract_document(
+        text=sample_text,
+        document_id="toy_doc_001",
+        patient_id="toy_pat_123",
+        consultation_date="12/05/2023"
+    )
+    
+    print("\n--- Final Output Summary ---")
+    print(f"Document ID: {result.document_id}")
+    print(f"Patient ID: {result.patient_id}")
+    print(f"Document Type: {result.document_type}")
+    print(f"Total Features Extracted: {len(result.features)}")
+    print(f"Flagged for Review: {len(result.flagged_for_review)} fields")

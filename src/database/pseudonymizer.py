@@ -154,7 +154,7 @@ class TextPseudonymizer:
             "ADRESSE": "[ADDRESS_{token}]",
             "ZIP": "[ZIP_{token}]",
             "VILLE": "[VILLE_{token}]",
-            "HOPITAL": "[HOPITAL_{token}]",
+            # "HOPITAL": "[HOPITAL_{token}]", we want to identify localization
             "IPP": "[IPP_{token}]",
             "NDA": "[NDA_{token}]",
             "SECU": "[SSID_{token}]"
