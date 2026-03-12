@@ -580,6 +580,11 @@ class ExtractionPipeline:
         merged.update(date_results)
 
         result.features = merged
+        result.date_results = date_results
+        result.controlled_results = controlled_results
+        result.gliner_results = gliner_results
+        result.eds_results = eds_results
+        
         result.add_log(
             f"Merged: {len(merged)} total features "
             f"({result.gliner_count} GLiNER + {result.tier1_count} EDS/Rules "

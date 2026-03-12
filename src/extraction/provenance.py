@@ -63,6 +63,13 @@ class ExtractionResult:
     document_date: Optional[str] = None
     patient_id: str = ""
     features: dict[str, ExtractionValue] = field(default_factory=dict)
+    
+    # Per-extractor intermediate results for performance benchmarks
+    date_results: dict[str, ExtractionValue] = field(default_factory=dict)
+    controlled_results: dict[str, ExtractionValue] = field(default_factory=dict)
+    gliner_results: dict[str, ExtractionValue] = field(default_factory=dict)
+    eds_results: dict[str, ExtractionValue] = field(default_factory=dict)
+    
     sections_detected: list[str] = field(default_factory=list)
     extraction_log: list[str] = field(default_factory=list)
     flagged_for_review: list[str] = field(default_factory=list)
