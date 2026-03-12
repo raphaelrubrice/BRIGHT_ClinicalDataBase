@@ -219,6 +219,7 @@ class ExtractionPipeline:
         use_negation: bool = True,
         use_eds: bool = True,
         use_gliner: bool = True,
+        use_disambiguator: bool = False,
         gliner_model: str = "urchade/gliner_multi-v2.1",
         batching_strategy: str = "heterogeneous",
         verbose: bool = False,
@@ -227,6 +228,7 @@ class ExtractionPipeline:
         self.use_negation = use_negation
         self.use_eds = use_eds
         self.use_gliner = use_gliner
+        self.use_disambiguator = use_disambiguator
         self.gliner_model = gliner_model
         self.batching_strategy = batching_strategy
         self.verbose = verbose
@@ -243,6 +245,7 @@ class ExtractionPipeline:
             self._gliner_extractor = GlinerExtractor(
                 model_name=gliner_model,
                 batching_strategy=batching_strategy,
+                use_disambiguator=use_disambiguator,
             )
 
         self._assertion_annotator = AssertionAnnotator() if use_negation else None
@@ -725,6 +728,7 @@ class ExtractionPipeline:
             "use_negation": self.use_negation,
             "use_eds": self.use_eds,
             "use_gliner": self.use_gliner,
+            "use_disambiguator": self.use_disambiguator,
             "gliner_model": self.gliner_model,
             "batching_strategy": self.batching_strategy,
             "verbose": self.verbose,

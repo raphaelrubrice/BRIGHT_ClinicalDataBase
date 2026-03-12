@@ -67,6 +67,8 @@ def parse_args() -> argparse.Namespace:
                         help="GLiNER field batching strategy (default: heterogeneous)")
     parser.add_argument("--parallel", type=int, default=os.cpu_count()-2,
                         help="Number of workers for parallel processing (-1 for Max CPUs, 0 or 1 for sequential processing).")
+    parser.add_argument("--use-disambiguator", action=argparse.BooleanOptionalAction, default=False,
+                        help="Enable textual context disambiguation before GLiNER")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_DIR,
                         help="Path to output directory (created if missing)")
     return parser.parse_args()
@@ -238,6 +240,7 @@ def main():
         "batching_strategy": args.batching_strategy,
         "verbose": True,
         "n_jobs": args.parallel, # Injects parallel configuration directly inside the pipeline 
+        "use_disambiguator": args.use_disambiguator,
     }
 
     pipeline = ExtractionPipeline(**pipeline_kwargs)

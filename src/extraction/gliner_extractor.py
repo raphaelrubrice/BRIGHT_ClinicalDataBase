@@ -755,7 +755,8 @@ class GlinerExtractor:
         chunk_overlap: int = 40,
         batching_strategy: str = "heterogeneous",
         backend: str = "pytorch", # "gliner2_onnx",
-        quantize_int8: bool = True,
+        quantize_int8: bool = False,
+        use_disambiguator: bool = False,
     ):
         self._model_name = model_name
         self._model = None  # Lazy loading
@@ -764,6 +765,11 @@ class GlinerExtractor:
         self._batching_strategy = BatchingStrategy(batching_strategy)
         self._backend = backend
         self._quantize_int8 = quantize_int8
+        
+        self._disambiguator = None
+        if use_disambiguator:
+            from src.extraction.disambiguator import Disambiguator
+            self._disambiguator = Disambiguator()
 
     def _ensure_model(self) -> None:
         if self._model is not None:

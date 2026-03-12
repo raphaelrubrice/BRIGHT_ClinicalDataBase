@@ -71,6 +71,7 @@ def main():
     extract_parser.add_argument("--use-gliner", action=argparse.BooleanOptionalAction, default=True, help="Enable or disable GLiNER extraction")
     extract_parser.add_argument("--batching-strategy", type=str, default="heterogeneous", choices=["semantic_context", "semantic_only", "heterogeneous"])
     extract_parser.add_argument("--parallel", type=int, default=os.cpu_count()-2, help="Number of workers for parallel processing")
+    extract_parser.add_argument("--use-disambiguator", action=argparse.BooleanOptionalAction, default=False, help="Enable textual context disambiguation before GLiNER")
 
     args, qt_args = parser.parse_known_args()
 
@@ -119,7 +120,8 @@ def main():
             output_dir=output_dir,
             use_gliner=args.use_gliner,
             batching_strategy=args.batching_strategy,
-            parallel_workers=args.parallel
+            parallel_workers=args.parallel,
+            use_disambiguator=args.use_disambiguator,
         )
     else:
         parser.print_help()
