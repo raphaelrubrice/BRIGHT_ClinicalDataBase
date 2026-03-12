@@ -14,11 +14,8 @@ unmodified document text.
 from __future__ import annotations
 
 import logging
-import re
-from typing import Callable
+from typing import Callable, Optional
 from rapidfuzz import fuzz
-
-from src.extraction.text_normalisation import normalise
 
 logger = logging.getLogger(__name__)
 
@@ -186,16 +183,26 @@ _DISAMBIGUATION_EN: dict[str, dict[str, list[str] | str]] = {
 
 
 # ───────────────────────────────────────────────────────────────────────
-# Helpers
+# Lazy-loaded spaCy models (Aligned with similarity.py pattern)
 # ───────────────────────────────────────────────────────────────────────
 
-_SHORT_TERM_MAX_LEN = 3
+_models: dict[str, any] = {}
 
-
-def _build_short_pattern(term: str) -> re.Pattern[str]:
-    """Compile a case-insensitive word-boundary regex for *term*."""
-    escaped = re.escape(term)
-    return re.compile(rf"\b{escaped}\b", re.IGNORECASE | re.UNICODE)
+def _get_nlp(lang: str):
+    """Lazy load the spaCy model appropriate for the given language."""
+    global _models
+    model_name = "fr_core_news_lg" if lang.startswith("fr") else "en_core_web_lg"
+    
+    if model_name not in _models:
+        try:
+            import spacy
+            logger.info("Loading spaCy model: %s for Disambiguator", model_name)
+            _models[model_name] = spacy.load(model_name)
+        except (ImportError, OSError) as exc:
+            logger.error("spaCy model %s not available. Disambiguator requires it. (%s)", model_name, exc)
+            raise
+            
+    return _models[model_name]
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -203,23 +210,66 @@ def _build_short_pattern(term: str) -> re.Pattern[str]:
 # ───────────────────────────────────────────────────────────────────────
 
 class Disambiguator:
-    """Find known clinical entities and inject context to help GLiNER."""
+    """Find known clinical entities using a spaCy-tokenized sliding window and rapidfuzz."""
 
-    # We only inject context if the term is found without another overlapping context nearby
-    _FUZZY_THRESHOLD = 90
+    def __init__(self, similarity_threshold: float = 0.85, max_context_proximity: int = 5) -> None:
+        """
+        Parameters
+        ----------
+        similarity_threshold : float
+            Threshold for rapidfuzz matching. 
+            0.85 gracefully handles typos (e.g. "temodla" instead of "temodal").
+        max_context_proximity : int
+            Maximum token distance between two identical context injections 
+            to trigger deduplication. Keeps only the latest one.
+            (e.g. 5 prevents stuttering like "essai clinique (trial) onconeurotek 2 (trial)")
+        """
+        self.similarity_threshold = similarity_threshold
+        self.max_context_proximity = max_context_proximity
+        
+        # Stores pre-tokenized terminologies by language to avoid repeated processing
+        self._processed_terms: dict[str, dict] = {"fr": None, "en": None}
 
-    def __init__(self) -> None:
-        # Pre-compile short-term patterns.
-        # Keyed by (language, category, term_normalised).
-        self._short_pats: dict[tuple[str, str, str], re.Pattern[str]] = {}
-        for reg_id, registry in (("fr", _DISAMBIGUATION_FR),
-                                 ("en", _DISAMBIGUATION_EN)):
-            for category, data in registry.items():
-                for term in data["terms"]:
-                    norm_term = normalise(term)
-                    if len(norm_term) <= _SHORT_TERM_MAX_LEN:
-                        key = (reg_id, category, norm_term)
-                        self._short_pats[key] = _build_short_pattern(norm_term)
+    def _init_language(self, language: str) -> None:
+        """Pre-tokenize all vocabulary terms using spaCy for strict alignment."""
+        reg_id = "fr" if language.startswith("fr") else "en"
+        
+        # Already initialized
+        if self._processed_terms[reg_id] is not None:
+            return
+            
+        nlp = _get_nlp(reg_id)
+        registry = _DISAMBIGUATION_FR if reg_id == "fr" else _DISAMBIGUATION_EN
+        
+        terms_list = []
+        max_tokens = 0
+        
+        for category, data in registry.items():
+            context = str(data["context"])
+            for term in data["terms"]:
+                term_norm = term.lower().strip()
+                if not term_norm:
+                    continue
+                
+                # Tokenize term using spaCy (ensures same hyphen/punctuation logic as documents)
+                doc = nlp(term_norm)
+                tokens = [t.text for t in doc if not t.is_space]
+                num_tokens = len(tokens)
+                
+                if num_tokens == 0:
+                    continue
+                    
+                max_tokens = max(max_tokens, num_tokens)
+                term_joined = " ".join(tokens)
+                terms_list.append((term_joined, num_tokens, context))
+        
+        # Sort descending by character length to prioritize compound terms
+        terms_list.sort(key=lambda x: len(x[0]), reverse=True)
+        
+        self._processed_terms[reg_id] = {
+            "terms": terms_list,
+            "max_tokens": max_tokens
+        }
 
     # ─── public API ───────────────────────────────────────────────────
 
@@ -231,7 +281,7 @@ class Disambiguator:
         text : str
             Full document text.
         language : str
-            ``"fr"`` or ``"en"`` — selects the contexts registry.
+            ``"fr"`` or ``"en"`` — selects the contexts registry and spaCy model.
 
         Returns
         -------
@@ -240,82 +290,159 @@ class Disambiguator:
             - An `offset_mapper` function `f(new_index)` -> `original_index` 
               to map slices from the modified text back to the original text.
         """
-        registry = _DISAMBIGUATION_FR if language.startswith("fr") else _DISAMBIGUATION_EN
         reg_id = "fr" if language.startswith("fr") else "en"
-
-        text_norm = normalise(text)
-
-        # 1. Collect all valid hits across all categories
-        # Each hit: (start_idx, end_idx, context_to_inject)
-        hits: list[tuple[int, int, str]] = []
-
-        for category, data in registry.items():
-            context_to_add = str(data["context"])
-            self._find_hits(
-                text_norm, text, data["terms"], reg_id, category, context_to_add, hits
-            )
-
-        if not hits:
-            # Short-circuit if nothing found. Mapper is identity.
+        
+        # Ensure vocab is parsed with spaCy for the requested language
+        self._init_language(reg_id)
+        registry_data = self._processed_terms.get(reg_id)
+        
+        if not registry_data or not registry_data["terms"]:
+            return text, lambda i: i
+            
+        terms_list = registry_data["terms"]
+        
+        # Allow max window to exceed the longest term token count by 2
+        # just in case the document separates hyphens heavily.
+        max_window = registry_data["max_tokens"] + 2
+        
+        # 1. Tokenize document using spaCy to match terminology splits
+        nlp = _get_nlp(reg_id)
+        doc = nlp(text)
+        
+        # Keep track of text tokens and exact character boundaries, skipping pure spaces
+        doc_tokens = [(t.text, t.idx, t.idx + len(t.text)) for t in doc if not t.is_space]
+        
+        if not doc_tokens:
             return text, lambda i: i
 
-        # 2. Sort hits by start position. 
-        # Handle overlaps by greedily picking the first longest one.
-        hits.sort(key=lambda h: (h[0], -(h[1] - h[0])))
+        candidate_hits: list[dict] = []
         
-        filtered_hits: list[tuple[int, int, str]] = []
-        last_end = -1
-        for start, end, ctx in hits:
-            # Skip if hit overlaps with a previously accepted hit
-            if start < last_end:
-                continue
-            
-            # Additional check: Don't inject if the context is already present right after
-            # Look ahead up to 5 characters (spaces, punctuation)
-            lookahead = text_norm[end:min(end + 5 + len(ctx), len(text_norm))]
-            if normalise(ctx) in lookahead:
+        # 2. Sliding window over the text: Collect ALL possible matches exceeding threshold
+        for i in range(len(doc_tokens)):
+            for window_size in range(1, max_window + 1):
+                if i + window_size > len(doc_tokens):
+                    break
+                    
+                window_slice = doc_tokens[i : i + window_size]
+                
+                # Join exact tokens from document
+                window_text_joined = " ".join([t[0].lower() for t in window_slice])
+                
+                # Compare against all terms using RapidFuzz
+                for term_joined, num_tokens, context in terms_list:
+                    
+                    # Optimization: skip if lengths are wildly different
+                    # (helps speed up and prevents impossible matches from evaluating)
+                    len_diff = abs(len(window_text_joined) - len(term_joined))
+                    if len_diff > max(5, len(term_joined) * 0.3):
+                        continue
+                        
+                    # Calculate Levenshtein similarity via rapidfuzz
+                    score = fuzz.ratio(window_text_joined, term_joined) / 100.0
+                    
+                    if score >= self.similarity_threshold:
+                        candidate_hits.append({
+                            "start_char": window_slice[0][1],
+                            "end_char": window_slice[-1][2],
+                            "start_tok": i,
+                            "end_tok": i + window_size,
+                            "score": score,
+                            "term_len": len(term_joined),
+                            "context": context
+                        })
+
+        if not candidate_hits:
+            return text, lambda i: i
+
+        # 3. Overlap Resolution
+        # Sort candidates by best score first, then by the length of the matched term 
+        # (this perfectly resolves the "onconeurotek 2" vs "onconeurotek 2 le" issue)
+        candidate_hits.sort(key=lambda h: (h["score"], h["term_len"]), reverse=True)
+
+        final_hits = []
+        consumed_toks = set()
+
+        for h in candidate_hits:
+            # Skip if any token in this match was already consumed by a better/longer match
+            if any(t in consumed_toks for t in range(h["start_tok"], h["end_tok"])):
                 continue
                 
-            filtered_hits.append((start, end, ctx))
-            last_end = end
+            # Anti-double injection safeguard: don't inject if context is naturally present right after
+            ctx_lower = h["context"].strip().lower()
+            lookahead_slice = text[h["end_char"] : h["end_char"] + len(h["context"]) + 5].lower()
+            if ctx_lower in lookahead_slice:
+                # Mark tokens as consumed so we don't accidentally tag a sub-part of them, 
+                # but don't add to final_hits
+                for t in range(h["start_tok"], h["end_tok"]):
+                    consumed_toks.add(t)
+                continue
+                
+            final_hits.append(h)
+            for t in range(h["start_tok"], h["end_tok"]):
+                consumed_toks.add(t)
 
-        if not filtered_hits:
-            return text, lambda i: i
+        # 4. Sort final accepted hits chronologically by start position
+        final_hits.sort(key=lambda h: h["start_char"])
 
-        # 3. Apply changes and build the offset map
-        # We process hits from left to right.
+        # 5. Proximity Deduplication Heuristic
+        # Remove identical context injections that are too close to each other,
+        # keeping only the latest one to lighten the text.
+        deduplicated_hits = []
+        for i in range(len(final_hits)):
+            keep = True
+            curr_hit = final_hits[i]
+            
+            # Look ahead to see if the same context repeats shortly
+            for j in range(i + 1, len(final_hits)):
+                next_hit = final_hits[j]
+                
+                # Distance in tokens between end of current hit and start of next hit
+                dist = next_hit["start_tok"] - curr_hit["end_tok"]
+                
+                if dist > self.max_context_proximity:
+                    break  # Hits are too far apart, stop looking
+                    
+                if curr_hit["context"] == next_hit["context"]:
+                    # An identical context will be injected very soon.
+                    # We drop the current injection.
+                    keep = False
+                    break
+                    
+            if keep:
+                deduplicated_hits.append(curr_hit)
+
+        # 6. Apply changes and build the offset mapping array
         modified_text = []
-        
-        # A list of (new_idx, original_idx) correspondences where divergence happens
         mappings: list[tuple[int, int]] = [(0, 0)]
         
         curr_orig = 0
         curr_new = 0
         
-        for start, end, ctx in filtered_hits:
-            # Add unmodified text up to the end of the term
+        for h in deduplicated_hits:
+            start = h["start_char"]
+            end = h["end_char"]
+            ctx = h["context"]
+            
             chunk = text[curr_orig:end]
             modified_text.append(chunk)
             
             curr_new += len(chunk)
             curr_orig = end
             
-            # Inject context
             modified_text.append(ctx)
             
-            # The context was added, so new index advances but original doesn't
-            mappings.append((curr_new, curr_orig)) # Just before context
+            # Anchor just before context
+            mappings.append((curr_new, curr_orig)) 
             
             curr_new += len(ctx)
             
-            # After context
+            # Anchor right after context
             mappings.append((curr_new, curr_orig))
 
-        # Add remaining text
         modified_text.append(text[curr_orig:])
         final_text = "".join(modified_text)
 
-        # Build mapping function for binary search
+        # 7. Build mapper function
         from bisect import bisect_right
         
         def offset_mapper(idx: int) -> int:
@@ -325,103 +452,17 @@ class Disambiguator:
             if idx >= len(final_text):
                 return len(text)
                 
-            # Find the segment
             i = bisect_right(mappings, (idx, float('inf'))) - 1
             if i < 0:
-                return idx # Fallback
+                return idx
                 
             new_idx_anchor, orig_idx_anchor = mappings[i]
             
-            # If we fall inside an injected context (the region where curr_orig didn't advance)
-            # Both new_idx_before_ctx and new_idx_after_ctx map to the exact same orig_idx_anchor.
-            # If `idx` is between them, we just return the orig_idx_anchor so the span stops exactly there.
-            
-            # Actually, `mappings[i]` tells us what the offset was at `new_idx_anchor`.
-            # Let's see if we are in an injected block.
-            if i > 0 and mappings[i][1] == mappings[i-1][1]:
-                # We are in an injected block. Any index inside this block maps to the anchor
+            # Detect injected block
+            if i + 1 < len(mappings) and mappings[i][1] == mappings[i+1][1]:
                 return orig_idx_anchor
 
-            # We are in normal text
+            # Normal text space
             return orig_idx_anchor + (idx - new_idx_anchor)
 
         return final_text, offset_mapper
-
-
-    # ─── internals ────────────────────────────────────────────────────
-
-    def _find_hits(
-        self,
-        text_norm: str,
-        text_orig: str,
-        terms_list: list[str],
-        reg_id: str,
-        category: str,
-        context_to_add: str,
-        out: list[tuple[int, int, str]],
-    ) -> None:
-        """Populate *out* with hits for one category."""
-        for term in terms_list:
-            term_norm = normalise(term)
-            if not term_norm:
-                continue
-
-            if len(term_norm) <= _SHORT_TERM_MAX_LEN:
-                # Exact word-boundary search on normalised text
-                pat = self._short_pats.get((reg_id, category, term_norm))
-                if pat is None:
-                    pat = _build_short_pattern(term_norm)
-                for m in pat.finditer(text_norm):
-                    out.append((m.start(), m.end(), context_to_add))
-            else:
-                # Sliding-window fuzzy search for longer terms
-                self._fuzzy_scan(
-                    text_norm, term_norm, self._FUZZY_THRESHOLD,
-                    context_to_add, out,
-                )
-
-    @staticmethod
-    def _fuzzy_scan(
-        text_norm: str,
-        term_norm: str,
-        threshold: int,
-        context_to_add: str,
-        out: list[tuple[int, int, str]],
-    ) -> None:
-        """Scan *text_norm* for fuzzy occurrences of *term_norm*."""
-        term_len = len(term_norm)
-        win_size = int(term_len * 1.5) + 1
-        step = max(1, term_len // 2)
-        text_len = len(text_norm)
-
-        # First try exact substring check
-        idx = text_norm.find(term_norm)
-        while idx != -1:
-            out.append((idx, idx + term_len, context_to_add))
-            idx = text_norm.find(term_norm, idx + term_len)
-
-        # Optimisation: if we found the term exactly, don't bother with fuzzy
-        # This prevents picking up weird partial matches when a perfect match exists.
-        # But here we search globally for the whole document, so let's continue fuzzy 
-        # but skip areas close to the exact match. For simplicity, we just do fuzzy.
-        
-        pos = 0
-        while pos + win_size <= text_len:
-            window = text_norm[pos:pos + win_size]
-            score = fuzz.partial_ratio(term_norm, window)
-            if score >= threshold:
-                out.append((pos, min(pos + win_size, text_len), context_to_add))
-                pos += win_size
-            else:
-                pos += step
-
-        # Handle tail
-        if text_len > win_size:
-            tail = text_norm[text_len - win_size:]
-            score = fuzz.partial_ratio(term_norm, tail)
-            if score >= threshold:
-                out.append((
-                    text_len - win_size,
-                    text_len,
-                    context_to_add,
-                ))

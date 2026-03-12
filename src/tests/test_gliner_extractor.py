@@ -334,17 +334,20 @@ class TestGlinerExtractWithMock:
         def predict_entities(self, text, labels, threshold=0.5):
             results = []
             if "crise d'épilepsie" in text:
+                start = text.find("crise d'épilepsie")
                 for label in labels:
                     if any(kw in label.lower() for kw in ("épilepsie", "seizure", "epilep", "crise", "convulsion")):
-                        results.append({"text": "crise d'épilepsie", "label": label, "score": 0.95})
+                        results.append({"start": start, "end": start + 17, "text": "crise d'épilepsie", "label": label, "score": 0.95})
             if "positif" in text:
+                start = text.find("positif")
                 for label in labels:
                     if "IDH1" in label or "idh1" in label.lower():
-                        results.append({"text": "positif", "label": label, "score": 0.92})
+                        results.append({"start": start, "end": start + 7, "text": "positif", "label": label, "score": 0.92})
             if "glioblastome" in text:
+                start = text.find("glioblastome")
                 for label in labels:
                     if any(kw in label.lower() for kw in ("diag", "histol", "tumor diag", "tumeur")):
-                        results.append({"text": "glioblastome", "label": label, "score": 0.98})
+                        results.append({"start": start, "end": start + 12, "text": "glioblastome", "label": label, "score": 0.98})
             return results
 
     def test_extract_heterogeneous(self):

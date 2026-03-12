@@ -889,7 +889,17 @@ class GlinerExtractor:
             (name, config) for name, config in SEMANTIC_BATCHES.items()
         ]
 
-    def _process_entity(self, label_text: str, score: float, span_text: str, batch_fields: set[str], language: str, extraction_state: dict[str, tuple]):
+    def _process_entity(
+        self, 
+        label_text: str, 
+        score: float, 
+        orig_span: str,
+        orig_start: int,
+        orig_end: int,
+        batch_fields: set[str], 
+        language: str, 
+        extraction_state: dict[str, tuple]
+    ):
         field_name = _REVERSE_DESC_MAP.get(label_text)
         if not field_name or field_name not in batch_fields:
             return
@@ -898,11 +908,11 @@ class GlinerExtractor:
         if score < threshold:
             return
 
-        norm_val = self._postprocess_span(field_name, span_text, language)
+        norm_val = self._postprocess_span(field_name, orig_span, language)
 
         existing = extraction_state.get(field_name)
         if existing is None or score > existing[1]:
-            extraction_state[field_name] = (norm_val, score, span_text, None, None)
+            extraction_state[field_name] = (norm_val, score, orig_span, orig_start, orig_end)
 
     def extract(
         self,
@@ -919,6 +929,13 @@ class GlinerExtractor:
             return {}
 
         self._ensure_model()
+        
+        # 1) Disambiguation logic
+        original_text = text
+        offset_mapper = lambda x: x
+        if getattr(self, "_disambiguator", None):
+            text, offset_mapper = self._disambiguator.apply(text, language)
+            
         chunks = self._chunk_text(text)
         extraction_state: dict[str, tuple] = {}
 
@@ -961,8 +978,10 @@ class GlinerExtractor:
                 if use_context:
                     context_prefix = self._build_context_prefix(batch_config, extraction_state)
                     augmented_text = f"{context_prefix}\n\n{chunk_text}" if context_prefix else chunk_text
+                    prefix_len = len(f"{context_prefix}\n\n") if context_prefix else 0
                 else:
                     augmented_text = chunk_text
+                    prefix_len = 0
 
                 # Resolve descriptions to pass to GLiNER
                 labels = [desc_map[f] for f in batch_fields if f in desc_map]
@@ -973,17 +992,47 @@ class GlinerExtractor:
                 if self._backend == "gliner2_onnx":
                     entities = self._model.extract_entities(augmented_text, labels, threshold=0.1)
                     for ent in entities:
-                        self._process_entity(ent.label, ent.score, ent.text, batch_fields, language, extraction_state)
+                        st = ent.start - prefix_len
+                        en = ent.end - prefix_len
+                        if st < 0: continue
+                        
+                        glob_mod_start = _chunk_offset + st
+                        glob_mod_end = _chunk_offset + en
+                        
+                        orig_start = offset_mapper(glob_mod_start)
+                        orig_end = offset_mapper(glob_mod_end)
+                        orig_span = original_text[orig_start:orig_end]
+                        
+                        self._process_entity(
+                            ent.label, ent.score, orig_span, orig_start, orig_end, 
+                            batch_fields, language, extraction_state
+                        )
                 else:
                     entities = self._model.predict_entities(augmented_text, labels, threshold=0.1)
                     for ent in entities:
-                        self._process_entity(ent["label"], ent["score"], ent["text"], batch_fields, language, extraction_state)
+                        st = ent["start"] - prefix_len
+                        en = ent["end"] - prefix_len
+                        if st < 0: continue
+                        
+                        glob_mod_start = _chunk_offset + st
+                        glob_mod_end = _chunk_offset + en
+                        
+                        orig_start = offset_mapper(glob_mod_start)
+                        orig_end = offset_mapper(glob_mod_end)
+                        orig_span = original_text[orig_start:orig_end]
+                        
+                        self._process_entity(
+                            ent["label"], ent["score"], orig_span, orig_start, orig_end, 
+                            batch_fields, language, extraction_state
+                        )
 
         results = {}
-        for f, (v, s, span, _, _) in extraction_state.items():
+        for f, (v, s, span, o_start, o_end) in extraction_state.items():
             results[f] = ExtractionValue(
                 value=v,
                 source_span=span,
+                source_span_start=o_start,
+                source_span_end=o_end,
                 extraction_tier="gliner",
                 confidence=round(float(s), 4),
                 vocab_valid=True

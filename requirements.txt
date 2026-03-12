@@ -25,7 +25,6 @@ onnxruntime
 gliner
 gliner2
 gliner2-onnx
-gliner-cpp
 
 # Testing
 pydantic
