@@ -219,7 +219,7 @@ class ExtractionPipeline:
         use_negation: bool = True,
         use_eds: bool = True,
         use_gliner: bool = True,
-        use_disambiguator: bool = False,
+        use_disambiguator: bool = True,
         gliner_model: str = "urchade/gliner_multi-v2.1",
         batching_strategy: str = "heterogeneous",
         verbose: bool = False,

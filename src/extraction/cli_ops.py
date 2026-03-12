@@ -18,7 +18,7 @@ def run_extraction_cli(
     use_gliner: bool = True,
     batching_strategy: str = "heterogeneous",
     parallel_workers: int = 1,
-    use_disambiguator: bool = False,
+    use_disambiguator: bool = True,
 ) -> None:
     """Run full extraction and timeline creation purely via CLI logic.
     

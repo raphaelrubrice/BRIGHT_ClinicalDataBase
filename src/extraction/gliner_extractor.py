@@ -756,7 +756,7 @@ class GlinerExtractor:
         batching_strategy: str = "heterogeneous",
         backend: str = "pytorch", # "gliner2_onnx",
         quantize_int8: bool = False,
-        use_disambiguator: bool = False,
+        use_disambiguator: bool = True,
     ):
         self._model_name = model_name
         self._model = None  # Lazy loading
