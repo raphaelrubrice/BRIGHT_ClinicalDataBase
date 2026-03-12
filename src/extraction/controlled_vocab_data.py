@@ -128,12 +128,12 @@ _MOL_CATS_FR: dict[str, tuple[str, ...]] = {
         "altere", "altéré", "alteree", "altérée",
         "mutation faux sens", "mutation non sens", "positif pour la mutation",
     ),
-    "vus": (
-        "vus", "variant de signification indeterminee", "variant de signification indéterminée",
-        "variant de signification incertaine", "polymorphisme",
-        "non pathogene", "non pathogène",
-        "variante de signification inconnue", "variant atypique", "signification clinique incertaine",
-    ),
+    # "vus": (
+    #     "vus", "variant de signification indeterminee", "variant de signification indéterminée",
+    #     "variant de signification incertaine", "polymorphisme",
+    #     "non pathogene", "non pathogène",
+    #     "variante de signification inconnue", "variant atypique", "signification clinique incertaine",
+    # ),
     # "autre" intentionally empty
 }
 
@@ -269,12 +269,12 @@ _MOL_CATS_EN: dict[str, tuple[str, ...]] = {
         "altered", "alteration",
         "missense mutation", "nonsense mutation", "frameshift", "positive for mutation",
     ),
-    "vus": (
-        "vus", "variant of uncertain significance",
-        "variant of unknown significance", "polymorphism",
-        "non-pathogenic", "non pathogenic",
-        "variant of unknown clinical significance", "atypical variant",
-    ),
+    # "vus": (
+    #     "vus", "variant of uncertain significance",
+    #     "variant of unknown significance", "polymorphism",
+    #     "non-pathogenic", "non pathogenic",
+    #     "variant of unknown clinical significance", "atypical variant",
+    # ),
 }
 
 _MOL_MGMT_CATS_EN: dict[str, tuple[str, ...]] = {

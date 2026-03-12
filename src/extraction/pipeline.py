@@ -585,12 +585,43 @@ class ExtractionPipeline:
             f"({result.gliner_count} GLiNER + {result.tier1_count} EDS/Rules "
             f"+ {len(controlled_results)} controlled + {len(date_results)} dates)."
         )
+        
         if _v:
             eds_only = len(merged) - result.gliner_count - len(date_results) - len(controlled_results)
             print(f"           → {len(merged)} total features "
                   f"({result.gliner_count} GLiNER, {max(0, eds_only)} EDS-only fallback, "
                   f"{len(controlled_results)} controlled, "
                   f"{len(date_results)} dates, {synergy_count} synergy-boosted)")
+            
+            # --- NEW: Print detailed field-by-field breakdown ---
+            if merged:
+                print("\n           ▼ Extracted Values Breakdown:")
+                print(f"             {'Field Name':<30} | {'Value':<38} | {'Source':<12} | {'Conf':<5}")
+                print(f"             {'-'*30}-+-{'-'*38}-+-{'-'*12}-+-{'-'*5}")
+                for fname, ev in sorted(merged.items()):
+                    # Determine exact source of the extraction for logging
+                    if fname in date_results:
+                        src = "Date"
+                    elif fname in controlled_results:
+                        src = "Controlled"
+                    elif fname in gliner_results and fname in eds_results:
+                        g_val = str(gliner_results[fname].value).strip().lower()
+                        e_val = str(eds_results[fname].value).strip().lower()
+                        src = "GLiNER+EDS" if (g_val == e_val and g_val != "") else "GLiNER"
+                    elif fname in gliner_results:
+                        src = "GLiNER"
+                    elif fname in eds_results:
+                        src = "EDS"
+                    else:
+                        src = "Unknown"
+
+                    val_repr = repr(ev.value)
+                    if len(val_repr) > 38:
+                        val_repr = val_repr[:35] + "..."
+                    
+                    conf_str = f"{ev.confidence:.2f}" if ev.confidence is not None else "N/A"
+                    print(f"             {fname:<30} | {val_repr:<38} | {src:<12} | {conf_str:<5}")
+                print()
 
         # -----------------------------------------------------------------
         # Step 10: Validate against controlled vocabularies
