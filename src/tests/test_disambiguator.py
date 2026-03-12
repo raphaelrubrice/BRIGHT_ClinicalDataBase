@@ -90,3 +90,41 @@ def test_english_repertoire(disambiguator):
     
     assert "(clinical trial)" in mod_text
     assert "(chemotherapy agent)" in mod_text
+
+
+def test_multiple_injections_offsets(disambiguator):
+    # This text has multiple consecutive hits that will be injected
+    text = "Traitement par temodal et keppra instauré à la pitié."
+    # temodal -> (chimiothérapie)
+    # keppra -> (traitement antiépileptique)
+    # pitié -> (hôpital)
+    
+    mod_text, offset_mapper = disambiguator.apply(text, language="fr")
+    
+    # Let's find "et" which is between temodal and keppra injections
+    orig_et_idx = text.find(" et ")
+    mod_et_idx = mod_text.find(" et ")
+    
+    # "et" should map perfectly back
+    assert offset_mapper(mod_et_idx) == orig_et_idx
+    assert offset_mapper(mod_et_idx + 1) == orig_et_idx + 1
+    
+    # "instauré" which is after keppra
+    orig_inst_idx = text.find("instauré")
+    mod_inst_idx = mod_text.find("instauré")
+    
+    assert offset_mapper(mod_inst_idx) == orig_inst_idx
+    assert offset_mapper(mod_inst_idx + 5) == orig_inst_idx + 5
+    
+    # Validate the injected context maps to the anchor
+    term_keppra = "keppra"
+    orig_keppra_end = text.find(term_keppra) + len(term_keppra)
+    
+    # The injection for keppra is ` (traitement antiépileptique)`
+    injection = " (traitement antiépileptique)"
+    mod_inj_start = mod_text.find(injection)
+    mod_inj_end = mod_inj_start + len(injection)
+    
+    assert offset_mapper(mod_inj_start) == orig_keppra_end
+    assert offset_mapper(mod_inj_end) == orig_keppra_end
+    assert offset_mapper(mod_inj_start + 4) == orig_keppra_end

@@ -374,6 +374,32 @@ class TestGlinerExtractWithMock:
         result = ext.extract("Some text", [])
         assert result == {}
 
+    def test_extract_with_disambiguator_offsets(self):
+        """Test that Entity offsets from GLiNER are correctly back-mapped to the original string when Disambiguator adds tokens."""
+        ext = self._make_extractor("heterogeneous")
+        
+        # We need a text that will trigger the disambiguator
+        # "temodal" triggers disambiguator to add " (chimiothérapie)"
+        # "glioblastome" will be extracted by the mock model
+        text = "Patient sous temodal. Suite du diagnostic: glioblastome pour ce patient."
+        
+        # Original positions
+        orig_glio_start = text.find("glioblastome")
+        orig_glio_end = orig_glio_start + len("glioblastome")
+        
+        # When extracting, the disambiguator will modify the text internally and pass it to GLiNER.
+        # GLiNER will find "glioblastome" at a shifted index, but `ext.extract` should remap it back.
+        result = ext.extract(text, ["diag_histologique"])
+        
+        assert "diag_histologique" in result
+        val = result["diag_histologique"]
+        
+        # Check that the extracted feature matches the ORIGINAL text offsets perfectly
+        assert val.value == "glioblastome"
+        assert val.source_span == "glioblastome"
+        assert val.source_span_start == orig_glio_start
+        assert val.source_span_end == orig_glio_end
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Field descriptions coverage
