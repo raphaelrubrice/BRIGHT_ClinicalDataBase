@@ -81,7 +81,7 @@ class TextPseudonymizer:
         hf_cache_dir: Optional[str] = None,
         secret_salt: Optional[str] = None,
         auto_update: bool = False,
-        keep: list[str] = ["IPP", "NDA", "DATE"]
+        keep: list[str] = ["IPP", "NDA", "DATE", "HOPITAL"]
     ) -> None:
         """
         model_path: local path to eds-pseudo artifacts directory (the path you pass to edsnlp.load)
@@ -445,7 +445,7 @@ if __name__ == "__main__":
         Compte-Rendu de Consultation du 01/12/2025
 
         Madame LAURENGE ep. LEPRINCE Alice, née le 18/05/1989, âgée de 36 ans,
-        a été vue en consultation par le Dr Touat dans le service du Pr Sanson.
+        a été vue en consultation par le Dr Touat dans le service du Pr Sanson à l'hopital Pitié Salpétriere.
         La patiente habite au 12 rue des Lilas, 75013 Paris.
         Téléphone : 06 12 34 56 78.  E-mail : alice.laurenge@mail.com
 
