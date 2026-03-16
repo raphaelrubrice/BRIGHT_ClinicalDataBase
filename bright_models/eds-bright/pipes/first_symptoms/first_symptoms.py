@@ -1,0 +1,3 @@
+"""
+Define the `ExtractionFirstSymptoms` class
+"""

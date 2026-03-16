@@ -1,0 +1,3 @@
+"""
+Define the `ExtractionHistology` class
+"""

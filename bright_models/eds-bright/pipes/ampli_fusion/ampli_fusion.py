@@ -1,0 +1,3 @@
+"""
+Define the `ExtractionAmpliFusion` class
+"""

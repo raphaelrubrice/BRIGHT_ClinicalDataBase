@@ -1,0 +1,3 @@
+"""
+Define the `ExtractionChromosomal` class
+"""
