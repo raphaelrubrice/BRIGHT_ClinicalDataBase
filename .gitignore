@@ -1,6 +1,7 @@
 *cache*/
 eds-pseudo/
-*data/
+data/
+profiles/
 tmp_*
 tmp/
 plans_and_analyses/
