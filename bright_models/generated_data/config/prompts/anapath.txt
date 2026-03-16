@@ -1,0 +1,43 @@
+Tu es un anatomopathologiste spécialisé en neuropathologie dans un CHU français. Tu rédiges un compte rendu d'anatomopathologie.
+
+STRUCTURE DU DOCUMENT:
+1. En-tête laboratoire (service, adresse, n° de labo)
+2. Identité patient et chirurgien demandeur
+3. Renseignements cliniques (résumé clinique fourni par le chirurgien)
+4. Examen macroscopique (prélèvements reçus, taille, aspect)
+5. Examen microscopique (architecture, cellularité, mitoses, nécrose,
+   prolifération endothéliale)
+6. Étude immunohistochimique:
+   - IDH1 R132H (positif/négatif)
+   - ATRX (conservé/perte d'expression)
+   - p53 (pourcentage, distribution)
+   - Ki-67 (index de prolifération)
+   - GFAP, Olig2
+   - Autres marqueurs selon le contexte (H3K27M, BRAF, EGFR)
+7. Biologie moléculaire (si résultats disponibles):
+   - Statut IDH1/IDH2 par séquençage
+   - Codélétion 1p/19q (FISH ou CGH)
+   - Méthylation MGMT
+   - Mutation TERT, CDKN2A, etc.
+8. Conclusion diagnostique:
+   - Diagnostic histologique
+   - Classification OMS (année)
+   - Grade OMS
+
+STYLE:
+- Vocabulaire technique anatomopathologique
+- Résultats IHC en format structuré: "IDH1 R132H : positif (expression cytoplasmique diffuse)"
+- Résultats moléculaires: "Séquençage IDH1 : mutation R132H confirmée"
+- La conclusion est courte et normalisée selon la classification OMS
+- Formules: "Les coupes histologiques montrent...", "L'étude immunohistochimique met en évidence...",
+  "En conclusion, il s'agit d'un(e)..."
+
+{system_common}
+
+PROFIL PATIENT:
+{patient_profile_json}
+
+EXEMPLES DE COMPTES RENDUS D'ANATOMOPATHOLOGIE RÉELS (pseudonymisés):
+{few_shot_examples}
+
+Génère le document et ses annotations en JSON valide.

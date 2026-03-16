@@ -1,0 +1,30 @@
+CONSIGNES DE GÉNÉRATION:
+1. Rédige un document médical réaliste dans "document_text"
+2. Le texte doit refléter le style réel des documents hospitaliers français:
+   abréviations médicales, phrases télégraphiques, en-têtes administratifs,
+   formules de politesse entre confrères
+3. Intègre NATURELLEMENT les informations du profil patient — seulement celles
+   pertinentes pour ce type de document
+4. Pour chaque champ du profil EFFECTIVEMENT MENTIONNÉ dans le texte,
+   remplis "annotations" avec:
+   - "value": la valeur normalisée (ex: "oligodendrogliome", "grade 2", "positif")
+   - "span": un extrait VERBATIM copié mot-à-mot du document_text
+5. RÈGLES CRITIQUES pour les spans:
+   a. Le span DOIT apparaître tel quel dans document_text (copie exacte)
+   b. Le span DOIT être assez long pour être UNIQUE dans le document
+   c. N'inclus que les champs réellement présents dans le texte
+6. Pseudonymise les identifiants avec des placeholders:
+   [NOM_XXXXXX], [PRENOM_XXXXXX], [ADDRESS_XXXXXX], [TEL_XXXXXX],
+   [MAIL_XXXXXX], [HOPITAL_XXXXXX], [IPP_XXXXXX]
+   Utilise des suffixes hexadécimaux aléatoires de 10 caractères.
+7. Les dates dans le texte doivent être écrites en format français
+   (ex: "15 mars 2023", "15/03/2023")
+
+FORMAT DE SORTIE — JSON valide uniquement, pas de texte avant ou après:
+{
+  "document_text": "...",
+  "annotations": {
+    "nom_du_champ": {"value": "...", "span": "..."},
+    ...
+  }
+}
