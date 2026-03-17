@@ -19,7 +19,7 @@ class PipelineConfig:
 
     # ── LLM ──────────────────────────────────────────────────────────────
     llm_provider: str = "local"          # "local" | "anthropic" | "openai"
-    llm_model: str = "Qwen/Qwen3-8B-Instruct"  # T4 default
+    llm_model: str = "Qwen/Qwen3-8B"  # T4 default
     llm_quantization: str = "awq"        # "awq" | "gptq" | "none"
     llm_backend: str = "vllm"            # "vllm" | "transformers"
     hf_token: Optional[str] = None       # HuggingFace token for gated models
@@ -81,8 +81,8 @@ class PipelineConfig:
         if gpu is None:
             gpu = _detect_gpu()
 
-        model = ("Qwen/Qwen3-32B-Instruct" if "a100" in gpu.lower()
-                 else "Qwen/Qwen3-8B-Instruct")
+        model = ("Qwen/Qwen3-32B" if "a100" in gpu.lower()
+                 else "Qwen/Qwen3-8B")
         mem = 0.92 if "a100" in gpu.lower() else 0.90
 
         return cls(
