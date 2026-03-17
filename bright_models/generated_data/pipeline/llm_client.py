@@ -12,6 +12,7 @@ Usage:
 
 import json
 import logging
+import os
 import re
 import time
 from typing import Optional
@@ -47,6 +48,10 @@ class LLMClient:
             self._init_transformers()
 
     def _init_vllm(self):
+        # Set HF token in env before importing vLLM (it reads from env)
+        if self.config.hf_token:
+            os.environ["HF_TOKEN"] = self.config.hf_token
+
         from vllm import LLM, SamplingParams
 
         quant = self.config.llm_quantization
@@ -73,7 +78,8 @@ class LLMClient:
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         model_name = self.config.llm_model
-        self._tokenizer = AutoTokenizer.from_pretrained(model_name)
+        token = self.config.hf_token
+        self._tokenizer = AutoTokenizer.from_pretrained(model_name, token=token)
 
         load_kwargs = {"device_map": "auto"}
         try:
@@ -88,7 +94,7 @@ class LLMClient:
             logger.warning("bitsandbytes not available, loading in fp16")
             load_kwargs["torch_dtype"] = "auto"
 
-        self._model = AutoModelForCausalLM.from_pretrained(model_name, **load_kwargs)
+        self._model = AutoModelForCausalLM.from_pretrained(model_name, token=token, **load_kwargs)
         self._backend = "transformers"
         logger.info("Transformers loaded: %s", model_name)
 
@@ -138,7 +144,9 @@ class LLMClient:
     def _build_vllm_prompt(self, system: str, user: str) -> str:
         from transformers import AutoTokenizer
         if self._tokenizer is None:
-            self._tokenizer = AutoTokenizer.from_pretrained(self.config.llm_model)
+            self._tokenizer = AutoTokenizer.from_pretrained(
+                self.config.llm_model, token=self.config.hf_token,
+            )
         messages = [
             {"role": "system", "content": system + " /no_think"},
             {"role": "user", "content": user},

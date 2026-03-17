@@ -22,6 +22,7 @@ class PipelineConfig:
     llm_model: str = "Qwen/Qwen3-8B-Instruct"  # T4 default
     llm_quantization: str = "awq"        # "awq" | "gptq" | "none"
     llm_backend: str = "vllm"            # "vllm" | "transformers"
+    hf_token: Optional[str] = None       # HuggingFace token for gated models
     gpu_memory_utilization: float = 0.90
     max_model_len: int = 8192
     temperature: float = 0.8
