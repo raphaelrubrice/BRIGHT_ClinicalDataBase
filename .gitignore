@@ -6,3 +6,6 @@ tmp_*
 tmp/
 plans_and_analyses/
 demo_outputs/
+checkpoints/
+*.jsonl
+*log*.txt

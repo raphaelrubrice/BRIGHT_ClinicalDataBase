@@ -20,11 +20,21 @@ STYLE:
 - Formules: "Dossier présenté par Dr...", "Au total, il s'agit de...",
   "La RCP propose:", "Décision prise à l'unanimité"
 
+ANNOTATIONS:
+- Les spans doivent être copiés VERBATIM du document_text que tu génères
+- NE PAS utiliser le format "nom_champ : valeur" comme span
+- Le span doit être un extrait du TEXTE NARRATIF du document
+- Exemple correct: "span": "glioblastome idh-sauvage, grade 4 oms 2021"
+- Exemple INCORRECT: "span": "diag_histologique : glioblastome"
+
 {system_common}
 
 PROFIL PATIENT:
 {patient_profile_json}
 
+EXEMPLE DE SORTIE JSON ATTENDUE:
+IMPORTANT: L'exemple ci-dessous montre le FORMAT DE SORTIE attendu.
+NE COPIE PAS le contenu de l'exemple. Génère un document ORIGINAL basé sur le PROFIL PATIENT ci-dessus.
 {few_shot_examples}
 
 Génère le document et ses annotations en JSON valide.

@@ -4,14 +4,18 @@ The annotation CSVs are transposed (rows = fields, columns = patient-visits),
 semicolon-delimited. This script parses them and produces one JSON file per
 patient-visit, matching BIO and CLINIQUE entries by NIP + surgery date.
 
+The clinical_db CSV provides the pseudonymised document texts (``raw_text``)
+that the benchmark needs to run the extraction pipeline.
+
 Usage:
-    python scripts/convert_annotations_to_gold.py
+    python scripts/convert_annotations_to_gold.py [--db PATH_TO_CLINICAL_DB.csv]
 """
 
 import csv
 import json
 import os
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 
@@ -19,16 +23,37 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 ANNOTATIONS_DIR = PROJECT_ROOT.parent / "test_annotated" / "ANNOTATIONS_RE MAJ Infos cliniques Braincap"
+CLINICAL_DB_DIR = PROJECT_ROOT.parent / "test_annotated" / "RE MAJ Infos cliniques Braincap"
 OUTPUT_DIR = PROJECT_ROOT / "data" / "gold_standard"
 
 REQ_BIO_PATH = ANNOTATIONS_DIR / "REQ_BIO.csv"
 REQ_CLINIQUE_PATH = ANNOTATIONS_DIR / "REQ_CLINIQUE.csv"
+DEFAULT_DB_PATH = CLINICAL_DB_DIR / "clinical_db_20260317_pseudo_only.csv"
 
 sys.path.append(str(PROJECT_ROOT))
 from src.extraction.schema import ALL_FIELDS_BY_NAME
 
 
 SKIPPED_FIELDS = {}
+
+
+def load_clinical_db(db_path: Path) -> dict[str, str]:
+    """Load the clinical_db CSV and return a mapping IPP → concatenated raw_text.
+
+    Documents for each patient are sorted by ORDER and joined with a double
+    newline separator so the extraction pipeline sees all reports at once.
+    """
+    import pandas as pd
+
+    df = pd.read_csv(db_path, sep=",", dtype=str).dropna(subset=["PSEUDO"])
+    df["ORDER"] = pd.to_numeric(df["ORDER"], errors="coerce")
+    df = df.sort_values(["IPP", "ORDER"])
+
+    texts_by_ipp: dict[str, list[str]] = defaultdict(list)
+    for _, row in df.iterrows():
+        texts_by_ipp[row["IPP"]].append(row["PSEUDO"].strip())
+
+    return {ipp: "\n\n".join(texts) for ipp, texts in texts_by_ipp.items()}
 
 
 def parse_transposed_csv(filepath: Path) -> list[dict[str, str]]:
@@ -165,7 +190,25 @@ def match_bio_to_clinique(
 
 
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--db", type=Path, default=DEFAULT_DB_PATH,
+        help="Path to clinical_db pseudo-only CSV (provides raw_text)",
+    )
+    args = parser.parse_args()
+
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    # Load document texts from clinical_db
+    db_path: Path = args.db
+    if db_path.exists():
+        raw_texts_by_ipp = load_clinical_db(db_path)
+        print(f"Loaded document texts for {len(raw_texts_by_ipp)} patients from {db_path.name}")
+    else:
+        raw_texts_by_ipp = {}
+        print(f"WARNING: clinical_db not found at {db_path} — gold standard will have no raw_text")
 
     # Parse both CSVs
     bio_entries = parse_transposed_csv(REQ_BIO_PATH)
@@ -236,6 +279,9 @@ def main():
         if not annotations:
             continue
 
+        # Attach raw_text from clinical_db (all documents for this patient)
+        raw_text = raw_texts_by_ipp.get(nip, "")
+
         gold_entry = {
             "document_id": doc_id,
             "patient_id": nip,
@@ -243,6 +289,7 @@ def main():
             "evol_clinique": evol,
             "has_bio_annotations": has_bio,
             "has_clinique_annotations": has_clinique,
+            "raw_text": raw_text,
             "annotations": annotations,
         }
         gold_entries.append(gold_entry)
@@ -259,6 +306,7 @@ def main():
         "source_files": {
             "REQ_BIO": str(REQ_BIO_PATH),
             "REQ_CLINIQUE": str(REQ_CLINIQUE_PATH),
+            "clinical_db": str(db_path),
         },
         "entries": [
             {
@@ -269,6 +317,7 @@ def main():
                 "n_annotations": len(e["annotations"]),
                 "has_bio": e["has_bio_annotations"],
                 "has_clinique": e["has_clinique_annotations"],
+                "has_raw_text": bool(e.get("raw_text")),
             }
             for e in gold_entries
         ],

@@ -37,7 +37,9 @@ STYLE:
 PROFIL PATIENT:
 {patient_profile_json}
 
-EXEMPLES DE COMPTES RENDUS D'ANATOMOPATHOLOGIE RÉELS (pseudonymisés):
+EXEMPLE DE SORTIE JSON ATTENDUE:
+IMPORTANT: L'exemple ci-dessous montre le FORMAT DE SORTIE attendu.
+NE COPIE PAS le contenu de l'exemple. Génère un document ORIGINAL basé sur le PROFIL PATIENT ci-dessus.
 {few_shot_examples}
 
 Génère le document et ses annotations en JSON valide.

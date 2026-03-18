@@ -48,6 +48,8 @@ class LLMClient:
             self._init_transformers()
 
     def _init_vllm(self):
+        # Ensure CUDA device is visible (Colab sometimes doesn't set this)
+        os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
         # Set HF token in env before importing vLLM (it reads from env)
         if self.config.hf_token:
             os.environ["HF_TOKEN"] = self.config.hf_token
@@ -57,22 +59,36 @@ class LLMClient:
         quant = self.config.llm_quantization
         kwargs = dict(
             model=self.config.llm_model,
-            max_model_len=self.config.max_model_len,
             gpu_memory_utilization=self.config.gpu_memory_utilization,
             dtype="float16",
+            max_num_seqs=self.config.batch_size,
         )
         if quant and quant != "none":
             kwargs["quantization"] = quant
 
-        self._model = LLM(**kwargs)
+        # Try configured max_model_len, fall back to half if OOM
+        max_len_candidates = [self.config.max_model_len, self.config.max_model_len // 2]
+        for max_len in max_len_candidates:
+            try:
+                kwargs["max_model_len"] = max_len
+                self._model = LLM(**kwargs)
+                break
+            except Exception as e:
+                if max_len == max_len_candidates[-1]:
+                    raise
+                logger.warning(
+                    "vLLM init failed with max_model_len=%d (%s), retrying with %d",
+                    max_len, e, max_len // 2,
+                )
+
         self._sampling_params = SamplingParams(
             temperature=self.config.temperature,
             top_p=0.95,
             max_tokens=self.config.max_tokens,
-            stop=["```"],
         )
         self._backend = "vllm"
-        logger.info("vLLM loaded: %s (quant=%s)", self.config.llm_model, quant)
+        logger.info("vLLM loaded: %s (max_len=%d, quant=%s)",
+                     self.config.llm_model, kwargs["max_model_len"], quant)
 
     def _init_transformers(self):
         from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -117,8 +133,13 @@ class LLMClient:
     def generate(self, system: str, user: str, **kwargs) -> str:
         """Generate a single response. Returns raw text."""
         if self._backend == "vllm":
-            return self._generate_vllm(system, user, **kwargs)
-        elif self._backend == "transformers":
+            try:
+                return self._generate_vllm(system, user, **kwargs)
+            except Exception as e:
+                logger.warning("vLLM engine dead (%s), reinitializing with transformers", e)
+                self._model = None
+                self._init_transformers()
+        if self._backend == "transformers":
             return self._generate_transformers(system, user, **kwargs)
         elif self._backend == "anthropic":
             return self._generate_anthropic(system, user, **kwargs)
@@ -130,10 +151,17 @@ class LLMClient:
         """Generate multiple responses. Each prompt is (system, user).
 
         For vLLM, batches all prompts in a single forward pass for throughput.
+        Falls back to sequential generation on engine errors.
         For API backends, calls sequentially with rate limiting.
         """
         if self._backend == "vllm":
-            return self._generate_vllm_batch(prompts, **kwargs)
+            try:
+                return self._generate_vllm_batch(prompts, **kwargs)
+            except Exception as e:
+                logger.warning("vLLM engine dead (%s), reinitializing with transformers", e)
+                self._model = None
+                self._init_transformers()
+                # fall through to sequential generation below
         results = []
         for system, user in prompts:
             results.append(self.generate(system, user, **kwargs))

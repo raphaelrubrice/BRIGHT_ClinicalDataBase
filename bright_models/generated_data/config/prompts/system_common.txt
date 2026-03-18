@@ -13,10 +13,42 @@ CONSIGNES DE GÉNÉRATION:
    a. Le span DOIT apparaître tel quel dans document_text (copie exacte)
    b. Le span DOIT être assez long pour être UNIQUE dans le document
    c. N'inclus que les champs réellement présents dans le texte
-6. Pseudonymise les identifiants avec des placeholders:
+   d. Les NOMS DES CHAMPS dans "annotations" doivent correspondre EXACTEMENT
+      aux noms du profil patient (ex: "ik_clinique", "mol_idh1", "diag_histologique")
+      N'invente PAS de nouveaux noms de champs.
+   e. Exemple correct:
+      "ik_clinique": {"value": "90", "span": "ik 90"}
+      Exemple INCORRECT:
+      "examen_clinique_ik": {"value": "90", "span": "l'IK est de 90"}
+   f. LISTE COMPLÈTE des noms de champs autorisés (n'utilise AUCUN autre nom):
+      date_chir, num_labo, date_rcp, dn_date, date_deces, sexe, annee_de_naissance,
+      activite_professionnelle, antecedent_tumoral, ik_clinique, diag_histologique,
+      diag_integre, classification_oms, grade, tumeur_lateralite, tumeur_position,
+      dominance_cerebrale, exam_radio_date_decouverte, contraste_1er_symptome,
+      prise_de_contraste, oedeme_1er_symptome, calcif_1er_symptome, date_1er_symptome,
+      epilepsie_1er_symptome, ceph_hic_1er_symptome, deficit_1er_symptome,
+      cognitif_1er_symptome, autre_trouble_1er_symptome, epilepsie, ceph_hic, deficit,
+      cognitif, autre_trouble, histo_necrose, histo_pec, histo_mitoses, aspect_cellulaire,
+      ihc_idh1, ihc_atrx, ihc_p53, ihc_fgfr3, ihc_braf, ihc_gfap, ihc_olig2, ihc_ki67,
+      ihc_hist_h3k27m, ihc_hist_h3k27me3, ihc_egfr_hirsch, ihc_mmr, mol_idh1, mol_idh2,
+      mol_mgmt, mol_h3f3a, mol_hist1h3b, mol_tert, mol_CDKN2A, ch1p, ch19q,
+      ch1p19q_codel, ch7p, ch7q, ch10p, ch10q, ch9p, ch9q, mol_p53, mol_atrx, mol_cic,
+      mol_fubp1, mol_fgfr1, mol_egfr_mut, mol_prkca, mol_pten, mol_braf, ampli_egfr,
+      ampli_mdm2, ampli_cdk4, ampli_met, ampli_mdm4, fusion_fgfr, fusion_ntrk,
+      fusion_autre, type_chirurgie, localisation_chir, qualite_exerese, chir_date,
+      chimios, chimio_protocole, chm_date_debut, chm_date_fin, chm_cycles, rx_date_debut,
+      rx_date_fin, rx_dose, rx_fractionnement, localisation_radiotherapie,
+      anti_epileptiques, essai_therapeutique, corticoides, optune, evol_clinique,
+      progress_clinique, progress_radiologique, reponse_radiologique, date_progression,
+      neuroncologue, neurochirurgien, radiotherapeute, anatomo_pathologiste,
+      infos_deces, survie_globale
+6. Pseudonymise les identifiants PERSONNELS avec des placeholders:
    [NOM_XXXXXX], [PRENOM_XXXXXX], [ADDRESS_XXXXXX], [TEL_XXXXXX],
-   [MAIL_XXXXXX], [HOPITAL_XXXXXX], [IPP_XXXXXX]
+   [MAIL_XXXXXX], [IPP_XXXXXX]
    Utilise des suffixes hexadécimaux aléatoires de 10 caractères.
+   Les noms d'hôpitaux, de services et de laboratoires doivent être RÉALISTES
+   (ex: GH Pitié-Salpêtrière, Laboratoire Raymond Escourolle, CHU de Montpellier).
+   Ne PAS pseudonymiser les noms d'hôpitaux.
 7. Les dates dans le texte doivent être écrites en format français
    (ex: "15 mars 2023", "15/03/2023")
 

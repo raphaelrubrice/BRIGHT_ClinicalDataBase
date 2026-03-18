@@ -19,14 +19,14 @@ class PipelineConfig:
 
     # ── LLM ──────────────────────────────────────────────────────────────
     llm_provider: str = "local"          # "local" | "anthropic" | "openai"
-    llm_model: str = "Qwen/Qwen3-8B"  # T4 default
-    llm_quantization: str = "awq"        # "awq" | "gptq" | "none"
+    llm_model: str = "Qwen/Qwen3-4B"  # T4 default (8B doesn't fit fp16 on 16GB)
+    llm_quantization: str = "none"        # "awq" | "gptq" | "none"
     llm_backend: str = "vllm"            # "vllm" | "transformers"
     hf_token: Optional[str] = None       # HuggingFace token for gated models
     gpu_memory_utilization: float = 0.90
     max_model_len: int = 8192
     temperature: float = 0.8
-    max_tokens: int = 4096
+    max_tokens: int = 6144
     batch_size: int = 20                 # documents per checkpoint batch
     enable_thinking: bool = False        # Qwen3 thinking mode (off for speed)
 
@@ -81,14 +81,16 @@ class PipelineConfig:
         if gpu is None:
             gpu = _detect_gpu()
 
-        model = ("Qwen/Qwen3-32B" if "a100" in gpu.lower()
-                 else "Qwen/Qwen3-8B")
-        mem = 0.92 if "a100" in gpu.lower() else 0.90
+        is_a100 = "a100" in gpu.lower()
+        model = "Qwen/Qwen3-32B" if is_a100 else "Qwen/Qwen3-4B"
+        mem = 0.92 if is_a100 else 0.90
+        batch = 16 if is_a100 else 4
 
         return cls(
             checkpoint_dir=Path(drive_root) / "checkpoints",
             llm_model=model,
             gpu_memory_utilization=mem,
+            batch_size=batch,
         )
 
     @classmethod

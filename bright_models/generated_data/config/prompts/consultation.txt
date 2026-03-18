@@ -18,13 +18,18 @@ STYLE:
 - Formules: "Patient(e) de X ans, suivi(e) pour...", "A l'examen:",
   "Proposition: ...", "Prochain RDV dans X mois avec IRM de contrôle"
 - Le ton est médical et factuel, pas de longs paragraphes narratifs
+- IK (Karnofsky) et PS (OMS) doivent être cohérents:
+  IK 100 = PS 0, IK 80-90 = PS 1, IK 60-70 = PS 2, IK < 50 = PS 3+
+- Ne pas écrire "asymptomatique" si IK < 80 ou PS > 1
 
 {system_common}
 
 PROFIL PATIENT:
 {patient_profile_json}
 
-EXEMPLES DE CONSULTATIONS RÉELLES (pseudonymisées):
+EXEMPLE DE SORTIE JSON ATTENDUE:
+IMPORTANT: L'exemple ci-dessous montre le FORMAT DE SORTIE attendu.
+NE COPIE PAS le contenu de l'exemple. Génère un document ORIGINAL basé sur le PROFIL PATIENT ci-dessus.
 {few_shot_examples}
 
 Génère le document et ses annotations en JSON valide.

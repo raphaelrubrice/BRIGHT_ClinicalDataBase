@@ -1,0 +1,310 @@
+{
+  "total_docs": 1578,
+  "unique_patients": 622,
+  "doc_type_distribution": {
+    "consultation": 571,
+    "anapath": 432,
+    "rcp": 575
+  },
+  "total_entities": 37003,
+  "entities_per_doc": {
+    "count": 1578,
+    "min": 8,
+    "max": 44,
+    "mean": 23.4,
+    "median": 22.0,
+    "stdev": 6.2
+  },
+  "text_length_overall": {
+    "count": 1578,
+    "min": 888,
+    "max": 3121,
+    "mean": 2097.5,
+    "median": 2194.0,
+    "stdev": 408.2
+  },
+  "text_length_by_type": {
+    "consultation": {
+      "count": 571,
+      "min": 888,
+      "max": 2350,
+      "mean": 1650.7,
+      "median": 1641,
+      "stdev": 226.6
+    },
+    "anapath": {
+      "count": 432,
+      "min": 1615,
+      "max": 2873,
+      "mean": 2227.5,
+      "median": 2229.5,
+      "stdev": 238.2
+    },
+    "rcp": {
+      "count": 575,
+      "min": 1879,
+      "max": 3121,
+      "mean": 2443.6,
+      "median": 2430,
+      "stdev": 181.2
+    }
+  },
+  "fields_present": 106,
+  "fields_total": 111,
+  "missing_fields": [
+    "ampli_mdm4",
+    "ceph_hic",
+    "cognitif",
+    "cognitif_1er_symptome",
+    "deficit"
+  ],
+  "field_frequency_top30": [
+    {
+      "field": "sexe",
+      "docs": 1552,
+      "pct": 98.4
+    },
+    {
+      "field": "diag_histologique",
+      "docs": 1530,
+      "pct": 97.0
+    },
+    {
+      "field": "grade",
+      "docs": 1520,
+      "pct": 96.3
+    },
+    {
+      "field": "tumeur_lateralite",
+      "docs": 1397,
+      "pct": 88.5
+    },
+    {
+      "field": "classification_oms",
+      "docs": 1365,
+      "pct": 86.5
+    },
+    {
+      "field": "annee_de_naissance",
+      "docs": 1353,
+      "pct": 85.7
+    },
+    {
+      "field": "mol_idh1",
+      "docs": 1348,
+      "pct": 85.4
+    },
+    {
+      "field": "tumeur_position",
+      "docs": 1337,
+      "pct": 84.7
+    },
+    {
+      "field": "type_chirurgie",
+      "docs": 1286,
+      "pct": 81.5
+    },
+    {
+      "field": "ik_clinique",
+      "docs": 1223,
+      "pct": 77.5
+    },
+    {
+      "field": "diag_integre",
+      "docs": 1148,
+      "pct": 72.8
+    },
+    {
+      "field": "localisation_chir",
+      "docs": 1138,
+      "pct": 72.1
+    },
+    {
+      "field": "num_labo",
+      "docs": 1050,
+      "pct": 66.5
+    },
+    {
+      "field": "qualite_exerese",
+      "docs": 1003,
+      "pct": 63.6
+    },
+    {
+      "field": "mol_mgmt",
+      "docs": 900,
+      "pct": 57.0
+    },
+    {
+      "field": "rx_fractionnement",
+      "docs": 791,
+      "pct": 50.1
+    },
+    {
+      "field": "ihc_idh1",
+      "docs": 779,
+      "pct": 49.4
+    },
+    {
+      "field": "histo_mitoses",
+      "docs": 752,
+      "pct": 47.7
+    },
+    {
+      "field": "chimio_protocole",
+      "docs": 734,
+      "pct": 46.5
+    },
+    {
+      "field": "anti_epileptiques",
+      "docs": 727,
+      "pct": 46.1
+    },
+    {
+      "field": "rx_dose",
+      "docs": 722,
+      "pct": 45.8
+    },
+    {
+      "field": "mol_idh2",
+      "docs": 704,
+      "pct": 44.6
+    },
+    {
+      "field": "ihc_olig2",
+      "docs": 699,
+      "pct": 44.3
+    },
+    {
+      "field": "ihc_ki67",
+      "docs": 698,
+      "pct": 44.2
+    },
+    {
+      "field": "ihc_gfap",
+      "docs": 671,
+      "pct": 42.5
+    },
+    {
+      "field": "ihc_atrx",
+      "docs": 658,
+      "pct": 41.7
+    },
+    {
+      "field": "ihc_p53",
+      "docs": 634,
+      "pct": 40.2
+    },
+    {
+      "field": "aspect_cellulaire",
+      "docs": 626,
+      "pct": 39.7
+    },
+    {
+      "field": "neuroncologue",
+      "docs": 613,
+      "pct": 38.8
+    },
+    {
+      "field": "neurochirurgien",
+      "docs": 550,
+      "pct": 34.9
+    }
+  ],
+  "span_validation": {
+    "total": 37003,
+    "valid": 37003,
+    "empty": 0,
+    "out_of_bounds": 0,
+    "start_ge_end": 0
+  },
+  "who_checks": {
+    "gbm_total": 778,
+    "gbm_idh_wt": 669,
+    "gbm_idh_violation": 0,
+    "oligo_total": 269,
+    "oligo_codel_present": 69,
+    "astro_idh_total": 293,
+    "astro_idh_correct": 236
+  },
+  "tumor_categories": {
+    "GBM": 778,
+    "Oligodendroglioma": 269,
+    "Astrocytoma": 339,
+    "No diagnosis": 48,
+    "Glioma (other)": 114,
+    "Other (épendymome rela-fusionné)": 3,
+    "Other (médulloblastome groupe 4)": 2,
+    "Other (craniopharyngiome adamantinomateux)": 3,
+    "Other (épendymome de la fosse postérieure group)": 1,
+    "Other (épendymome postérieur pfa)": 2,
+    "Other (épendymome supratentoriel zfta-rela grad)": 2,
+    "Other (médulloblastome wnt activé)": 3,
+    "Other (épendymome fosse postérieure pfb)": 2,
+    "Other (épendymome supratentoriel zfta-rela fusi)": 3,
+    "Other (médulloblastome)": 4,
+    "Other (médulloblastome activé voie wnt)": 2,
+    "Other (épendymome de fosse postérieure de type )": 3
+  },
+  "value_distributions": {
+    "sexe": {
+      "M": 806,
+      "F": 746
+    },
+    "grade": {
+      "4": 948,
+      "2": 261,
+      "3": 260,
+      "1": 51
+    },
+    "classification_oms": {
+      "2021": 1365
+    },
+    "tumeur_lateralite": {
+      "gauche": 729,
+      "droite": 617,
+      "bilatérale": 51
+    },
+    "type_chirurgie": {
+      "exérèse totale": 788,
+      "exérèse partielle": 147,
+      "biopsie": 124,
+      "exérèse subtotale": 115,
+      "biopsie stéréotaxique": 111,
+      "exerese totale": 1
+    },
+    "mol_idh1": {
+      "wt": 694,
+      "muté (R132H)": 343,
+      "non muté": 169,
+      "muté R132H": 137,
+      "non muté (séquençage étendu)": 2,
+      "non muté (séquençage étendu en cours)": 1,
+      "non": 1,
+      "sauvage": 1
+    },
+    "mol_mgmt": {
+      "méthylé": 562,
+      "non méthylé": 200,
+      "non methyle": 103,
+      "non méthylée": 12,
+      "non methylee": 10,
+      "méthylique": 4,
+      "méthylée": 3,
+      "non methylée": 2,
+      "methylee": 1,
+      "methyle": 1,
+      "prométhylé": 1,
+      "wt": 1
+    },
+    "ch1p19q_codel": {
+      "non": 235,
+      "absence de codélétion": 71,
+      "codélétion confirmée": 58,
+      "oui": 11,
+      "absence": 3,
+      "négatif": 1,
+      "codélété": 1,
+      "non réalisée": 1
+    }
+  }
+}

@@ -289,7 +289,7 @@ DOC_STRUCTURES: dict[str, list[str]] = {
 
 # Few-shot example mapping: doc_type -> list of example filenames
 FEW_SHOT_MAP: dict[str, list[str]] = {
-    "consultation": ["entry_7.txt", "entry_8.txt"],
-    "rcp": [],  # no real RCP examples available
-    "anapath": ["entry_9.txt", "entry_10.txt"],
+    "consultation": ["consultation_example_1.json"],
+    "rcp": ["rcp_example_1.json"],
+    "anapath": ["anapath_example_1.json"],
 }
