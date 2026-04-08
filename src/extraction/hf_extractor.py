@@ -1,9 +1,12 @@
 """HFExtractor — inference over the 10 fine-tuned raphael-r/bright-eds-* models.
 
-Each model is an edsnlp pipeline saved to the HuggingFace Hub and loadable
-via ``edsnlp.load("raphael-r/bright-eds-{group}")``.  Models are loaded
-ONE AT A TIME for the whole batch, then released, to minimise GPU memory
-usage.
+Each model is an edsnlp pipeline saved to the HuggingFace Hub.  Models are
+loaded ONE AT A TIME for the whole batch, then released, to minimise GPU
+memory usage.  Loading uses ``huggingface_hub.snapshot_download`` to obtain
+a local cache path first, then ``edsnlp.load(local_path)``; this bypasses
+the package-metadata check inside ``edsnlp.load_from_huggingface`` which
+raises ``PackageNotFoundError`` for models that are not pip-installed
+Python packages.
 
 Architecture slot: ML branch (``use_eds=True`` in ExtractionPipeline).
 Controlled-field normalization reuses the lookup tables from rule_extraction.py.
@@ -20,6 +23,7 @@ from typing import Optional
 
 import torch
 import edsnlp
+from huggingface_hub import snapshot_download
 
 from .schema import ExtractionValue
 
@@ -223,12 +227,20 @@ class HFExtractor:
         )
 
     def _resolve_model(self, group: str) -> str:
-        """Return a local path (str) if a cached model exists, else a Hub repo ID."""
+        """Return a local directory path for the model.
+
+        Checks ``local_model_dir`` first; otherwise downloads from the
+        HuggingFace Hub via ``snapshot_download`` and returns the local
+        cache path.  Passing a local path to ``edsnlp.load()`` bypasses
+        the package-metadata check that ``load_from_huggingface`` performs
+        (which raises ``PackageNotFoundError`` for models that are not
+        pip-installed Python packages).
+        """
         if self.local_model_dir is not None:
             local = self.local_model_dir / group
             if local.exists():
                 return str(local)
-        return f"{HUB_PREFIX}{group}"
+        return snapshot_download(f"{HUB_PREFIX}{group}")
 
     def extract_batch(self, texts: list[str]) -> list[dict[str, ExtractionValue]]:
         """Infer on *texts* with each enabled group model loaded exactly once.
