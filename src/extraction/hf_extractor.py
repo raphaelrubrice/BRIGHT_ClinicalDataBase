@@ -19,7 +19,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 import edsnlp
@@ -225,31 +225,50 @@ class HFExtractor:
         self.local_model_dir: Optional[Path] = (
             Path(local_model_dir) if local_model_dir is not None else None
         )
+        self._model_paths: dict[str, str] = {}   # group → resolved local path
+        self._loaded_nlp: dict[str, Any] = {}    # group → loaded edsnlp pipeline
 
     def _resolve_model(self, group: str) -> str:
-        """Return a local directory path for the model.
+        """Return a local directory path for the model (cached after first call).
 
-        Checks ``local_model_dir`` first; otherwise downloads from the
-        HuggingFace Hub via ``snapshot_download`` and returns the local
-        cache path.  Passing a local path to ``edsnlp.load()`` bypasses
-        the package-metadata check that ``load_from_huggingface`` performs
-        (which raises ``PackageNotFoundError`` for models that are not
-        pip-installed Python packages).
+        Checks ``local_model_dir`` first; otherwise resolves via
+        ``snapshot_download``.  On subsequent calls the cached path is returned
+        immediately — no network round-trip.  When the model is already in the
+        HuggingFace cache, ``local_files_only=True`` is tried first so that no
+        HTTP request is made; falls back to a normal download if not yet cached.
         """
+        if group in self._model_paths:
+            return self._model_paths[group]
+
         if self.local_model_dir is not None:
             local = self.local_model_dir / group
             if local.exists():
+                self._model_paths[group] = str(local)
                 return str(local)
-        return snapshot_download(f"{HUB_PREFIX}{group}")
+
+        # Avoid network round-trip when model is already in HF cache.
+        try:
+            path = snapshot_download(f"{HUB_PREFIX}{group}", local_files_only=True)
+        except Exception:
+            path = snapshot_download(f"{HUB_PREFIX}{group}")
+
+        self._model_paths[group] = path
+        return path
+
+    def _get_nlp(self, group: str) -> Any:
+        """Return the loaded edsnlp pipeline for *group*, loading it on first access."""
+        if group not in self._loaded_nlp:
+            self._loaded_nlp[group] = edsnlp.load(self._resolve_model(group))
+        return self._loaded_nlp[group]
 
     def extract_batch(self, texts: list[str]) -> list[dict[str, ExtractionValue]]:
-        """Infer on *texts* with each enabled group model loaded exactly once.
+        """Infer on *texts* with each enabled group model.
 
-        For every group:
-        1. Load the model (from disk or HuggingFace Hub).
+        Models are loaded lazily on first call and kept in memory for subsequent
+        calls (``_loaded_nlp`` cache).  For every group:
+        1. Retrieve the cached model (or load it on first access).
         2. Run ``nlp.pipe(texts)`` — returns one Doc per text.
         3. Iterate entities; normalise and store in per-document result dicts.
-        4. Delete the model and flush the GPU cache before loading the next.
 
         Returns
         -------
@@ -260,8 +279,7 @@ class HFExtractor:
         results: list[dict[str, ExtractionValue]] = [{} for _ in texts]
 
         for group in self.enabled_groups:
-            model_id = self._resolve_model(group)
-            nlp = edsnlp.load(model_id)
+            nlp = self._get_nlp(group)
 
             for i, doc in enumerate(nlp.pipe(texts)):
                 for ent in doc.ents:
@@ -272,9 +290,8 @@ class HFExtractor:
                         # so only one entity per field is expected).
                         results[i][fname] = ev
 
-            del nlp
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         return results
 
