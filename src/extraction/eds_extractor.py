@@ -362,6 +362,11 @@ class EDSExtractor:
                         for kw in keywords:
                             if kw in surrounding_text:
                                 if t_field == "annee_de_naissance":
+                                    # Reject timestamps (e.g. "16/01/2026 17:00") — a
+                                    # HH:MM component means this is a visit/document date,
+                                    # not a birth date.
+                                    if re.search(r'\d{1,2}:\d{2}', ent.text):
+                                        break
                                     fmt_date = str(dt.year)
                                 else:
                                     fmt_date = f"{dt.day:02d}/{dt.month:02d}/{dt.year}" if dt.month and dt.day else str(dt.year)

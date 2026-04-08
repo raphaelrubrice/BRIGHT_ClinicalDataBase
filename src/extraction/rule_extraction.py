@@ -1007,7 +1007,7 @@ def extract_binary(
 
     for field_name, keywords in _BINARY_KEYWORDS.items():
         for kw in keywords:
-            pattern = re.compile(re.escape(kw), _RE_FLAGS)
+            pattern = re.compile(r"\b" + re.escape(kw) + r"\b", _RE_FLAGS)
             match = pattern.search(text)
             if match is None:
                 continue

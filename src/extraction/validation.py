@@ -172,6 +172,10 @@ def normalise_value(
                     return "oui"
                 if value == 0:
                     return "non"
+        if field_def and field_def.field_type == FieldType.CATEGORICAL:
+            # CATEGORICAL fields store allowed values as strings (e.g. GRADE = {"1","2","3","4"}).
+            # Convert integer inputs so that vocab matching works correctly.
+            return str(int(value))
         if field_def and field_def.field_type == FieldType.INTEGER:
             return int(value)
         if field_def and field_def.field_type == FieldType.FLOAT:
@@ -251,11 +255,16 @@ def _is_value_valid(
             if isinstance(allowed, str) and allowed.lower() == normalised_lower:
                 return True
 
-    # If the vocab contains "autre", any non-empty string is valid
-    # (the "autre" category accepts free-text values that don't match
-    # specific controlled options).
+    # If the vocab contains "autre", non-empty free-text values are valid.
+    # Exception: for purely-numeric vocabularies (e.g. GRADE = {"1","2","3","4"}),
+    # a numeric string that doesn't match is an out-of-range number, not a
+    # free-text description — reject it rather than silently accepting it as "autre".
     if isinstance(normalised_value, str) and normalised_value.strip():
         if vocab_has_autre(field_def.allowed_values):
+            non_meta = {v for v in field_def.allowed_values if v not in ("NA", "autre")}
+            if non_meta and all(v.lstrip("-").isdigit() for v in non_meta):
+                if normalised_value.lstrip("-").isdigit():
+                    return False  # numeric string out of range → invalid grade
             return True
 
     return False

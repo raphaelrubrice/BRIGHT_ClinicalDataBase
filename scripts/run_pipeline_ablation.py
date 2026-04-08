@@ -102,11 +102,23 @@ def _build_pipeline(
 
 
 def _load_docs(data_dir: Path, max_docs: int | None) -> list[dict]:
-    """Load all *.json gold-standard files from *data_dir*, skipping manifest."""
+    """Load all *.json gold-standard files from *data_dir*, skipping manifest.
+
+    If *data_dir* contains subdirectories (lines/ and aggregates/) but no
+    top-level JSON files, defaults to loading from aggregates/ so that the
+    ablation runs against patient-level ground truth by default.
+    """
+    # Check for top-level JSON files first
+    top_level = sorted(p for p in data_dir.glob("*.json") if p.name != "manifest.json")
+    if not top_level:
+        # New layout: try aggregates/ subdir as default
+        aggregates_dir = data_dir / "aggregates"
+        if aggregates_dir.exists():
+            logging.info("No top-level JSON files found; loading from %s", aggregates_dir)
+            return _load_docs(aggregates_dir, max_docs)
+
     docs: list[dict] = []
-    for path in sorted(data_dir.glob("*.json")):
-        if path.name == "manifest.json":
-            continue
+    for path in top_level:
         try:
             docs.append(json.loads(path.read_text(encoding="utf-8")))
         except Exception as exc:
@@ -174,7 +186,9 @@ def main() -> None:
     parser.add_argument("--mode", choices=["rule", "ml", "both"], required=True,
                         help="Pipeline ablation mode.")
     parser.add_argument("--data-dir", type=Path, default=GOLD_STANDARD_DIR,
-                        help="Directory containing gold-standard JSON files.")
+                        help="Directory containing gold-standard JSON files. "
+                             "Pass a subdirectory (lines/ or aggregates/) to restrict "
+                             "to per-visit lines or per-patient aggregates respectively.")
     parser.add_argument("--out-dir", type=Path, default=Path("tmp/pipeline_ablation"),
                         help="Output directory for results and log.")
     parser.add_argument("--max-docs", type=int, default=None,
@@ -256,42 +270,84 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Extract
     # ------------------------------------------------------------------
+    # Normalise doc keys to what ExtractionPipeline.extract_batch() expects:
+    #   gold-standard uses "raw_text" / "date_chir"; pipeline uses "text" / "consultation_date"
+    pipeline_docs = [
+        {
+            "text": doc.get("raw_text", ""),
+            "document_id": doc.get("document_id", f"doc_{i}"),
+            "patient_id": doc.get("patient_id", ""),
+            "consultation_date": None,  # no single date for multi-doc raw_text
+        }
+        for i, doc in enumerate(docs)
+    ]
+
     records: list[dict] = []
-    for i, doc in enumerate(docs):
-        doc_id = doc.get("document_id", f"doc_{i}")
-        patient_id = doc.get("patient_id", "")
-        text = doc.get("raw_text", "")
-        consultation_date = doc.get("date_chir")  # use surgery date as reference
 
-        logger.info(
-            "─── Document %d / %d  id=%s  patient=%s ───",
-            i + 1, len(docs), doc_id, patient_id,
-        )
-
+    if args.mode in ("ml", "both"):
+        # HF-aware path: each model group is loaded exactly ONCE for the whole
+        # batch, then results are injected per-document.  This replaces the
+        # per-doc loop (which would load all 10 models × N docs = N×10 loads).
+        logger.info("Using extract_batch for mode=%s (%d docs)…", args.mode, len(docs))
         try:
-            result = pipeline.extract_document(
-                text=text,
-                document_id=doc_id,
-                patient_id=patient_id,
-                consultation_date=consultation_date,
-            )
+            all_results = pipeline.extract_batch(pipeline_docs)
         except Exception as exc:
-            logger.error("  FAILED: %s", exc, exc_info=True)
-            result = ExtractionResult(document_id=doc_id, patient_id=patient_id)
-            result.add_log(f"Pipeline failed: {exc}")
+            logger.error("extract_batch FAILED: %s", exc, exc_info=True)
+            all_results = [
+                ExtractionResult(
+                    document_id=pdoc["document_id"],
+                    patient_id=pdoc["patient_id"],
+                )
+                for pdoc in pipeline_docs
+            ]
 
-        records.append(_result_to_record(result))
+        for i, result in enumerate(all_results):
+            records.append(_result_to_record(result))
+            logger.info(
+                "─── Document %d / %d  id=%s  patient=%s ───",
+                i + 1, len(docs), result.document_id, result.patient_id,
+            )
+            logger.info(
+                "  → type=%-15s  %d features  %d flagged  %.0fms",
+                result.document_type,
+                len(result.features),
+                len(result.flagged_for_review),
+                result.total_extraction_time_ms,
+            )
+            if result.flagged_for_review:
+                logger.info("  → flagged: %s", result.flagged_for_review)
 
-        # Inline summary to console
-        logger.info(
-            "  → type=%-15s  %d features  %d flagged  %.0fms",
-            result.document_type,
-            len(result.features),
-            len(result.flagged_for_review),
-            result.total_extraction_time_ms,
-        )
-        if result.flagged_for_review:
-            logger.info("  → flagged: %s", result.flagged_for_review)
+    else:
+        # rule mode: per-doc loop (no HF models; parallelism controlled by --jobs)
+        for i, pdoc in enumerate(pipeline_docs):
+            doc_id = pdoc["document_id"]
+            patient_id = pdoc["patient_id"]
+            logger.info(
+                "─── Document %d / %d  id=%s  patient=%s ───",
+                i + 1, len(docs), doc_id, patient_id,
+            )
+            try:
+                result = pipeline.extract_document(
+                    text=pdoc["text"],
+                    document_id=doc_id,
+                    patient_id=patient_id,
+                    consultation_date=pdoc["consultation_date"],
+                )
+            except Exception as exc:
+                logger.error("  FAILED: %s", exc, exc_info=True)
+                result = ExtractionResult(document_id=doc_id, patient_id=patient_id)
+                result.add_log(f"Pipeline failed: {exc}")
+
+            records.append(_result_to_record(result))
+            logger.info(
+                "  → type=%-15s  %d features  %d flagged  %.0fms",
+                result.document_type,
+                len(result.features),
+                len(result.flagged_for_review),
+                result.total_extraction_time_ms,
+            )
+            if result.flagged_for_review:
+                logger.info("  → flagged: %s", result.flagged_for_review)
 
     # ------------------------------------------------------------------
     # Save results

@@ -1,13 +1,30 @@
 """Convert REQ_BIO.csv and REQ_CLINIQUE.csv into gold standard JSON files.
 
-The annotation CSVs are transposed (rows = fields, columns = patient-visits),
-semicolon-delimited. This script parses them and produces one JSON file per
-patient-visit, matching BIO and CLINIQUE entries by NIP + surgery date.
+Produces two sets of files:
 
-The clinical_db CSV provides the pseudonymised document texts (``raw_text``)
-that the benchmark needs to run the extraction pipeline.
+  data/gold_standard/lines/       — one file per (patient × visit) line.
+                                    Annotations = merged BIO + CLINIQUE for that visit.
+  data/gold_standard/aggregates/  — one file per patient.
+                                    Annotations = union of ALL their REQ rows.
 
-Usage:
+Both use raw_text = all pseudonymised documents for that patient concatenated
+(sorted by ORDER), which mirrors what the extraction pipeline will process.
+
+Matching logic
+--------------
+Every REQ_BIO row and every REQ_CLINIQUE row is guaranteed to appear in exactly
+one line entry:
+
+1. BIO rows are collected first, keyed by (nip, date_chir).
+2. CLINIQUE rows are matched to an existing BIO key via fuzzy date comparison
+   (nip must match; dates compared by dates_match_fuzzy).  Unmatched CLINIQUE
+   rows create new line keys using (nip, evol_clinique) as fallback identifier.
+
+Per-line entries:  document_id = "{nip}_{evol}"
+Aggregate entries: document_id = "{nip}_aggregate"
+
+Usage
+-----
     python scripts/convert_annotations_to_gold.py [--db PATH_TO_CLINICAL_DB.csv]
 """
 
@@ -19,7 +36,9 @@ from collections import defaultdict
 from pathlib import Path
 
 
+# ---------------------------------------------------------------------------
 # Paths
+# ---------------------------------------------------------------------------
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 ANNOTATIONS_DIR = PROJECT_ROOT.parent / "test_annotated" / "ANNOTATIONS_RE MAJ Infos cliniques Braincap"
@@ -31,11 +50,14 @@ REQ_CLINIQUE_PATH = ANNOTATIONS_DIR / "REQ_CLINIQUE.csv"
 DEFAULT_DB_PATH = CLINICAL_DB_DIR / "clinical_db_20260317_pseudo_only.csv"
 
 sys.path.append(str(PROJECT_ROOT))
-from src.extraction.schema import ALL_FIELDS_BY_NAME
+from src.extraction.schema import ALL_FIELDS_BY_NAME  # noqa: E402
+
+SKIPPED_FIELDS: dict[str, int] = {}
 
 
-SKIPPED_FIELDS = {}
-
+# ---------------------------------------------------------------------------
+# Parsing helpers (unchanged from previous version)
+# ---------------------------------------------------------------------------
 
 def load_clinical_db(db_path: Path) -> dict[str, str]:
     """Load the clinical_db CSV and return a mapping IPP → concatenated raw_text.
@@ -63,7 +85,6 @@ def parse_transposed_csv(filepath: Path) -> list[dict[str, str]]:
     where keys are the field names from column 0.
     """
     rows = []
-    # Try multiple encodings since the files have French accents
     for encoding in ("utf-8", "latin-1", "cp1252"):
         try:
             with open(filepath, encoding=encoding, newline="") as f:
@@ -76,9 +97,8 @@ def parse_transposed_csv(filepath: Path) -> list[dict[str, str]]:
     if not rows:
         raise RuntimeError(f"Could not read {filepath} with any encoding")
 
-    # rows[i][0] = field name, rows[i][1..n] = values for each patient-visit
-    n_columns = len(rows[0]) - 1  # exclude the field-name column
-    entries = [{} for _ in range(n_columns)]
+    n_columns = len(rows[0]) - 1
+    entries: list[dict[str, str | None]] = [{} for _ in range(n_columns)]
 
     for row in rows:
         if not row or not row[0].strip():
@@ -91,24 +111,25 @@ def parse_transposed_csv(filepath: Path) -> list[dict[str, str]]:
     return entries
 
 
-def make_document_id(nip: str, evol: str | None, idx: int) -> str:
-    """Create a human-readable document ID."""
-    evol_part = evol if evol else f"visit{idx}"
-    return f"{nip}_{evol_part}"
+def _normalize_date_str(s: str) -> str:
+    """Lowercase and replace non-ASCII characters so encoding variants match."""
+    return s.lower().encode("ascii", errors="ignore").decode("ascii")
 
 
 def dates_match_fuzzy(date_a: str | None, date_b: str | None) -> bool:
     """Check if two date strings refer to the same event (fuzzy).
 
     Handles cases like '01/03/2016' matching '2016' (year-only),
-    and 'déc-10' matching 'déc-10'.
+    'déc-10' matching 'dec-10' (encoding variants), and exact equality.
     """
     if date_a is None or date_b is None:
         return False
     if date_a == date_b:
         return True
-    # If one is year-only (4 digits), check if the other contains that year
-    for a, b in [(date_a, date_b), (date_b, date_a)]:
+    a_norm, b_norm = _normalize_date_str(date_a), _normalize_date_str(date_b)
+    if a_norm == b_norm:
+        return True
+    for a, b in [(a_norm, b_norm), (b_norm, a_norm)]:
         if len(a) == 4 and a.isdigit():
             if a in b:
                 return True
@@ -118,90 +139,128 @@ def dates_match_fuzzy(date_a: str | None, date_b: str | None) -> bool:
 def clean_annotations(annotations: dict[str, str | None]) -> dict[str, object]:
     """Convert annotation dict to gold standard format.
 
-    Removes None values and converts numeric strings where appropriate.
+    Removes None values, skips identifier fields, validates against schema,
+    and converts numeric strings where appropriate.
     """
     cleaned = {}
     for field, value in annotations.items():
         if value is None:
             continue
-        # Skip the identifier fields (handled separately)
-        if field in ("nip",):
+        if field in ("nip", "date_chir", "chir_date"):
+            # Identifier / matching fields — not features to be extracted
             continue
-        # Schema validation
         if field not in ALL_FIELDS_BY_NAME:
             SKIPPED_FIELDS[field] = SKIPPED_FIELDS.get(field, 0) + 1
             continue
 
-        # Try integer conversion for grade, cycles, etc.
         if field in ("grade", "chm_cycles", "histo_mitoses", "ik_clinique"):
             try:
                 cleaned[field] = {"value": int(value)}
                 continue
             except (ValueError, TypeError):
                 pass
-        # Try float for rx_dose
         if field in ("rx_dose",):
             try:
                 cleaned[field] = {"value": float(value)}
                 continue
             except (ValueError, TypeError):
                 pass
-        # Everything else is a string
         cleaned[field] = {"value": value}
 
     return cleaned
 
 
-def match_bio_to_clinique(
-    bio_entries: list[dict], clinique_entries: list[dict]
-) -> list[tuple[dict, dict]]:
-    """Match BIO and CLINIQUE entries by NIP + surgery date (fuzzy).
+# ---------------------------------------------------------------------------
+# Line-building logic
+# ---------------------------------------------------------------------------
 
-    Returns list of (bio_entry_or_empty, clinique_entry_or_empty) pairs.
+def _canonical_date(entry: dict, date_key: str) -> str | None:
+    """Return the date string for an entry, or None."""
+    return entry.get(date_key) or None
+
+
+def build_lines(
+    bio_entries: list[dict],
+    clinique_entries: list[dict],
+) -> list[dict]:
+    """Merge BIO and CLINIQUE entries into per-visit lines.
+
+    Returns a list of line dicts, each with:
+        nip, evol, bio (dict), clinique (dict)
+
+    Every input row appears in exactly one line.
     """
-    # Build all CLINIQUE entries indexed for matching
-    used_clinique = set()
-    pairs: list[tuple[dict, dict]] = []
+    # Each line: {"nip": str, "evol": str|None, "bio": dict, "clinique": dict}
+    lines: list[dict] = []
 
-    # First pass: match each BIO entry to a CLINIQUE entry
+    # --- Collect BIO rows ---
     for bio in bio_entries:
-        nip_bio = bio.get("nip")
-        date_bio = bio.get("date_chir")
-        matched = False
-        for j, clinique in enumerate(clinique_entries):
-            if j in used_clinique:
+        nip = bio.get("nip")
+        if not nip:
+            continue
+        lines.append({"nip": nip, "evol": None, "bio": bio, "clinique": {}})
+
+    # --- Match CLINIQUE rows to existing BIO lines, or create new lines ---
+    used_line_indices: set[int] = set()
+
+    for clinique in clinique_entries:
+        nip = clinique.get("nip")
+        if not nip:
+            continue
+        chir_date = clinique.get("chir_date")
+        evol = clinique.get("evol_clinique")
+
+        # Try to find a matching BIO line (same nip, fuzzy date)
+        matched_idx = None
+        for idx, line in enumerate(lines):
+            if idx in used_line_indices:
                 continue
-            nip_clin = clinique.get("nip")
-            date_clin = clinique.get("chir_date")
-            if nip_bio == nip_clin and dates_match_fuzzy(date_bio, date_clin):
-                pairs.append((bio, clinique))
-                used_clinique.add(j)
-                matched = True
+            if line["nip"] != nip:
+                continue
+            bio_date = _canonical_date(line["bio"], "date_chir")
+            if dates_match_fuzzy(chir_date, bio_date):
+                matched_idx = idx
                 break
-        if not matched:
-            pairs.append((bio, {}))
 
-    # Second pass: add unmatched CLINIQUE entries
-    for j, clinique in enumerate(clinique_entries):
-        if j not in used_clinique:
-            pairs.append(({}, clinique))
+        if matched_idx is not None:
+            lines[matched_idx]["clinique"] = clinique
+            lines[matched_idx]["evol"] = evol or lines[matched_idx]["evol"]
+            used_line_indices.add(matched_idx)
+        else:
+            # No matching BIO row — create a CLINIQUE-only line
+            lines.append({"nip": nip, "evol": evol, "bio": {}, "clinique": clinique})
 
-    return pairs
+    return lines
 
 
-def main():
+def make_document_id(nip: str, evol: str | None, fallback_idx: int) -> str:
+    """Create a human-readable document ID."""
+    evol_part = evol.strip() if evol else f"visit{fallback_idx}"
+    return f"{nip}_{evol_part}"
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--db", type=Path, default=DEFAULT_DB_PATH,
-        help="Path to clinical_db pseudo-only CSV (provides raw_text)",
+        help="Path to clinical_db pseudo-only CSV (provides raw_text).",
     )
     args = parser.parse_args()
 
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    lines_dir = OUTPUT_DIR / "lines"
+    aggregates_dir = OUTPUT_DIR / "aggregates"
+    lines_dir.mkdir(parents=True, exist_ok=True)
+    aggregates_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load document texts from clinical_db
+    # ------------------------------------------------------------------
+    # Load raw texts
+    # ------------------------------------------------------------------
     db_path: Path = args.db
     if db_path.exists():
         raw_texts_by_ipp = load_clinical_db(db_path)
@@ -210,122 +269,115 @@ def main():
         raw_texts_by_ipp = {}
         print(f"WARNING: clinical_db not found at {db_path} — gold standard will have no raw_text")
 
-    # Parse both CSVs
+    # ------------------------------------------------------------------
+    # Parse REQ CSVs
+    # ------------------------------------------------------------------
     bio_entries = parse_transposed_csv(REQ_BIO_PATH)
     clinique_entries = parse_transposed_csv(REQ_CLINIQUE_PATH)
-
     print(f"Parsed {len(bio_entries)} BIO entries, {len(clinique_entries)} CLINIQUE entries")
 
-    for i, entry in enumerate(bio_entries):
-        nip = entry.get("nip")
-        date_chir = entry.get("date_chir")
-        print(f"  BIO[{i}]: NIP={nip}, date_chir={date_chir}")
+    # ------------------------------------------------------------------
+    # Build per-visit lines
+    # ------------------------------------------------------------------
+    lines = build_lines(bio_entries, clinique_entries)
+    print(f"Built {len(lines)} lines across {len({l['nip'] for l in lines})} patients")
 
-    for i, entry in enumerate(clinique_entries):
-        nip = entry.get("nip")
-        chir_date = entry.get("chir_date")
-        evol = entry.get("evol_clinique")
-        print(f"  CLINIQUE[{i}]: NIP={nip}, chir_date={chir_date}, evol={evol}")
+    line_entries: list[dict] = []
+    lines_by_nip: dict[str, list[dict]] = defaultdict(list)
 
-    # Match BIO and CLINIQUE entries by NIP + fuzzy date
-    matched_pairs = match_bio_to_clinique(bio_entries, clinique_entries)
-    print(f"\nMatched {len(matched_pairs)} pairs:")
+    for idx, line in enumerate(lines):
+        nip = line["nip"]
+        evol = line["evol"]
+        doc_id = make_document_id(nip, evol, idx)
 
-    gold_entries = []
-
-    for pair_idx, (bio, clinique) in enumerate(matched_pairs):
-
-        # Get identifiers from whichever is available
-        nip = bio.get("nip") or clinique.get("nip")
-        evol = clinique.get("evol_clinique")
-        date_chir = bio.get("date_chir") or clinique.get("chir_date")
-
-        if not nip:
-            continue
-
-        doc_id = make_document_id(nip, evol, len(gold_entries))
-
-        # Determine document type from available annotations
-        # If we have BIO fields filled, it's likely anapath or molecular
-        # If we have CLINIQUE fields filled, it's likely consultation
-        has_bio = any(
-            v is not None
-            for k, v in bio.items()
-            if k not in ("nip", "date_chir", "num_labo")
-        )
-        has_clinique = any(
-            v is not None
-            for k, v in clinique.items()
-            if k not in ("nip", "annee_de_naissance", "sexe", "date_deces", "infos_deces")
-        )
-
-        # Merge annotations
-        annotations = {}
-
-        # Add BIO annotations (skip nip — it's an identifier, not a feature)
+        # Merge annotations: BIO first, CLINIQUE wins on conflict
         bio_annotations = {
-            k: v for k, v in bio.items()
-            if k != "nip" and v is not None
+            k: v for k, v in line["bio"].items() if k != "nip" and v is not None
         }
-        annotations.update(clean_annotations(bio_annotations))
-
-        # Add CLINIQUE annotations (skip nip)
         clinique_annotations = {
-            k: v for k, v in clinique.items()
-            if k != "nip" and v is not None
+            k: v for k, v in line["clinique"].items() if k != "nip" and v is not None
         }
-        annotations.update(clean_annotations(clinique_annotations))
+        merged_raw = {**bio_annotations, **clinique_annotations}
+        annotations = clean_annotations(merged_raw)
 
         if not annotations:
+            print(f"  [skip] {doc_id} — no annotations after cleaning")
             continue
 
-        # Attach raw_text from clinical_db (all documents for this patient)
-        raw_text = raw_texts_by_ipp.get(nip, "")
-
-        gold_entry = {
+        entry = {
             "document_id": doc_id,
             "patient_id": nip,
-            "date_chir": date_chir,
-            "evol_clinique": evol,
-            "has_bio_annotations": has_bio,
-            "has_clinique_annotations": has_clinique,
-            "raw_text": raw_text,
+            "entry_type": "line",
+            "raw_text": raw_texts_by_ipp.get(nip, ""),
             "annotations": annotations,
         }
-        gold_entries.append(gold_entry)
+        line_entries.append(entry)
+        lines_by_nip[nip].append(entry)
 
-        # Write individual JSON file
-        out_path = OUTPUT_DIR / f"{doc_id}.json"
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(gold_entry, f, ensure_ascii=False, indent=2)
-        print(f"  -> Wrote {out_path.name} ({len(annotations)} annotated fields)")
+        out_path = lines_dir / f"{doc_id}.json"
+        out_path.write_text(json.dumps(entry, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"  [line]      {out_path.name}  ({len(annotations)} fields)")
 
-    # Write a manifest of all gold standard entries
+    # ------------------------------------------------------------------
+    # Build per-patient aggregates
+    # ------------------------------------------------------------------
+    aggregate_entries: list[dict] = []
+
+    for nip, patient_lines in sorted(lines_by_nip.items()):
+        # Union all annotations; later lines win on conflict
+        agg_annotations: dict[str, object] = {}
+        for line_entry in patient_lines:
+            agg_annotations.update(line_entry["annotations"])
+
+        doc_id = f"{nip}_aggregate"
+        entry = {
+            "document_id": doc_id,
+            "patient_id": nip,
+            "entry_type": "patient_aggregate",
+            "raw_text": raw_texts_by_ipp.get(nip, ""),
+            "annotations": agg_annotations,
+        }
+        aggregate_entries.append(entry)
+
+        out_path = aggregates_dir / f"{doc_id}.json"
+        out_path.write_text(json.dumps(entry, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"  [aggregate] {out_path.name}  ({len(agg_annotations)} fields, {len(patient_lines)} lines merged)")
+
+    # ------------------------------------------------------------------
+    # Write manifest
+    # ------------------------------------------------------------------
     manifest = {
-        "total_entries": len(gold_entries),
+        "total_lines": len(line_entries),
+        "total_aggregates": len(aggregate_entries),
         "source_files": {
             "REQ_BIO": str(REQ_BIO_PATH),
             "REQ_CLINIQUE": str(REQ_CLINIQUE_PATH),
             "clinical_db": str(db_path),
         },
-        "entries": [
+        "lines": [
             {
                 "document_id": e["document_id"],
                 "patient_id": e["patient_id"],
-                "date_chir": e["date_chir"],
-                "evol_clinique": e["evol_clinique"],
                 "n_annotations": len(e["annotations"]),
-                "has_bio": e["has_bio_annotations"],
-                "has_clinique": e["has_clinique_annotations"],
                 "has_raw_text": bool(e.get("raw_text")),
             }
-            for e in gold_entries
+            for e in line_entries
+        ],
+        "aggregates": [
+            {
+                "document_id": e["document_id"],
+                "patient_id": e["patient_id"],
+                "n_annotations": len(e["annotations"]),
+                "has_raw_text": bool(e.get("raw_text")),
+            }
+            for e in aggregate_entries
         ],
     }
     manifest_path = OUTPUT_DIR / "manifest.json"
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, ensure_ascii=False, indent=2)
-    print(f"\nWrote manifest with {len(gold_entries)} entries to {manifest_path}")
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"\nWrote {len(line_entries)} line files → {lines_dir}")
+    print(f"Wrote {len(aggregate_entries)} aggregate files → {aggregates_dir}")
+    print(f"Wrote manifest → {manifest_path}")
 
     if SKIPPED_FIELDS:
         print(f"\nSkipped {sum(SKIPPED_FIELDS.values())} values across {len(SKIPPED_FIELDS)} non-schema fields:")

@@ -109,12 +109,14 @@ class TestNormaliseValue:
         assert normalise_value("mol_idh1", "wt") == "wt"
 
     def test_integer_field_parsing(self):
+        # Grade vocab is string-keyed; string digits pass through as strings.
         result = normalise_value("grade", "3")
-        assert result == 3
+        assert result == "3"
 
     def test_integer_passthrough(self):
+        # Integer inputs are converted to strings for CATEGORICAL fields.
         result = normalise_value("grade", 3)
-        assert result == 3
+        assert result == "3"
 
     def test_ihc_maintenu_synonym(self):
         assert normalise_value("ihc_atrx", "conservé") == "maintenu"
@@ -161,13 +163,14 @@ class TestIsValueValid:
         assert _is_value_valid(field_def, "maybe") is False
 
     def test_valid_grade(self):
+        # Grade values are stored as strings after normalisation.
         field_def = ALL_FIELDS_BY_NAME["grade"]
-        assert _is_value_valid(field_def, 1) is True
-        assert _is_value_valid(field_def, 4) is True
+        assert _is_value_valid(field_def, "1") is True
+        assert _is_value_valid(field_def, "4") is True
 
     def test_invalid_grade(self):
         field_def = ALL_FIELDS_BY_NAME["grade"]
-        assert _is_value_valid(field_def, 5) is False
+        assert _is_value_valid(field_def, "5") is False
 
     def test_valid_chromosomal(self):
         field_def = ALL_FIELDS_BY_NAME["ch1p"]
@@ -332,12 +335,13 @@ class TestValidateExtraction:
         assert result["type_chirurgie"].vocab_valid is True
 
     def test_integer_grade_from_string(self):
+        # Grade values are normalised to strings; vocab check passes without flagging.
         extractions = {
             "grade": ExtractionValue(value="3", extraction_tier="llm"),
         }
         result = validate_extraction(extractions)
 
-        assert result["grade"].value == 3
+        assert result["grade"].value == "3"
         assert result["grade"].vocab_valid is True
 
     def test_empty_extraction_dict(self):

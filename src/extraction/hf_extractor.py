@@ -195,7 +195,7 @@ def _span_to_ev(fname: str, ent) -> Optional[ExtractionValue]:
         confidence=None,        # CRF models do not expose calibrated scores
         extraction_tier="hf",
         section=None,
-        vocab_valid=None,       # validated later by pipeline validation step
+        vocab_valid=False,      # validated later by pipeline validation step
     )
 
 
