@@ -16,14 +16,18 @@ returned as-is from the entity text.
 
 from __future__ import annotations
 
+import logging
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Any, Optional
 
 import torch
 import edsnlp
 from huggingface_hub import snapshot_download
+
+logger = logging.getLogger(__name__)
 
 from .schema import ExtractionValue
 
@@ -55,6 +59,16 @@ from .rule_extraction import (  # noqa: E402
 # ---------------------------------------------------------------------------
 
 HUB_PREFIX = "raphael-r/bright-eds-"
+
+# Documents stacked per transformer forward pass during nlp.pipe().
+# Matches eds-pseudo's batch_size; tune down if OOM on small CPU machines.
+_PIPE_BATCH_SIZE = 8
+
+# Transformer window/stride used on CPU to reduce O(n²) attention cost ~4×.
+# Models were trained with window=510/stride=382; overriding here trades a
+# small amount of long-range context for much faster CPU inference.
+_CPU_WINDOW = 128
+_CPU_STRIDE = 96
 
 # Only known label mismatch between model output and canonical field name.
 _LABEL_REMAP: dict[str, str] = {"chir_date": "date_chir"}
@@ -258,7 +272,28 @@ class HFExtractor:
     def _get_nlp(self, group: str) -> Any:
         """Return the loaded edsnlp pipeline for *group*, loading it on first access."""
         if group not in self._loaded_nlp:
-            self._loaded_nlp[group] = edsnlp.load(self._resolve_model(group))
+            model_path = self._resolve_model(group)
+            logger.info("[HFExtractor] Loading model '%s' from %s …", group, model_path)
+            t0 = time.perf_counter()
+            nlp = edsnlp.load(model_path)
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            nlp.to(device)
+            if device == "cpu":
+                for name, comp in nlp.pipeline:
+                    if hasattr(comp, "window") and hasattr(comp, "stride"):
+                        comp.window = _CPU_WINDOW
+                        comp.stride = _CPU_STRIDE
+                        logger.info(
+                            "[HFExtractor] CPU mode: pipe '%s' window→%d stride→%d"
+                            " (~4× faster, minor accuracy cost)",
+                            name, _CPU_WINDOW, _CPU_STRIDE,
+                        )
+                        break
+            logger.info(
+                "[HFExtractor] Model '%s' loaded in %.1fs (device=%s)",
+                group, time.perf_counter() - t0, device,
+            )
+            self._loaded_nlp[group] = nlp
         return self._loaded_nlp[group]
 
     def extract_batch(self, texts: list[str]) -> list[dict[str, ExtractionValue]]:
@@ -276,12 +311,17 @@ class HFExtractor:
             One dict per input text.  A field is present only when the model
             extracted a non-None normalised value.
         """
+        n = len(texts)
         results: list[dict[str, ExtractionValue]] = [{} for _ in texts]
 
-        for group in self.enabled_groups:
+        for g_idx, group in enumerate(self.enabled_groups, 1):
+            logger.info(
+                "[HFExtractor] Group %d/%d '%s' — running pipe on %d texts …",
+                g_idx, len(self.enabled_groups), group, n,
+            )
             nlp = self._get_nlp(group)
-
-            for i, doc in enumerate(nlp.pipe(texts)):
+            t0 = time.perf_counter()
+            for i, doc in enumerate(nlp.pipe(texts, batch_size=_PIPE_BATCH_SIZE)):
                 for ent in doc.ents:
                     fname = _normalize_label(ent.label_)
                     ev = _span_to_ev(fname, ent)
@@ -289,6 +329,10 @@ class HFExtractor:
                         # Last entity wins per field (models are deterministic,
                         # so only one entity per field is expected).
                         results[i][fname] = ev
+            logger.info(
+                "[HFExtractor] Group '%s' inference done in %.1fs",
+                group, time.perf_counter() - t0,
+            )
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
