@@ -1,3 +1,0 @@
-"""
-Define the `ExtractionTreatmentSurgery` class
-"""

@@ -499,7 +499,7 @@ class TestSectionToFeaturesCompleteness:
         features = SECTION_TO_FEATURES["treatment"]
         assert "chimios" in features
         assert "rx_dose" in features
-        assert "chir_date" in features
+        assert "date_chir" in features
 
     def test_clinical_exam_maps_to_exam_fields(self):
         features = SECTION_TO_FEATURES["clinical_exam"]

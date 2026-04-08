@@ -1,9 +1,17 @@
-"""Main extraction pipeline orchestrator — GLiNER-first architecture.
+"""Main extraction pipeline orchestrator.
 
-Wires together document classification, section detection, GLiNER primary
-extraction, EDS-NLP qualifier identification and standalone extraction,
-validation, and provenance tracking into a single ``extract_document()``
-function.
+Wires together document classification, section detection, rule-based
+extraction (DateExtractor, ControlledExtractor, regex rules, EDSExtractor),
+HuggingFace fine-tuned model extraction (HFExtractor), validation, and
+provenance tracking into a single ``extract_document()`` function.
+
+Supports three ablatable modes (see ``ExtractionPipeline``):
+- Rules-only  (``use_eds=False``) — DateExtractor + ControlledExtractor +
+  regex rules + EDSExtractor (rule-based edsnlp patterns).  No HF models.
+- ML-only     (``use_rules=False``) — HFExtractor (10 fine-tuned models)
+  on all fields.  No rule-based extractors.
+- Rules + ML  (``use_eds=True, use_rules=True``) — both branches run;
+  HF wins on ``_HF_PASSING_FIELDS``, rules win on others.
 
 Public API
 ----------
@@ -21,12 +29,12 @@ from concurrent.futures import ProcessPoolExecutor
 from typing import Optional
 
 from .controlled_extractor import ControlledExtractor
-from .controlled_vocab_data import CONTROLLED_REGISTRY_FR, CONTROLLED_REGISTRY_EN
+from .controlled_vocab_data import CONTROLLED_REGISTRY_FR
 from .date_extractor import DateExtractor
 from .document_classifier import DocumentClassifier
 from .provenance import ExtractionResult
 from .eds_extractor import EDSExtractor
-from .gliner_extractor import GlinerExtractor
+from .hf_extractor import HFExtractor
 from .negation import AssertionAnnotator
 from .rule_extraction import run_rule_extraction
 from .schema import (
@@ -48,22 +56,27 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _SIMILARITY_FLIP: dict[str, str] = {
+    # IHC / presence
     "positif": "negatif",
     "negatif": "positif",
     "positive": "negatif",
     "negative": "positif",
     "maintenu": "negatif",
+    # Molecular status: mute ↔ wt
     "mute": "wt",
     "muté": "wt",
     "mutée": "wt",
-    "wt": "mute",
+    "wt": "muté",
+    # Methylation: methyle ↔ non methyle
     "methyle": "non methyle",
     "méthylé": "non methyle",
-    "non methyle": "methyle",
-    "non méthylé": "methyle",
-    "gain": "perte",
-    "perte": "gain",
-    "perte partielle": "gain",
+    "non methyle": "méthylé",
+    "non méthylé": "méthylé",
+    # Lack of gain is not synonymous with loss and vice versa
+    # # Chromosomal: gain ↔ perte
+    # "gain": "perte",
+    # "perte": "gain",
+    # "perte partielle": "gain",
 }
 
 
@@ -111,6 +124,83 @@ def _apply_negation(field_name: str, value, source_span: str | None = None) -> s
     if val_str:
         return f"non {val_str}"
     return val_str
+
+
+# ---------------------------------------------------------------------------
+# EDS passing fields (F1 >= 0.6 on held-out benchmark)
+# Used in Rules + ML mode: HF wins on these fields, rules win on the others.
+# In ML-only mode HF is used on ALL fields (no filter applied).
+# Calibrated from HuggingFace model-card metrics — refine after full evaluation.
+# ---------------------------------------------------------------------------
+
+_HF_PASSING_FIELDS: frozenset[str] = frozenset({
+    "fusion_autre", "chm_date_debut", "dominance_cerebrale", "ik_clinique",
+    "diag_histologique", "rx_fractionnement", "type_chirurgie", "rx_dose",
+    "mol_idh1", "tumeur_lateralite", "classification_oms", "tumeur_position",
+    "ch10q", "sexe", "grade", "neuroncologue", "ch7p", "anti_epileptiques",
+    "histo_mitoses", "date_rcp", "corticoides", "mol_fubp1", "mol_h3f3a",
+    "mol_braf", "evol_clinique", "chimio_protocole", "ihc_idh1", "mol_mgmt",
+    "annee_de_naissance", "localisation_chir", "mol_atrx", "ihc_gfap", "ch9p",
+    "mol_tert", "ihc_ki67", "ihc_atrx", "ihc_olig2", "autre_trouble_1er_symptome",
+    "chimios", "ihc_p53", "neurochirurgien", "diag_integre",
+    "activite_professionnelle", "infos_deces", "mol_idh2", "mol_cic",
+    "mol_CDKN2A", "ihc_hist_h3k27me3", "survie_globale", "ihc_braf", "ch7q",
+    "ch1p", "aspect_cellulaire", "chm_cycles", "essai_therapeutique",
+    "ch1p19q_codel", "prise_de_contraste", "radiotherapeute", "anatomo_pathologiste",
+})
+
+
+# ---------------------------------------------------------------------------
+# Merge helpers for the three-mode pipeline
+# ---------------------------------------------------------------------------
+
+def _merge_rules(
+    rule_results: dict[str, ExtractionValue],
+    controlled_results: dict[str, ExtractionValue],
+    date_results: dict[str, ExtractionValue],
+    eds_results: dict[str, ExtractionValue],
+) -> dict[str, ExtractionValue]:
+    """Merge all rule-based result dicts into a single ``rules_merged`` dict.
+
+    Priority: ``date > controlled > eds_results (edsnlp patterns) > rule_results (regex)``.
+
+    EDSExtractor (rule-based edsnlp patterns) sits between controlled-vocab
+    extraction and pure-regex rules because its pattern matching is typically
+    more specialised.
+    """
+    merged: dict[str, ExtractionValue] = {}
+    merged.update(rule_results)
+    merged.update(eds_results)          # edsnlp rule patterns win over pure regex
+    merged.update(controlled_results)   # controlled vocab wins over edsnlp patterns
+    merged.update(date_results)         # date extractor always wins
+    return merged
+
+
+def _decide_extraction(
+    hf_results: dict[str, ExtractionValue],
+    rules_merged: dict[str, ExtractionValue],
+    use_hf: bool,
+    use_rules: bool,
+) -> dict[str, ExtractionValue]:
+    """Select the best extraction per field based on the active mode.
+
+    Modes
+    -----
+    - **ML-only** (``use_rules=False``)  → return *hf_results* as-is.
+    - **Rules-only** (``use_hf=False``)  → return *rules_merged* as-is.
+    - **Rules + ML** (both True)         → HF wins on ``_HF_PASSING_FIELDS``,
+      rules win on all others.
+    """
+    if not use_rules:
+        return dict(hf_results)
+    if not use_hf:
+        return dict(rules_merged)
+    # Rules + ML: per-field decision
+    merged = dict(rules_merged)
+    for fname, hf_val in hf_results.items():
+        if fname in _HF_PASSING_FIELDS:
+            merged[fname] = hf_val
+    return merged
 
 
 # ---------------------------------------------------------------------------
@@ -181,76 +271,129 @@ def _process_single_doc(idx: int, doc: dict):
 # ---------------------------------------------------------------------------
 
 class ExtractionPipeline:
-    """End-to-end clinical feature extraction pipeline (GLiNER-first).
+    """End-to-end clinical feature extraction pipeline.
 
-    Orchestrates:
-    1. Document type classification
-    2. Section detection
-    3. Language detection
-    4. Feature routing (document type → extractable fields)
-    5. Primary extraction via GLiNER (all fields)
-    6. EDS-NLP Level 1: qualifier identification for GLiNER entities
-    7. EDS-NLP Level 2 / Rules: standalone extraction
-    8. Merge (GLiNER precedence, synergy boost, EDS fallback)
-    9. Controlled vocabulary validation
-    10. Source span validation
-    11. Provenance record + flagging
+    Supports three modes selectable via ``use_eds`` / ``use_rules``:
+
+    - **Rules-only** (``use_eds=False, use_rules=True``): DateExtractor +
+      ControlledExtractor + regex rules + EDSExtractor (rule-based edsnlp
+      patterns).  Fully deterministic, no HF models.
+    - **ML-only** (``use_eds=True, use_rules=False``): HFExtractor
+      (10 fine-tuned ``raphael-r/bright-eds-*`` models) on all fields.
+      No rule-based extractors.
+    - **Rules + ML** (``use_eds=True, use_rules=True``): both branches run;
+      HF wins on ``_HF_PASSING_FIELDS``, rules win on others.
+
+    Pipeline steps (Rules + ML mode):
+    1.  Document type classification
+    2.  Section detection
+    3.  Language detection
+    4.  Feature routing (document type → extractable fields)
+    5.  DateExtractor              → date_results         (RULES branch)
+    6.  ControlledExtractor        → controlled_results   (RULES branch)
+    7.  run_rule_extraction()      → rule_results         (RULES branch)
+    7.5 EDSExtractor               → eds_results          (RULES branch)
+    8.  HFExtractor                → hf_results           (ML branch)
+    9.  Merge rules branch         → rules_merged
+    10. Decide HF vs Rules         → features
+    11. Negation                   → features updated
+    12. Controlled vocabulary validation
+    13. Source span validation
+    14. Provenance record + flagging
 
     Parameters
     ----------
     use_negation : bool
-        Whether to enable negation / hypothesis / history annotation.
+        Whether to apply negation annotation after extraction.
     use_eds : bool
-        Whether to enable EDS-NLP standalone extraction.
-    use_gliner : bool
-        Whether to enable GLiNER primary extraction.
-    gliner_model : str
-        GLiNER model name (default ``"urchade/gliner_multi-v2.1"``).
-    batching_strategy : str
-        Batching strategy to use in GLiNER (default ``"heterogeneous"``).
+        Whether to run HuggingFace fine-tuned model extraction (ML branch).
+    use_rules : bool
+        Whether to run rule-based extraction (DateExtractor,
+        ControlledExtractor, regex rules, EDSExtractor).
+    enabled_rule_extractors : set[str] or None
+        Fine-grained control over which rule sub-extractors to activate.
+        ``None`` means all are active.  See ``run_rule_extraction`` for
+        valid names.
+    enabled_groups : list[str] or None
+        HuggingFace model groups to enable.  ``None`` activates all 10.
+        Useful for ablation studies (e.g. ``["diagnosis", "ihc"]``).
+    local_model_dir : Path or None
+        Directory containing locally cached ``bright-eds-{group}`` model
+        subdirectories.  Checked before downloading from the Hub.
     verbose : bool
-        Whether to print step-by-step progress to stdout (default ``False``).
+        Whether to emit step-by-step debug logs (default ``False``).
     n_jobs : int
-        Number of workers for parallel processing (-1 means max CPUs - 2). Default is -1.
+        Number of workers for parallel processing (-1 = max CPUs - 2).
+        Ignored when ``use_eds=True`` (HF batch pre-computation forces
+        sequential execution).
     """
 
     def __init__(
         self,
         use_negation: bool = True,
         use_eds: bool = True,
-        use_gliner: bool = True,
-        use_disambiguator: bool = True,
-        gliner_model: str = "urchade/gliner_multi-v2.1",
-        batching_strategy: str = "heterogeneous",
+        use_rules: bool = True,
+        enabled_rule_extractors: set[str] | None = None,
+        enabled_groups: list[str] | None = None,
+        local_model_dir: Optional[str] = None,
         verbose: bool = False,
+        transparent: bool = False,
         n_jobs: int = -1,
     ):
         self.use_negation = use_negation
         self.use_eds = use_eds
-        self.use_gliner = use_gliner
-        self.use_disambiguator = use_disambiguator
-        self.gliner_model = gliner_model
-        self.batching_strategy = batching_strategy
+        self.use_rules = use_rules
+        self.enabled_rule_extractors = enabled_rule_extractors
+        self.enabled_groups = enabled_groups
+        self.local_model_dir = local_model_dir
         self.verbose = verbose
+        self.transparent = transparent
         self.n_jobs = n_jobs
 
         # Sub-components
         self.classifier = DocumentClassifier()
         self.section_detector = SectionDetector()
 
-        self._eds_extractor = EDSExtractor() if use_eds else None
+        # RULES branch: EDSExtractor (rule-based edsnlp patterns)
+        self._eds_extractor = EDSExtractor() if use_rules else None
 
-        self._gliner_extractor = None
-        if use_gliner:
-            self._gliner_extractor = GlinerExtractor(
-                model_name=gliner_model,
-                batching_strategy=batching_strategy,
-                use_disambiguator=use_disambiguator,
-            )
+        # ML branch: HFExtractor (10 fine-tuned HuggingFace models)
+        self._hf_extractor = (
+            HFExtractor(enabled_groups=enabled_groups, local_model_dir=local_model_dir)
+            if use_eds else None
+        )
 
         self._assertion_annotator = AssertionAnnotator() if use_negation else None
         self._date_extractor = DateExtractor()
         self._controlled_extractor = ControlledExtractor()
+
+    # -- Transparent logging helper -------------------------------------------
+
+    @staticmethod
+    def _log_extraction_dict(
+        label: str,
+        d: dict[str, "ExtractionValue"],
+        max_span: int = 60,
+    ) -> None:
+        """Dump the full contents of an extraction result dict via logger.debug.
+
+        ``transparent=True`` calls this after every intermediate step so that
+        each field's value, source span, and confidence are visible in the log.
+        """
+        if not d:
+            logger.debug("  [%s] (empty)", label)
+            return
+        logger.debug("  [%s] — %d field(s):", label, len(d))
+        logger.debug(
+            "    %-32s %-22s %-20s %s",
+            "field", "value", "source_span[:60]", "conf",
+        )
+        logger.debug("    %s", "-" * 90)
+        for fname, ev in sorted(d.items()):
+            val = repr(ev.value) if ev.value is not None else "None"
+            span = (ev.source_span or "")[:max_span].replace("\n", "↵")
+            conf = f"{ev.confidence:.2f}" if ev.confidence is not None else "N/A"
+            logger.debug("    %-32s %-22s %-20s %s", fname, val[:22], span[:20], conf)
 
     # -- Language detection ---------------------------------------------------
 
@@ -272,6 +415,7 @@ class ExtractionPipeline:
         document_id: str = "",
         patient_id: str = "",
         consultation_date: str | None = None,
+        _precomputed_hf: dict[str, ExtractionValue] | None = None,
     ) -> ExtractionResult:
         """Run the full extraction pipeline on a single document.
 
@@ -303,15 +447,15 @@ class ExtractionPipeline:
         )
         result.add_log(f"Pipeline started for document '{document_id}'.")
         if _v:
-            print(f"\n{'='*60}")
-            print(f"[PIPELINE] Starting extraction for document '{document_id}'")
-            print(f"{'='*60}")
+            logger.debug("=" * 60)
+            logger.debug("[PIPELINE] Starting extraction for document '%s'", document_id)
+            logger.debug("=" * 60)
 
         # -----------------------------------------------------------------
         # Step 1: Classify document type
         # -----------------------------------------------------------------
         if _v:
-            print("[Step 1/11] Classifying document type...")
+            logger.debug("[Step 1/14] Classifying document type...")
         classification = self.classifier.classify(text)
         result.document_type = classification.document_type
         result.classification_confidence = classification.confidence
@@ -322,9 +466,12 @@ class ExtractionPipeline:
             f"ambiguous={classification.is_ambiguous})."
         )
         if _v:
-            print(f"           → type='{classification.document_type}', "
-                  f"confidence={classification.confidence:.2f}, "
-                  f"ambiguous={classification.is_ambiguous}")
+            logger.debug(
+                "           → type='%s', confidence=%.2f, ambiguous=%s",
+                classification.document_type,
+                classification.confidence,
+                classification.is_ambiguous,
+            )
 
         if classification.is_ambiguous:
             result.add_log(
@@ -336,30 +483,33 @@ class ExtractionPipeline:
         # Step 2: Detect sections
         # -----------------------------------------------------------------
         if _v:
-            print("[Step 2/11] Detecting sections...")
+            logger.debug("[Step 2/14] Detecting sections...")
         sections = self.section_detector.detect(text)
         result.sections_detected = list(sections.keys())
         result.add_log(
             f"Sections detected: {result.sections_detected}"
         )
         if _v:
-            print(f"           → {len(result.sections_detected)} sections: {result.sections_detected}")
+            logger.debug(
+                "           → %d sections: %s",
+                len(result.sections_detected), result.sections_detected,
+            )
 
         # -----------------------------------------------------------------
         # Step 3: Language detection
         # -----------------------------------------------------------------
         if _v:
-            print("[Step 3/11] Detecting language...")
+            logger.debug("[Step 3/14] Detecting language...")
         language = self._detect_language(text)
         result.add_log(f"Detected language: '{language}'.")
         if _v:
-            print(f"           → language='{language}'")
+            logger.debug("           → language='%s'", language)
 
         # -----------------------------------------------------------------
         # Step 4: Determine extractable feature subset
         # -----------------------------------------------------------------
         if _v:
-            print("[Step 4/11] Routing features for document type...")
+            logger.debug("[Step 4/14] Routing features for document type...")
         try:
             feature_subset = get_extractable_fields(result.document_type)
         except ValueError as exc:
@@ -382,16 +532,22 @@ class ExtractionPipeline:
             f"({len(date_fields)} date, {len(non_date_fields)} non-date)."
         )
         if _v:
-            print(f"           → {len(feature_subset)} fields targeted "
-                  f"({len(date_fields)} date, {len(non_date_fields)} non-date)")
+            logger.debug(
+                "           → %d fields targeted (%d date, %d non-date)",
+                len(feature_subset), len(date_fields), len(non_date_fields),
+            )
+
+        # =================================================================
+        # RULES BRANCH  (Steps 5–7) — active when use_rules=True
+        # =================================================================
 
         # -----------------------------------------------------------------
-        # Step 5: Date extraction (dedicated DateExtractor)
+        # Step 5: DateExtractor
         # -----------------------------------------------------------------
-        if _v:
-            print("[Step 5/12] Running dedicated date extraction...")
         date_results: dict[str, ExtractionValue] = {}
-        if date_fields and self._date_extractor:
+        if self.use_rules and date_fields:
+            if _v:
+                logger.debug("[Step 5/14] Running DateExtractor (rules branch)...")
             t_date_start = time.perf_counter()
             try:
                 date_results = self._date_extractor.extract(
@@ -403,238 +559,268 @@ class ExtractionPipeline:
             except Exception as exc:
                 result.add_log(f"DateExtractor failed: {exc}")
                 logger.error("DateExtractor failed: %s", exc)
-
             t_date_elapsed = (time.perf_counter() - t_date_start) * 1000
             result.add_log(
-                f"DateExtractor: extracted {len(date_results)} date fields "
-                f"in {t_date_elapsed:.0f}ms."
+                f"DateExtractor: {len(date_results)} date fields in {t_date_elapsed:.0f}ms."
             )
             if _v:
-                print(f"           → {len(date_results)} date fields in {t_date_elapsed:.0f}ms")
+                logger.debug("           → %d date fields in %.0fms", len(date_results), t_date_elapsed)
+            if self.transparent:
+                self._log_extraction_dict("Step5 date_results", date_results)
 
         # -----------------------------------------------------------------
-        # Step 5.5: ControlledExtractor (Find & Check for controlled-vocab)
+        # Step 6: ControlledExtractor
         # -----------------------------------------------------------------
         controlled_results: dict[str, ExtractionValue] = {}
-        ctrl_registry = (CONTROLLED_REGISTRY_FR if language.startswith("fr")
-                         else CONTROLLED_REGISTRY_EN)
-        controlled_fields = [f for f in non_date_fields if f in ctrl_registry]
-        if controlled_fields and self._controlled_extractor:
+        if self.use_rules:
+            ctrl_registry = CONTROLLED_REGISTRY_FR
+            controlled_fields = [f for f in non_date_fields if f in ctrl_registry]
+            if controlled_fields:
+                if _v:
+                    logger.debug("[Step 6/14] Running ControlledExtractor (rules branch)...")
+                t_ctrl_start = time.perf_counter()
+                try:
+                    controlled_results = self._controlled_extractor.extract(
+                        text=text,
+                        feature_subset=controlled_fields,
+                        language=language,
+                    )
+                except Exception as exc:
+                    result.add_log(f"ControlledExtractor failed: {exc}")
+                    logger.error("ControlledExtractor failed: %s", exc)
+                t_ctrl_elapsed = (time.perf_counter() - t_ctrl_start) * 1000
+                result.add_log(
+                    f"ControlledExtractor: {len(controlled_results)} fields "
+                    f"in {t_ctrl_elapsed:.0f}ms."
+                )
+                if _v:
+                    logger.debug("           → %d fields in %.0fms", len(controlled_results), t_ctrl_elapsed)
+                if self.transparent:
+                    self._log_extraction_dict("Step6 controlled_results", controlled_results)
+
+        # -----------------------------------------------------------------
+        # Step 7: run_rule_extraction (regex / heuristics)
+        # -----------------------------------------------------------------
+        rule_results: dict[str, ExtractionValue] = {}
+        if self.use_rules:
             if _v:
-                print("[Step 5.5/12] Running ControlledExtractor (Find & Check)...")
-            t_ctrl_start = time.perf_counter()
+                logger.debug("[Step 7/14] Running rule extraction (regex/heuristics)...")
+            t_rules_start = time.perf_counter()
             try:
-                controlled_results = self._controlled_extractor.extract(
+                rule_results = run_rule_extraction(
                     text=text,
-                    feature_subset=controlled_fields,
-                    language=language,
+                    sections=sections,
+                    feature_subset=non_date_fields,
+                    enabled_extractors=self.enabled_rule_extractors,
                 )
             except Exception as exc:
-                result.add_log(f"ControlledExtractor failed: {exc}")
-                logger.error("ControlledExtractor failed: %s", exc)
-
-            t_ctrl_elapsed = (time.perf_counter() - t_ctrl_start) * 1000
+                result.add_log(f"run_rule_extraction failed: {exc}")
+                logger.error("run_rule_extraction failed: %s", exc)
+            t_rules_elapsed = (time.perf_counter() - t_rules_start) * 1000
             result.add_log(
-                f"ControlledExtractor: extracted {len(controlled_results)} "
-                f"fields in {t_ctrl_elapsed:.0f}ms."
+                f"RuleExtraction: {len(rule_results)} fields in {t_rules_elapsed:.0f}ms."
             )
             if _v:
-                print(f"           → {len(controlled_results)} fields in {t_ctrl_elapsed:.0f}ms")
+                logger.debug("           → %d fields in %.0fms", len(rule_results), t_rules_elapsed)
+            if self.transparent:
+                self._log_extraction_dict("Step7 rule_results", rule_results)
 
-        # Fields filled by ControlledExtractor are removed from GLiNER subset
-        gliner_fields = [f for f in non_date_fields
-                         if f not in controlled_results]
+        # =================================================================
+        # RULES BRANCH — Step 7.5: EDSExtractor (rule-based edsnlp patterns)
+        # =================================================================
 
         # -----------------------------------------------------------------
-        # Step 6: PRIMARY — GLiNER extraction (non-date fields)
+        # Step 7.5: EDSExtractor (rule-based edsnlp patterns, RULES branch)
         # -----------------------------------------------------------------
-        if _v:
-            print("[Step 6/12] Running GLiNER primary extraction...")
-        gliner_results: dict[str, ExtractionValue] = {}
-        if self._gliner_extractor:
-            t_gliner_start = time.perf_counter()
+        eds_results: dict[str, ExtractionValue] = {}
+        if self.use_rules and self._eds_extractor:
+            if _v:
+                logger.debug("[Step 7.5/14] Running EDSExtractor (RULES branch)...")
+            t_eds_start = time.perf_counter()
             try:
-                gliner_results = self._gliner_extractor.extract(
+                eds_results = self._eds_extractor.extract(
                     text=text,
-                    feature_subset=gliner_fields,
-                    language=language,
-                    verbose=_v,
+                    sections=sections,
+                    feature_subset=feature_subset,
                 )
             except Exception as exc:
-                result.add_log(f"GLiNER extraction failed: {exc}")
-                logger.error("GLiNER extraction failed: %s", exc)
-
-            t_gliner_elapsed = (time.perf_counter() - t_gliner_start) * 1000
-            result.gliner_count = len(gliner_results)
+                result.add_log(f"EDSExtractor failed: {exc}")
+                logger.error("EDSExtractor failed: %s", exc)
+            t_eds_elapsed = (time.perf_counter() - t_eds_start) * 1000
             result.add_log(
-                f"GLiNER (primary): extracted {len(gliner_results)} fields "
-                f"in {t_gliner_elapsed:.0f}ms."
+                f"EDSExtractor: {len(eds_results)} fields in {t_eds_elapsed:.0f}ms."
             )
             if _v:
-                print(f"           → {len(gliner_results)} fields extracted in {t_gliner_elapsed:.0f}ms")
+                logger.debug("           → %d fields in %.0fms", len(eds_results), t_eds_elapsed)
+            if self.transparent:
+                self._log_extraction_dict("Step7.5 eds_results", eds_results)
+
+        # =================================================================
+        # ML BRANCH  (Step 8) — active when use_eds=True
+        # =================================================================
 
         # -----------------------------------------------------------------
-        # Step 7: EDS-NLP Level 1 — Qualifier identification for GLiNER
+        # Step 8: HFExtractor (fine-tuned HuggingFace models, ML branch)
         # -----------------------------------------------------------------
-        if _v:
-            print("[Step 7/12] Running EDS-NLP qualifier annotation...")
-        if self._assertion_annotator and gliner_results:
-            qualified_count = 0
-            for field_name, ev in list(gliner_results.items()):
-                if ev.source_span_start is None or ev.source_span_end is None:
-                    continue
-
-                annotations = self._assertion_annotator.annotate(
-                    text,
-                    [(ev.source_span_start, ev.source_span_end, field_name)],
-                )
-                if not annotations:
-                    continue
-
-                ann = annotations[0]
-                if ann.is_negated:
-                    ev.value = _apply_negation(field_name, ev.value, ev.source_span)
-                    qualified_count += 1
-                if ann.is_hypothesis:
-                    ev.confidence = round((ev.confidence or 0.5) * 0.7, 4)
-                    qualified_count += 1
-                if ann.is_history:
-                    ev.flagged = True
-                    qualified_count += 1
-
-            result.add_log(
-                f"EDS-NLP Level 1 (qualifiers): {qualified_count} GLiNER "
-                f"entities qualified (negation/hypothesis/history)."
-            )
+        hf_results: dict[str, ExtractionValue] = {}
+        if self.use_eds and self._hf_extractor:
             if _v:
-                print(f"           → {qualified_count} entities qualified (negation/hypothesis/history)")
-
-        # -----------------------------------------------------------------
-        # Step 8: EDS-NLP Level 2 / Rules — Standalone extraction (non-date)
-        # -----------------------------------------------------------------
-        if _v:
-            print("[Step 8/12] Running EDS-NLP / Rules standalone extraction...")
-        t_eds_start = time.perf_counter()
-        if self.use_eds and self._eds_extractor:
-            eds_results = self._eds_extractor.extract(
-                text=text,
-                sections=sections,
-                feature_subset=non_date_fields,
-            )
-            result.add_log("EDS-NLP Level 2: standalone extraction.")
-        else:
-            eds_results = run_rule_extraction(
-                text=text,
-                sections=sections,
-                feature_subset=non_date_fields,
-            )
-            result.add_log("EDS-NLP Level 2: Regex fallback (legacy logic).")
-        t_eds_elapsed = (time.perf_counter() - t_eds_start) * 1000
-
-        result.tier1_count = len(eds_results)
-        result.add_log(
-            f"EDS/Rules: extracted {len(eds_results)} fields "
-            f"in {t_eds_elapsed:.0f}ms."
-        )
-        if _v:
-            print(f"           → {len(eds_results)} fields extracted in {t_eds_elapsed:.0f}ms")
-
-        # -----------------------------------------------------------------
-        # Step 9: Merge GLiNER + EDS + Dates (GLiNER precedence for non-date)
-        # -----------------------------------------------------------------
-        if _v:
-            print("[Step 9/12] Merging GLiNER + EDS + Date results...")
-        merged: dict[str, ExtractionValue] = {}
-        synergy_count = 0
-
-        all_fields = set(list(gliner_results.keys()) + list(eds_results.keys()))
-        for fname in all_fields:
-            g = gliner_results.get(fname)
-            e = eds_results.get(fname)
-
-            if g and e:
-                g_val = str(g.value).strip().lower() if g.value is not None else ""
-                e_val = str(e.value).strip().lower() if e.value is not None else ""
-
-                if g_val == e_val and g_val != "":
-                    # Synergy boost: both agree → boost confidence
-                    base_conf = max(g.confidence or 0.0, e.confidence or 0.0)
-                    g.confidence = min(1.0, round(base_conf + 0.1, 4))
-                    merged[fname] = g
-                    synergy_count += 1
+                logger.debug("[Step 8/14] Running HFExtractor (ML branch)...")
+            t_hf_start = time.perf_counter()
+            try:
+                if _precomputed_hf is not None:
+                    # Provided by extract_batch() — avoids reloading models per doc.
+                    hf_results = _precomputed_hf
                 else:
-                    # GLiNER takes precedence
-                    merged[fname] = g
-            elif g:
-                merged[fname] = g
-            else:
-                # EDS fallback for fields GLiNER missed
-                merged[fname] = e
+                    hf_results = self._hf_extractor.extract(text)
+            except Exception as exc:
+                result.add_log(f"HFExtractor failed: {exc}")
+                logger.error("HFExtractor failed: %s", exc)
+            t_hf_elapsed = (time.perf_counter() - t_hf_start) * 1000
+            result.add_log(
+                f"HFExtractor: {len(hf_results)} fields in {t_hf_elapsed:.0f}ms."
+            )
+            if _v:
+                logger.debug("           → %d fields in %.0fms", len(hf_results), t_hf_elapsed)
+            if self.transparent:
+                self._log_extraction_dict("Step8 hf_results", hf_results)
 
-        # Inject controlled-vocab results (fill gaps not covered by GLiNER/EDS)
-        for fname, ev in controlled_results.items():
-            if fname not in merged:
-                merged[fname] = ev
+        # =================================================================
+        # MERGE & DECISION  (Steps 9–10)
+        # =================================================================
 
-        # Inject date results (DateExtractor has sole authority over date fields)
-        merged.update(date_results)
-
-        result.features = merged
+        # -----------------------------------------------------------------
+        # Step 9: Merge rules branch → rules_merged
+        # Priority: date > controlled > eds_results > rule_results
+        # -----------------------------------------------------------------
+        if _v:
+            logger.debug("[Step 9/14] Merging rules branch...")
+        rules_merged: dict[str, ExtractionValue] = _merge_rules(
+            rule_results, controlled_results, date_results, eds_results
+        )
+        result.rule_results = rule_results
+        result.rules_merged = rules_merged
         result.date_results = date_results
         result.controlled_results = controlled_results
-        result.gliner_results = gliner_results
         result.eds_results = eds_results
-        
+        result.hf_results = hf_results
         result.add_log(
-            f"Merged: {len(merged)} total features "
-            f"({result.gliner_count} GLiNER + {result.tier1_count} EDS/Rules "
-            f"+ {len(controlled_results)} controlled + {len(date_results)} dates)."
+            f"Rules merged: {len(rules_merged)} fields "
+            f"(date={len(date_results)}, controlled={len(controlled_results)}, "
+            f"eds={len(eds_results)}, rules={len(rule_results)})."
         )
-        
         if _v:
-            eds_only = len(merged) - result.gliner_count - len(date_results) - len(controlled_results)
-            print(f"           → {len(merged)} total features "
-                  f"({result.gliner_count} GLiNER, {max(0, eds_only)} EDS-only fallback, "
-                  f"{len(controlled_results)} controlled, "
-                  f"{len(date_results)} dates, {synergy_count} synergy-boosted)")
-            
-            # --- NEW: Print detailed field-by-field breakdown ---
+            logger.debug("           → %d fields in rules_merged", len(rules_merged))
+        if self.transparent:
+            self._log_extraction_dict("Step9 rules_merged", rules_merged)
+
+        # -----------------------------------------------------------------
+        # Step 10: Decide HF vs Rules → final merged features
+        # -----------------------------------------------------------------
+        if _v:
+            logger.debug("[Step 10/14] Deciding HF vs Rules per field...")
+        merged: dict[str, ExtractionValue] = _decide_extraction(
+            hf_results, rules_merged, self.use_eds, self.use_rules
+        )
+        result.features = merged
+        result.tier1_count = len(merged)
+        result.add_log(
+            f"Decision: {len(merged)} total features selected "
+            f"(mode: rules={self.use_rules}, hf={self.use_eds})."
+        )
+        if self.transparent:
+            self._log_extraction_dict("Step10 decided_features", merged)
+        if _v:
+            logger.debug("           → %d total features after decision", len(merged))
             if merged:
-                print("\n           ▼ Extracted Values Breakdown:")
-                # We reduced the widths of the columns slightly here to prevent standard 
-                # terminal windows from wrapping the text to the next line.
-                print(f"             {'Field Name':<28} | {'Value':<30} | {'Source':<11} | {'Conf'}")
-                print(f"             {'-'*28}-+-{'-'*30}-+-{'-'*11}-+-{'-'*4}")
+                logger.debug("           ▼ Extracted Values Breakdown:")
+                header = f"{'Field Name':<28} | {'Value':<30} | {'Source':<11} | {'Conf'}"
+                sep = f"{'-'*28}-+-{'-'*30}-+-{'-'*11}-+-{'-'*4}"
+                logger.debug(header)
+                logger.debug(sep)
                 for fname, ev in sorted(merged.items()):
-                    # Determine exact source of the extraction for logging
                     if fname in date_results:
                         src = "Date"
                     elif fname in controlled_results:
                         src = "Controlled"
-                    elif fname in gliner_results and fname in eds_results:
-                        g_val = str(gliner_results[fname].value).strip().lower()
-                        e_val = str(eds_results[fname].value).strip().lower()
-                        src = "GLiNER+EDS" if (g_val == e_val and g_val != "") else "GLiNER"
-                    elif fname in gliner_results:
-                        src = "GLiNER"
                     elif fname in eds_results:
                         src = "EDS"
+                    elif fname in rule_results:
+                        src = "Rules"
+                    elif fname in hf_results:
+                        src = "HF"
                     else:
                         src = "Unknown"
-
                     val_repr = repr(ev.value)
                     if len(val_repr) > 30:
                         val_repr = val_repr[:27] + "..."
-                    
                     conf_str = f"{ev.confidence:.2f}" if ev.confidence is not None else "N/A"
-                    print(f"             {fname:<28} | {val_repr:<30} | {src:<11} | {conf_str}")
-                print()
+                    logger.debug(
+                        "%s | %s | %s | %s",
+                        f"{fname:<28}", f"{val_repr:<30}", f"{src:<11}", conf_str,
+                    )
 
         # -----------------------------------------------------------------
-        # Step 10: Validate against controlled vocabularies
+        # Step 11: Negation detection
+        # -----------------------------------------------------------------
+        if self.use_negation and self._assertion_annotator:
+            if _v:
+                logger.debug("[Step 11/14] Applying negation detection...")
+            # Collect (start, end, field_name) for all spans with a value
+            spans_to_check: list[tuple[int, int, str]] = []
+            span_fields: list[str] = []
+            for fname, ev in merged.items():
+                if ev.source_span and ev.value is not None:
+                    span_start = text.find(ev.source_span)
+                    if span_start == -1:
+                        continue
+                    spans_to_check.append(
+                        (span_start, span_start + len(ev.source_span), fname)
+                    )
+                    span_fields.append(fname)
+
+            if spans_to_check:
+                try:
+                    annotations = self._assertion_annotator.annotate(
+                        text, spans_to_check
+                    )
+                    negated_count = 0
+                    for ann, fname in zip(annotations, span_fields):
+                        if ann.is_negated:
+                            ev = merged[fname]
+                            original_val = ev.value
+                            ev.value = _apply_negation(fname, ev.value, ev.source_span)
+                            result.add_log(
+                                f"Negation: '{fname}' '{original_val}' → '{ev.value}'"
+                            )
+                            if self.transparent:
+                                logger.debug(
+                                    "  [Step11 negation] %-32s %r → %r  (span: %r)",
+                                    fname, original_val, ev.value,
+                                    (ev.source_span or "")[:60],
+                                )
+                            negated_count += 1
+                        elif self.transparent and ann.is_hypothesis:
+                            logger.debug(
+                                "  [Step11 hypothesis] %-32s %r  (span: %r)",
+                                fname, merged[fname].value,
+                                (merged[fname].source_span or "")[:60],
+                            )
+                    if negated_count:
+                        result.add_log(
+                            f"Negation: {negated_count} field(s) inverted."
+                        )
+                    elif _v:
+                        logger.debug("           → no negated spans found")
+                except Exception as exc:
+                    result.add_log(f"Negation step failed: {exc}")
+                    logger.error("Negation step failed: %s", exc)
+
+        # -----------------------------------------------------------------
+        # Step 12: Validate against controlled vocabularies
         # -----------------------------------------------------------------
         if _v:
-            print("[Step 10/12] Validating against controlled vocabularies...")
+            logger.debug("[Step 12/14] Validating against controlled vocabularies...")
         validate_extraction(merged)
         vocab_flagged = [
             fname for fname, ev in merged.items()
@@ -648,13 +834,19 @@ class ExtractionPipeline:
         else:
             result.add_log("Vocabulary validation: all values valid.")
         if _v:
-            print(f"           → {len(vocab_flagged)} fields flagged out of vocabulary")
+            logger.debug("           → %d fields flagged out of vocabulary", len(vocab_flagged))
+        if self.transparent and vocab_flagged:
+            for fname in vocab_flagged:
+                ev = merged[fname]
+                logger.debug(
+                    "  [Step12 vocab_invalid] %-32s value=%r", fname, ev.value
+                )
 
         # -----------------------------------------------------------------
-        # Step 11: Validate source spans
+        # Step 13: Validate source spans
         # -----------------------------------------------------------------
         if _v:
-            print("[Step 11/12] Validating source spans...")
+            logger.debug("[Step 13/14] Validating source spans...")
         validate_source_spans(merged, text)
         span_flagged = [
             fname for fname, ev in merged.items()
@@ -668,13 +860,13 @@ class ExtractionPipeline:
         else:
             result.add_log("Source span validation: all spans verified.")
         if _v:
-            print(f"           → {len(span_flagged)} additional fields flagged")
+            logger.debug("           → %d additional fields flagged", len(span_flagged))
 
         # -----------------------------------------------------------------
-        # Step 12: Build flagged-for-review list
+        # Step 14: Build flagged-for-review list
         # -----------------------------------------------------------------
         if _v:
-            print("[Step 12/12] Building flagged-for-review list...")
+            logger.debug("[Step 14/14] Building flagged-for-review list...")
         result.update_flagged_from_features()
         result.add_log(
             f"Total flagged for review: {len(result.flagged_for_review)} fields."
@@ -688,10 +880,14 @@ class ExtractionPipeline:
             f"Pipeline completed in {result.total_extraction_time_ms:.0f}ms."
         )
         if _v:
-            print(f"           → {len(result.flagged_for_review)} fields flagged for review")
-            print(f"[PIPELINE] ✓ Completed in {result.total_extraction_time_ms:.0f}ms "
-                  f"— {len(merged)} features extracted")
-            print(f"{'='*60}\n")
+            logger.debug(
+                "           → %d fields flagged for review", len(result.flagged_for_review)
+            )
+            logger.debug(
+                "[PIPELINE] ✓ Completed in %.0fms — %d features extracted",
+                result.total_extraction_time_ms, len(merged),
+            )
+            logger.debug("=" * 60)
 
         return result
 
@@ -702,7 +898,15 @@ class ExtractionPipeline:
         documents: list[dict],
         n_jobs: int | None = None,
     ) -> list[ExtractionResult]:
-        """Process a list of documents in parallel.
+        """Process a list of documents, with HF-aware batching.
+
+        When ``self._hf_extractor`` is active, all HuggingFace models are
+        loaded exactly **once** for the whole batch (one per group), results
+        are pre-computed, then the per-document pipeline runs sequentially
+        with the pre-computed HF results injected (bypassing Step 8).
+
+        When only the RULES branch is active, the existing
+        ``ProcessPoolExecutor`` multiprocessing path is used.
 
         Parameters
         ----------
@@ -710,8 +914,8 @@ class ExtractionPipeline:
             Each dict must have ``'text'``, and optionally
             ``'document_id'``, ``'patient_id'``, and ``'consultation_date'``.
         n_jobs : int, optional
-            Number of worker processes. If None, defaults to `self.n_jobs`.
-            If -1, max(1, N_CPU - 2).
+            Number of worker processes for the rules-only path.
+            Ignored when HFExtractor is active.
 
         Returns
         -------
@@ -722,6 +926,45 @@ class ExtractionPipeline:
         if n == 0:
             return []
 
+        # ---------------------------------------------------------------
+        # HF-aware path: pre-compute all HF results in one pass, then
+        # iterate sequentially (GPU batching >>> CPU parallelism here).
+        # ---------------------------------------------------------------
+        if self._hf_extractor is not None:
+            logger.info(
+                "Starting HF-aware sequential batch extraction of %d documents", n
+            )
+            texts = [d.get("text", "") for d in documents]
+            try:
+                all_hf: list[dict[str, ExtractionValue]] = (
+                    self._hf_extractor.extract_batch(texts)
+                )
+            except Exception as exc:
+                logger.error("HFExtractor.extract_batch failed: %s — falling back to empty", exc)
+                all_hf = [{} for _ in documents]
+
+            results: list[ExtractionResult] = []
+            for i, doc in enumerate(documents):
+                doc_id = doc.get("document_id", f"doc_{i}")
+                logger.info("Processing document %d/%d: %s", i + 1, n, doc_id)
+                try:
+                    result = self.extract_document(
+                        text=doc.get("text", ""),
+                        document_id=doc_id,
+                        patient_id=doc.get("patient_id", ""),
+                        consultation_date=doc.get("consultation_date"),
+                        _precomputed_hf=all_hf[i],
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.error("Failed to process document '%s': %s", doc_id, exc)
+                    result = ExtractionResult(document_id=doc_id, patient_id=doc.get("patient_id", ""))
+                    result.add_log(f"Pipeline failed with error: {exc}")
+                results.append(result)
+            return results
+
+        # ---------------------------------------------------------------
+        # Rules-only path: existing sequential / multiprocessing logic.
+        # ---------------------------------------------------------------
         n_jobs_to_use = n_jobs if n_jobs is not None else self.n_jobs
 
         def run_sequential() -> list[ExtractionResult]:
@@ -738,8 +981,8 @@ class ExtractionPipeline:
 
                 try:
                     result = self.extract_document(
-                        text=text, 
-                        document_id=doc_id, 
+                        text=text,
+                        document_id=doc_id,
                         patient_id=patient_id,
                         consultation_date=consultation_date,
                     )
@@ -765,11 +1008,12 @@ class ExtractionPipeline:
         pipeline_kwargs = {
             "use_negation": self.use_negation,
             "use_eds": self.use_eds,
-            "use_gliner": self.use_gliner,
-            "use_disambiguator": self.use_disambiguator,
-            "gliner_model": self.gliner_model,
-            "batching_strategy": self.batching_strategy,
+            "use_rules": self.use_rules,
+            "enabled_rule_extractors": self.enabled_rule_extractors,
+            "enabled_groups": self.enabled_groups,
+            "local_model_dir": self.local_model_dir,
             "verbose": self.verbose,
+            "transparent": self.transparent,
             "n_jobs": 1  # Inside the worker, we don't spawn more parallel jobs
         }
 
@@ -801,8 +1045,7 @@ class ExtractionPipeline:
 
         except Exception as parallel_exc:
             # Fallback en cas d'échec du multiprocessing (ex: erreur de pickling, manque de mémoire, etc.)
-            error_msg = f"⚠️ Parallelization failed ({type(parallel_exc).__name__}: {parallel_exc}). Falling back to sequential execution..."
-            print(error_msg)
+            error_msg = f"Parallelization failed ({type(parallel_exc).__name__}: {parallel_exc}). Falling back to sequential execution."
             logger.warning(error_msg)
             
             return run_sequential()

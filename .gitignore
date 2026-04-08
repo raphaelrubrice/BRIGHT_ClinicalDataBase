@@ -9,3 +9,5 @@ demo_outputs/
 checkpoints/
 *.jsonl
 *log*.txt
+old_*
+tuto*

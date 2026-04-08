@@ -68,10 +68,7 @@ def main():
     extract_parser = subparsers.add_parser("extract", help="Extract clinical/bio features to output folder")
     extract_parser.add_argument("--db", required=True, type=Path, help="Path to the pseudonymized document database CSV")
     extract_parser.add_argument("--output", required=True, type=Path, help="Path to output directory (created if missing)")
-    extract_parser.add_argument("--use-gliner", action=argparse.BooleanOptionalAction, default=True, help="Enable or disable GLiNER extraction")
-    extract_parser.add_argument("--batching-strategy", type=str, default="heterogeneous", choices=["semantic_context", "semantic_only", "heterogeneous"])
     extract_parser.add_argument("--parallel", type=int, default=os.cpu_count()-2, help="Number of workers for parallel processing")
-    extract_parser.add_argument("--no-disambiguator", action="store_true", help="Disable textual context disambiguation before GLiNER")
 
     args, qt_args = parser.parse_known_args()
 
@@ -118,10 +115,7 @@ def main():
         run_extraction_cli(
             db_path=db_path,
             output_dir=output_dir,
-            use_gliner=args.use_gliner,
-            batching_strategy=args.batching_strategy,
             parallel_workers=args.parallel,
-            use_disambiguator=not args.no_disambiguator,
         )
     else:
         parser.print_help()

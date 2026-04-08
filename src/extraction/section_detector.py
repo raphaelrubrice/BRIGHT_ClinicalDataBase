@@ -249,7 +249,7 @@ SECTION_TO_FEATURES: dict[str, list[str]] = {
     ],
     "treatment": [
         "chimios", "chimio_protocole", "chm_date_debut", "chm_date_fin", "chm_cycles",
-        "chir_date", "type_chirurgie", "qualite_exerese",
+        "date_chir", "type_chirurgie", "qualite_exerese",
         "rx_date_debut", "rx_date_fin", "rx_dose", "rx_fractionnement",
         "anti_epileptiques", "essai_therapeutique",
         "corticoides", "optune",

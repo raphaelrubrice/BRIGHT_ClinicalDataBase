@@ -87,12 +87,10 @@ class TestDateExtractorFR:
     def test_chirurgie(self, extractor):
         text = "Le patient a été opéré le 10/06/2023 pour exérèse tumorale."
         result = extractor.extract(
-            text, feature_subset=["date_chir", "chir_date"], language="fr"
+            text, feature_subset=["date_chir"], language="fr"
         )
-        matched_fields = set(result.keys()) & {"date_chir", "chir_date"}
-        assert len(matched_fields) >= 1
-        for f in matched_fields:
-            assert result[f].value == "10/06/2023"
+        assert "date_chir" in result
+        assert result["date_chir"].value == "10/06/2023"
 
     def test_chimio_dates(self, extractor):
         text = (

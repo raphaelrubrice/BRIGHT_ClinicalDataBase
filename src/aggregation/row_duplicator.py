@@ -20,14 +20,16 @@ from typing import Optional
 
 from ..extraction.provenance import ExtractionResult
 from ..extraction.schema import ExtractionValue
+from .temporal_aggregation import SPECIMEN_BOUND_FEATURES as _SPECIMEN_BOUND_FEATURES
 
 
 # ---------------------------------------------------------------------------
 # Feature groupings for duplication logic
 # ---------------------------------------------------------------------------
 
-# Fields that are shared across all rows (demographics, tumour location, etc.)
-SHARED_FEATURES: set[str] = {
+# Non-specimen-bound fields that are still shared across all duplicate rows
+# (demographics, care team, tumour location, outcome, historical symptoms …)
+_NON_SPECIMEN_SHARED_FEATURES: set[str] = {
     # Demographics
     "date_rcp", "annee_de_naissance", "sexe", "activite_professionnelle",
     "antecedent_tumoral",
@@ -38,10 +40,6 @@ SHARED_FEATURES: set[str] = {
     "tumeur_lateralite", "tumeur_position", "dominance_cerebrale",
     # Outcome (shared across timeline)
     "date_deces", "infos_deces", "survie_globale",
-    # Biological identifiers
-    "num_labo",
-    # Diagnosis (shared unless explicitly different per specimen)
-    "diag_histologique", "diag_integre", "classification_oms", "grade",
     # First symptoms (historical, shared)
     "date_1er_symptome", "epilepsie_1er_symptome", "ceph_hic_1er_symptome",
     "deficit_1er_symptome", "cognitif_1er_symptome",
@@ -49,24 +47,21 @@ SHARED_FEATURES: set[str] = {
     # Radiology at discovery
     "exam_radio_date_decouverte", "contraste_1er_symptome",
     "oedeme_1er_symptome", "calcif_1er_symptome",
-    # All IHC / molecular / chromosomal / amplification / fusion (specimen-bound)
-    "ihc_idh1", "ihc_p53", "ihc_atrx", "ihc_fgfr3", "ihc_braf",
-    "ihc_hist_h3k27m", "ihc_hist_h3k27me3", "ihc_egfr_hirsch",
-    "ihc_gfap", "ihc_olig2", "ihc_ki67", "ihc_mmr",
-    "histo_necrose", "histo_pec", "histo_mitoses", "aspect_cellulaire",
-    "mol_idh1", "mol_idh2", "mol_tert", "mol_CDKN2A", "mol_h3f3a",
-    "mol_hist1h3b", "mol_braf", "mol_mgmt", "mol_fgfr1", "mol_egfr_mut",
-    "mol_prkca", "mol_p53", "mol_pten", "mol_cic", "mol_fubp1", "mol_atrx",
-    "ch1p", "ch19q", "ch10p", "ch10q", "ch7p", "ch7q", "ch9p", "ch9q", "ch1p19q_codel",
-    "ampli_mdm2", "ampli_cdk4", "ampli_egfr", "ampli_met", "ampli_mdm4",
-    "fusion_fgfr", "fusion_ntrk", "fusion_autre",
 }
+
+# date_chir triggers duplication — exclude it from the shared set.
+# All other specimen-bound fields (IHC / molecular / chromosomal / amplifications /
+# fusions / histology / diagnosis) are shared across duplicate rows.
+# Importing from temporal_aggregation ensures these lists stay in sync.
+SHARED_FEATURES: set[str] = (
+    _SPECIMEN_BOUND_FEATURES - {"date_chir"}
+) | _NON_SPECIMEN_SHARED_FEATURES
 
 # Treatment-event-specific field groups
 # Each group represents a distinct "event axis" that can trigger duplication.
 
 SURGERY_EVENT_FIELDS: list[str] = [
-    "chir_date", "type_chirurgie", "qualite_exerese", "date_chir",
+    "date_chir", "type_chirurgie", "qualite_exerese",
 ]
 
 CHEMO_EVENT_FIELDS: list[str] = [
@@ -181,18 +176,9 @@ def _create_event_row(
 def _detect_surgery_events(
     extraction: ExtractionResult,
 ) -> list[dict[str, ExtractionValue]]:
-    """Detect multiple surgery events from chir_date / date_chir fields."""
-    dates: list[str] = []
-    for field in ("chir_date", "date_chir"):
-        dates.extend(_count_distinct_dates(extraction, field))
-
-    # Deduplicate across both fields
-    seen: set[str] = set()
-    unique_dates: list[str] = []
-    for d in dates:
-        if d not in seen:
-            seen.add(d)
-            unique_dates.append(d)
+    """Detect multiple surgery events from date_chir field."""
+    dates: list[str] = _count_distinct_dates(extraction, "date_chir")
+    unique_dates: list[str] = list(dict.fromkeys(dates))  # deduplicate, preserve order
 
     if len(unique_dates) <= 1:
         return []
@@ -202,7 +188,7 @@ def _detect_surgery_events(
     for date_val in unique_dates:
         event: dict[str, ExtractionValue] = {}
         # Set the surgery date
-        event["chir_date"] = ExtractionValue(
+        event["date_chir"] = ExtractionValue(
             value=date_val,
             extraction_tier="rule",
             source_span=date_val,
@@ -345,7 +331,7 @@ def detect_multiple_events(
     """Check if the document reports multiple distinct treatment events.
 
     Duplication triggers (checked in priority order):
-    - Multiple distinct surgery dates (``chir_date`` / ``date_chir``)
+    - Multiple distinct surgery dates (``date_chir``)
     - Multiple chemotherapy lines (``chimios`` + ``chm_date_debut``)
     - Multiple radiotherapy courses (``rx_date_debut`` + ``rx_dose``)
     - Multiple progression events (``date_progression``)

@@ -169,7 +169,7 @@ class TestSpecimenBoundFeatures:
         # A new surgery event
         ext2 = _make_extraction(
             doc_id="d2", doc_date="01/06/2024", doc_type="anapath",
-            chir_date="01/06/2024",
+            date_chir="01/06/2024",
             ihc_idh1="negatif",
         )
 
@@ -187,7 +187,7 @@ class TestSpecimenBoundFeatures:
         # New surgery only sets ihc_idh1, not mol_tert
         ext2 = _make_extraction(
             doc_id="d2", doc_date="01/06/2024", doc_type="anapath",
-            chir_date="01/06/2024",
+            date_chir="01/06/2024",
             ihc_idh1="negatif",
         )
 
@@ -373,7 +373,7 @@ class TestSyntheticPatientTimeline:
             grade=3,
             ch1p="perte",
             ch19q="perte",
-            chir_date="10/02/2024",
+            date_chir="10/02/2024",
             date_chir="10/02/2024",
         )
         ext3 = _make_extraction(
@@ -391,7 +391,7 @@ class TestSyntheticPatientTimeline:
         )
         ext5 = _make_extraction(
             doc_id="anapath_2", doc_date="01/09/2024", doc_type="anapath",
-            chir_date="01/09/2024",
+            date_chir="01/09/2024",
             date_chir="01/09/2024",
             ihc_idh1="positif",
             mol_tert="wt",

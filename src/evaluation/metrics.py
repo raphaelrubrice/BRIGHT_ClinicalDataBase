@@ -246,7 +246,7 @@ _FEATURE_CATEGORIES: dict[str, list[str]] = {
         "anatomo_pathologiste", "localisation_radiotherapie", "localisation_chir",
     ],
     "dates": [
-        "chir_date", "date_chir", "chm_date_debut", "chm_date_fin",
+        "date_chir", "chm_date_debut", "chm_date_fin",
         "rx_date_debut", "rx_date_fin", "date_1er_symptome",
         "exam_radio_date_decouverte", "date_progression", "date_deces", "dn_date",
     ],

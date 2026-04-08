@@ -50,15 +50,6 @@ _DATE_REPERTOIRE_FR: dict[str, list[str]] = {
         "exerese le", "biopsie stéréotaxique le", "biopsie chirurgicale le",
         "geste chirurgical", "intervention neurochirurgicale",
     ],
-    "chir_date": [
-        "chirurgie", "opéré", "opérée", "intervention", "opération",
-        "exérèse", "biopsie", "résection", "craniotomie", "craniectomie",
-        "opéré le", "opérée le", "reprise chir", "intervention le",
-        "acte chirurgical", "intervention chirurgicale", "résection tumorale", 
-        "exérèse tumorale", "macroscopiquement complète le", "resection le", 
-        "exerese le", "biopsie stéréotaxique le", "biopsie chirurgicale le",
-        "geste chirurgical", "intervention neurochirurgicale",
-    ],
     "date_rcp": [
         "rcp", "réunion de concertation", "concertation pluridisciplinaire",
         "staff", "réunion pluridisciplinaire", "réunion de concertation pluridisciplinaire",
@@ -146,13 +137,6 @@ _DATE_REPERTOIRE_EN: dict[str, list[str]] = {
         "expired on", "time of death",
     ],
     "date_chir": [
-        "surgery", "operated", "operation", "resection", "biopsy",
-        "craniotomy", "excision", "surgical", "operated on",
-        "surgical intervention", "tumor resection", "tumour resection", 
-        "surgical resection", "biopsied on", "resected on", "craniotomy on", 
-        "excision on", "neurosurgery on",
-    ],
-    "chir_date": [
         "surgery", "operated", "operation", "resection", "biopsy",
         "craniotomy", "excision", "surgical", "operated on",
         "surgical intervention", "tumor resection", "tumour resection", 

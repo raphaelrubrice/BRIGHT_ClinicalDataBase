@@ -15,10 +15,7 @@ logger = logging.getLogger(__name__)
 def run_extraction_cli(
     db_path: Path,
     output_dir: Path,
-    use_gliner: bool = True,
-    batching_strategy: str = "heterogeneous",
     parallel_workers: int = 1,
-    use_disambiguator: bool = True,
 ) -> None:
     """Run full extraction and timeline creation purely via CLI logic.
     
@@ -52,16 +49,13 @@ def run_extraction_cli(
 
     # Initialise pipeline
     logger.info("Initializing ExtractionPipeline "
-                f"(GLiNER={use_gliner}, batching={batching_strategy}, n_jobs={parallel_workers})...")
+                f"(n_jobs={parallel_workers})...")
                 
     pipeline_kwargs = {
-        "use_gliner": use_gliner,
         "use_eds": True,
         "use_negation": True,
-        "batching_strategy": batching_strategy,
         "verbose": True,
         "n_jobs": parallel_workers,
-        "use_disambiguator": use_disambiguator,
     }
     pipeline = ExtractionPipeline(**pipeline_kwargs)
 

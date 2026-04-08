@@ -53,17 +53,17 @@ class TestFieldCounts:
         )
 
     def test_clinique_field_count(self):
-        """56 clinical fields (from REQ_CLINIQUE.csv)."""
-        assert len(CLINIQUE_FIELDS) == 56, (
-            f"Expected 56 CLINIQUE fields, got {len(CLINIQUE_FIELDS)}. "
+        """55 clinical fields (chir_date removed as duplicate of date_chir)."""
+        assert len(CLINIQUE_FIELDS) == 55, (
+            f"Expected 55 CLINIQUE fields, got {len(CLINIQUE_FIELDS)}. "
             f"Names: {ALL_CLINIQUE_FIELD_NAMES}"
         )
 
     def test_total_field_count(self):
-        """111 total fields -> 111 unique names."""
+        """110 total fields (55 BIO + 55 CLINIQUE — chir_date removed)."""
         total_unique = len(ALL_FIELDS_BY_NAME)
-        assert total_unique == 111, (
-            f"Expected 111 unique field names, got {total_unique}"
+        assert total_unique == 110, (
+            f"Expected 110 unique field names, got {total_unique}"
         )
 
     def test_no_duplicate_bio_fields(self):
@@ -135,7 +135,7 @@ class TestCliniqueFieldNames:
         "date_progression",
         "epilepsie", "ceph_hic", "deficit", "cognitif", "autre_trouble",
         "anti_epileptiques", "essai_therapeutique",
-        "chir_date", "type_chirurgie", "qualite_exerese",
+        "type_chirurgie", "qualite_exerese",
         "rx_date_debut", "rx_date_fin", "rx_dose", "rx_fractionnement",
         "corticoides", "optune",
     ]
@@ -173,7 +173,7 @@ class TestControlledVocab:
         assert "perte partielle" in ControlledVocab.CHROMOSOMAL
 
     def test_grade_values(self):
-        assert ControlledVocab.GRADE == {1, 2, 3, 4, "autre", "NA"}
+        assert ControlledVocab.GRADE == {"1", "2", "3", "4", "autre", "NA"}
 
     def test_who_classification(self):
         assert ControlledVocab.WHO_CLASSIFICATION == {"2007", "2016", "2021", "NA"}
@@ -561,10 +561,10 @@ class TestJSONSchemaGeneration:
         schema = get_json_schema("diagnosis")
         values_props = schema["properties"]["values"]["properties"]
         grade = values_props["grade"]
-        # Grade is an integer with enum values {1, 2, 3, 4}
+        # Grade is now categorical with string values {"1","2","3","4","autre","NA"}
         assert "enum" in grade
-        assert 1 in grade["enum"]
-        assert 4 in grade["enum"]
+        assert "1" in grade["enum"]
+        assert "4" in grade["enum"]
         assert None in grade["enum"]
 
     def test_unknown_group_raises(self):
@@ -678,7 +678,6 @@ class TestSampleExtractionParsing:
             autre_trouble=ExtractionValue(value="non"),
             anti_epileptiques=ExtractionValue(value="oui"),
             essai_therapeutique=ExtractionValue(value="non"),
-            chir_date=ExtractionValue(value="15/10/2024"),
             type_chirurgie=ExtractionValue(value="exerese complete"),
             rx_date_debut=ExtractionValue(value="26/11/2024"),
             rx_date_fin=ExtractionValue(value="09/01/2025"),

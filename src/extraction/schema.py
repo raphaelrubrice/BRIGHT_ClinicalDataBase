@@ -13,7 +13,6 @@ Public API
 - ``ClinicalFeatures``         – All 56 clinical fields.
 - ``DocumentExtraction``       – Full extraction result for one document.
 - ``FEATURE_ROUTING``          – Document-type → extractable feature subsets.
-- ``get_json_schema(group)``   – JSON Schema dict for Ollama ``format`` param.
 """
 
 from __future__ import annotations
@@ -28,8 +27,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # ---------------------------------------------------------------------------
 # Controlled vocabularies
 # ---------------------------------------------------------------------------
-
-import re
 
 class ControlledVocab:
     """Namespace of allowed value sets for constrained fields."""
@@ -47,8 +44,7 @@ class ControlledVocab:
     
     MGMT_STATUS: set[str] = {"methyle", "non methyle", "wt", "mute", "NA"}
 
-    # Changed to allow "autre" (Type hint updated to include str)
-    GRADE: set[int | str] = {1, 2, 3, 4, "autre", "NA"}
+    GRADE: set[str] = {"1", "2", "3", "4", "autre", "NA"}
 
     WHO_CLASSIFICATION: set[str] = {"2007", "2016", "2021", "NA"}
 
@@ -127,7 +123,7 @@ class ExtractionValue(BaseModel):
     source_span: Optional[str] = None  # exact text from document
     source_span_start: Optional[int] = None  # character offset
     source_span_end: Optional[int] = None
-    extraction_tier: Literal["rule", "llm", "gliner", "manual"] = "rule"
+    extraction_tier: Literal["rule", "llm", "gliner", "manual", "hf"] = "rule"
     confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     section: Optional[str] = None  # which document section
     vocab_valid: bool = True  # passed controlled vocabulary check
@@ -198,7 +194,7 @@ BIO_FIELDS: list[FieldDefinition] = [
     FieldDefinition(name="diag_histologique",   display_name="Diagnostic histologique",     field_type=FieldType.FREE_TEXT,     group="diagnosis"),
     FieldDefinition(name="diag_integre",        display_name="Diagnostic intégré",          field_type=FieldType.FREE_TEXT,     group="diagnosis"),
     FieldDefinition(name="classification_oms",  display_name="Classification OMS",          field_type=FieldType.CATEGORICAL,  group="diagnosis",  allowed_values=ControlledVocab.WHO_CLASSIFICATION, mapping_type=MappingType.SIMILARITY),
-    FieldDefinition(name="grade",               display_name="Grade OMS",                   field_type=FieldType.INTEGER,      group="diagnosis",  allowed_values=ControlledVocab.GRADE),
+    FieldDefinition(name="grade",               display_name="Grade OMS",                   field_type=FieldType.CATEGORICAL,  group="diagnosis",  allowed_values=ControlledVocab.GRADE, mapping_type=MappingType.SIMILARITY),
 
     # ── IHC ──
     FieldDefinition(name="ihc_idh1",            display_name="IHC IDH1",             field_type=FieldType.CATEGORICAL, group="ihc", allowed_values=ControlledVocab.IHC_STATUS, mapping_type=MappingType.SIMILARITY),
@@ -340,7 +336,6 @@ CLINIQUE_FIELDS: list[FieldDefinition] = [
     FieldDefinition(name="essai_therapeutique",      display_name="Essai thérapeutique",     field_type=FieldType.CATEGORICAL, group="adjunct", allowed_values=ControlledVocab.BINARY, mapping_type=MappingType.PRESENCE),
 
     # ── Surgery ──
-    FieldDefinition(name="chir_date",       display_name="Date chirurgie",    field_type=FieldType.DATE,        group="surgery"),
     FieldDefinition(name="type_chirurgie",  display_name="Type chirurgie",    field_type=FieldType.CATEGORICAL, group="surgery", allowed_values=ControlledVocab.SURGERY_TYPE, mapping_type=MappingType.SIMILARITY),
     FieldDefinition(name="qualite_exerese", display_name="Qualité de l'exérèse", field_type=FieldType.STRING,     group="surgery"),
 
@@ -528,7 +523,6 @@ class ClinicalFeatures(BaseModel):
     essai_therapeutique: Optional[ExtractionValue] = None
 
     # Surgery
-    chir_date: Optional[ExtractionValue] = None
     type_chirurgie: Optional[ExtractionValue] = None
     qualite_exerese: Optional[ExtractionValue] = None
 
@@ -606,7 +600,7 @@ _RCP_CLINIQUE_FIELDS = _resolve_patterns(CLINIQUE_FIELDS, [
     "date_rcp", "sexe", "annee_de_naissance",
     "chimios", "chimio_protocole", "chm_*",
     "rx_*",
-    "chir_date", "type_chirurgie", "qualite_exerese",
+    "date_chir", "type_chirurgie", "qualite_exerese",
     "ik_clinique",
     "tumeur_lateralite", "tumeur_position", "dominance_cerebrale",
     "evol_clinique", "reponse_radiologique",
@@ -706,7 +700,7 @@ FEATURE_GROUPS: dict[str, list[str]] = {
     ),
     "treatment": _resolve_patterns(CLINIQUE_FIELDS, [
         "chimios", "chimio_protocole", "chm_*",
-        "chir_date", "type_chirurgie", "qualite_exerese",
+        "date_chir", "type_chirurgie", "qualite_exerese",
         "rx_*",
         "anti_epileptiques", "essai_therapeutique",
         "corticoides", "optune",
@@ -721,7 +715,7 @@ FEATURE_GROUPS: dict[str, list[str]] = {
 
 
 # ---------------------------------------------------------------------------
-# JSON schema generation for Ollama constrained decoding
+# JSON schema generation (kept for potential future use, not used in pipeline)
 # ---------------------------------------------------------------------------
 
 def _json_type_for_field(field: FieldDefinition) -> dict[str, Any]:

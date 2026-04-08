@@ -81,7 +81,7 @@ TIME_VARYING_FEATURES: set[str] = {
     "ik_clinique", "epilepsie", "ceph_hic", "deficit", "cognitif",
     "autre_trouble",
     "chimios", "chimio_protocole", "chm_date_debut", "chm_date_fin", "chm_cycles",
-    "chir_date", "type_chirurgie", "qualite_exerese",
+    "date_chir", "type_chirurgie", "qualite_exerese",
     "rx_date_debut", "rx_date_fin", "rx_dose", "rx_fractionnement",
     "corticoides", "optune",
     "anti_epileptiques", "essai_therapeutique",
@@ -125,11 +125,8 @@ def _priority_rank(doc_type: str, field_name: str) -> int:
 
 def _is_surgery_event(extraction: ExtractionResult) -> bool:
     """Check if this extraction reports a new surgery event."""
-    for field in ("chir_date", "date_chir"):
-        ev = extraction.features.get(field)
-        if ev is not None and ev.value is not None:
-            return True
-    return False
+    ev = extraction.features.get("date_chir")
+    return ev is not None and ev.value is not None
 
 
 def _extraction_sort_key(extraction: ExtractionResult) -> str:
@@ -284,6 +281,30 @@ def aggregate_patient_timeline(
 # State update helpers
 # ---------------------------------------------------------------------------
 
+def _update_state_with_priority(
+    fname: str,
+    new_value: Any,
+    doc_type: str,
+    state: dict[str, tuple[Any, str]],
+) -> None:
+    """Update *state[fname]* only when *new_value* is non-None and the source
+    has equal or higher priority than the current value.
+
+    This is the shared core used by both static and specimen-bound rules.
+    Time-varying fields also use it (latest document at the same date wins
+    by priority; across different dates the last chronological value wins).
+    """
+    if new_value is None:
+        return
+
+    if fname not in state:
+        state[fname] = (new_value, doc_type)
+    else:
+        _, existing_doc_type = state[fname]
+        if _priority_rank(doc_type, fname) < _priority_rank(existing_doc_type, fname):
+            state[fname] = (new_value, doc_type)
+
+
 def _apply_static(
     fname: str,
     new_value: Any,
@@ -296,16 +317,7 @@ def _apply_static(
     Subsequent non-None values update only if they come from a
     higher-priority document type.
     """
-    if new_value is None:
-        return
-
-    if fname not in state:
-        state[fname] = (new_value, doc_type)
-    else:
-        _, existing_doc_type = state[fname]
-        # Update only if the new source has higher priority
-        if _priority_rank(doc_type, fname) < _priority_rank(existing_doc_type, fname):
-            state[fname] = (new_value, doc_type)
+    _update_state_with_priority(fname, new_value, doc_type, state)
 
 
 def _apply_specimen_bound(
@@ -324,15 +336,7 @@ def _apply_specimen_bound(
     After reset, the feature is set from the first non-None value seen.
     Conflicts are resolved via document-type priority.
     """
-    if new_value is None:
-        return
-
-    if fname not in state:
-        state[fname] = (new_value, doc_type)
-    else:
-        _, existing_doc_type = state[fname]
-        if _priority_rank(doc_type, fname) < _priority_rank(existing_doc_type, fname):
-            state[fname] = (new_value, doc_type)
+    _update_state_with_priority(fname, new_value, doc_type, state)
 
 
 def _apply_time_varying(
@@ -343,9 +347,11 @@ def _apply_time_varying(
 ) -> None:
     """Apply time-varying update rule.
 
-    Carry the latest explicit value.  ``None`` does NOT overwrite a
-    previous explicit value.  When two documents at the same timepoint
-    conflict, resolve via document-type priority.
+    Carry the latest explicit value forward.  ``None`` does NOT overwrite
+    a previous explicit value.  When documents share the same timepoint,
+    the higher-priority document type wins.  Across different timepoints,
+    the most recent chronological value wins (priority still applies within
+    the same timepoint since we call ``_update_state_with_priority``).
     """
     if new_value is None:
         return  # NA does NOT overwrite
@@ -353,10 +359,7 @@ def _apply_time_varying(
     if fname not in state:
         state[fname] = (new_value, doc_type)
     else:
-        # Always take the latest explicit value (chronological ordering
-        # means we process in order).  But if we're still "at the same
-        # timepoint" we use priority.  Since we iterate chronologically,
-        # the latest document wins unless priority says otherwise.
-        # For simplicity: always update when we have a new explicit value,
-        # but prefer higher-priority doc type if the value is the same timepoint.
-        state[fname] = (new_value, doc_type)
+        _, existing_doc_type = state[fname]
+        # Accept the new value if higher or equal priority
+        if _priority_rank(doc_type, fname) <= _priority_rank(existing_doc_type, fname):
+            state[fname] = (new_value, doc_type)

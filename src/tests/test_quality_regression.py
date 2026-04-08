@@ -34,18 +34,18 @@ class TestDateContextAssignment:
         """'né(e) le' context → annee_de_naissance."""
         text = "Monsieur X, né le 15/06/1977, 47 ans"
         dates = extract_dates(text)
-        assigned = _assign_dates_by_context(dates, ["annee_de_naissance", "chir_date"], text)
+        assigned = _assign_dates_by_context(dates, ["annee_de_naissance", "date_chir"], text)
         assert "annee_de_naissance" in assigned
         assert assigned["annee_de_naissance"].value == "1977"
-        assert "chir_date" not in assigned  # Should NOT contaminate
+        assert "date_chir" not in assigned  # Should NOT contaminate
 
     def test_surgery_date_keyword(self):
-        """'opéré le' context → chir_date."""
+        """'opéré le' context → date_chir."""
         text = "Patient opéré le 20/03/2024 au bloc central"
         dates = extract_dates(text)
-        assigned = _assign_dates_by_context(dates, ["chir_date", "annee_de_naissance"], text)
-        assert "chir_date" in assigned
-        assert assigned["chir_date"].value == "20/03/2024"
+        assigned = _assign_dates_by_context(dates, ["date_chir", "annee_de_naissance"], text)
+        assert "date_chir" in assigned
+        assert assigned["date_chir"].value == "20/03/2024"
         assert "annee_de_naissance" not in assigned
 
     def test_multi_date_no_cross_contamination(self):
@@ -56,18 +56,18 @@ class TestDateContextAssignment:
             "Début radiothérapie le 15/03/2024."
         )
         dates = extract_dates(text)
-        fields = ["annee_de_naissance", "chir_date", "rx_date_debut"]
+        fields = ["annee_de_naissance", "date_chir", "rx_date_debut"]
         assigned = _assign_dates_by_context(dates, fields, text)
 
         assert assigned.get("annee_de_naissance", ExtractionValue()).value == "1980"
-        assert assigned.get("chir_date", ExtractionValue()).value == "01/02/2024"
+        assert assigned.get("date_chir", ExtractionValue()).value == "01/02/2024"
         assert assigned.get("rx_date_debut", ExtractionValue()).value == "15/03/2024"
 
     def test_unmatched_dates_are_left_for_llm(self):
         """Dates without keyword context are NOT assigned (left for Tier 2)."""
         text = "Consultation du 15/11/2024"
         dates = extract_dates(text)
-        assigned = _assign_dates_by_context(dates, ["chir_date", "rx_date_debut"], text)
+        assigned = _assign_dates_by_context(dates, ["date_chir", "rx_date_debut"], text)
         # "consultation du" doesn't match surgery or radiotherapy keywords
         assert len(assigned) == 0
 

@@ -3,8 +3,8 @@ from typing import Any
 import edsnlp
 import edsnlp.pipes as eds
 
-from src.extraction.schema import ExtractionValue, get_field, ControlledVocab
-from src.extraction.rule_extraction import (
+from .schema import ExtractionValue, get_field, ControlledVocab
+from .rule_extraction import (
     _IHC_VALUE_NORM,
     _MOL_STATUS_NORM,
     _CHR_STATUS_NORM,
@@ -17,9 +17,9 @@ from src.extraction.rule_extraction import (
     _DRUG_SYNONYMS,
     _DATE_CONTEXT_KEYWORDS,
 )
-from src.extraction.text_normalisation import normalise as _norm
+from .text_normalisation import normalise as _norm
 from collections import defaultdict
-from src.extraction.section_detector import get_section_for_feature
+from .section_detector import get_section_for_feature
 
 # ---------------------------------------------------------------------------
 # Matcher Dictionaries

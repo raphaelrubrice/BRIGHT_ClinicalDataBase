@@ -3,10 +3,10 @@ import pandas as pd
 from pathlib import Path
 from typing import Any
 
-from src.extraction.pipeline import ExtractionPipeline
-from src.extraction.schema import get_extractable_fields, ALL_FIELDS_BY_NAME, FieldType
-from src.evaluation.gold_standard import load_gold_standard
-from src.evaluation.metrics import (
+from ..extraction.pipeline import ExtractionPipeline
+from ..extraction.schema import get_extractable_fields, ALL_FIELDS_BY_NAME, FieldType
+from .gold_standard import load_gold_standard
+from .metrics import (
     compute_per_feature_metrics,
     compute_aggregate_metrics,
     compute_category_metrics,
@@ -22,8 +22,8 @@ def _generate_extractor_reports(all_data: list[dict], output_dir: str):
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    # 4 Extractors we care about: date, controlled, gliner, eds
-    extractors = ["date", "controlled", "gliner", "eds"]
+    # Extractors: date, controlled, rules, eds
+    extractors = ["date", "controlled", "rules", "eds"]
     
     for ext_name in extractors:
         all_metrics_ext = []
@@ -41,8 +41,8 @@ def _generate_extractor_reports(all_data: list[dict], output_dir: str):
                 p_dict = res.date_results
             elif ext_name == "controlled":
                 p_dict = res.controlled_results
-            elif ext_name == "gliner":
-                p_dict = res.gliner_results
+            elif ext_name == "rules":
+                p_dict = res.rule_results
             elif ext_name == "eds":
                 p_dict = res.eds_results
             else:
@@ -73,15 +73,11 @@ def _generate_extractor_reports(all_data: list[dict], output_dir: str):
                 # Add all valid date fields in GT
                 domain_fields.update({f for f in ext_gt if f in _DATE_FIELDS})
             elif ext_name == "controlled":
-                # Any field in GT that belongs to controlled fields that are extractable
-                # We can approximate the domain by seeing if the field type is CATEGORICAL
-                # but an easier approximation is just to look at what's in the GT that was missed.
-                from src.extraction.controlled_vocab_data import CONTROLLED_REGISTRY_FR, CONTROLLED_REGISTRY_EN
-                domain_fields.update({f for f in ext_gt if f in CONTROLLED_REGISTRY_FR or f in CONTROLLED_REGISTRY_EN})
-            elif ext_name == "gliner":
-                # GLiNER handles anything not handled by date/controlled
-                from src.extraction.controlled_vocab_data import CONTROLLED_REGISTRY_FR, CONTROLLED_REGISTRY_EN
-                domain_fields.update({f for f in ext_gt if f not in _DATE_FIELDS and f not in CONTROLLED_REGISTRY_FR and f not in CONTROLLED_REGISTRY_EN})
+                from ..extraction.controlled_vocab_data import CONTROLLED_REGISTRY_FR
+                domain_fields.update({f for f in ext_gt if f in CONTROLLED_REGISTRY_FR})
+            elif ext_name == "rules":
+                # Rules handle all non-date fields
+                domain_fields.update({f for f in ext_gt if f not in _DATE_FIELDS})
             elif ext_name == "eds":
                 # EDS handles the fallback for non-dates
                 domain_fields.update({f for f in ext_gt if f not in _DATE_FIELDS})
@@ -241,8 +237,6 @@ def run_benchmark(
     all_docs_data: list[dict] = []
     
     tier1_total = 0
-    tier2_total = 0
-    gliner_total = 0
 
     for doc in docs:
         doc_id = doc.get("document_id", "")
@@ -252,8 +246,6 @@ def run_benchmark(
         result = pipeline.extract_document(text, document_id=doc_id, patient_id=patient_id)
         
         tier1_total += result.tier1_count
-        tier2_total += result.tier2_count
-        gliner_total += result.gliner_count
 
         gt_annotations = doc.get("annotations", {})
 
@@ -331,7 +323,5 @@ def run_benchmark(
     logger = logging.getLogger(__name__)
     logger.info("Extraction provenance summary across all benchmark documents:")
     logger.info("  Tier 1 (Rule/EDS): %d", tier1_total)
-    logger.info("  Tier GLiNER      : %d", gliner_total)
-    logger.info("  Tier 2 (LLM)     : %d", tier2_total)
 
     return df_metrics

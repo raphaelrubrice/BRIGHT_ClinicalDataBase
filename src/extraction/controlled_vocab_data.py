@@ -11,7 +11,8 @@ specifies:
 Two registries are provided:
 
 * ``CONTROLLED_REGISTRY_FR`` – French clinical documents.
-* ``CONTROLLED_REGISTRY_EN`` – English clinical documents.
+* ``CONTROLLED_REGISTRY_EN`` – English clinical documents (unused — all
+  documents are French; kept for potential future use).
 
 Categories with value ``"autre"`` or ``"NA"`` are intentionally **not**
 included: ``"autre"`` gets an empty list (free-text → no robust

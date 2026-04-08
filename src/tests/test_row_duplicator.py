@@ -100,28 +100,28 @@ class TestCountDistinctDates:
     """Test extracting distinct date values from a feature."""
 
     def test_single_date(self):
-        ext = _make_extraction(chir_date="01/03/2020")
-        dates = _count_distinct_dates(ext, "chir_date")
+        ext = _make_extraction(date_chir="01/03/2020")
+        dates = _count_distinct_dates(ext, "date_chir")
         assert dates == ["01/03/2020"]
 
     def test_multiple_dates_comma(self):
-        ext = _make_extraction(chir_date="01/03/2020, 15/09/2021")
-        dates = _count_distinct_dates(ext, "chir_date")
+        ext = _make_extraction(date_chir="01/03/2020, 15/09/2021")
+        dates = _count_distinct_dates(ext, "date_chir")
         assert dates == ["01/03/2020", "15/09/2021"]
 
     def test_duplicates_removed(self):
-        ext = _make_extraction(chir_date="01/03/2020, 01/03/2020, 15/09/2021")
-        dates = _count_distinct_dates(ext, "chir_date")
+        ext = _make_extraction(date_chir="01/03/2020, 01/03/2020, 15/09/2021")
+        dates = _count_distinct_dates(ext, "date_chir")
         assert dates == ["01/03/2020", "15/09/2021"]
 
     def test_missing_field(self):
         ext = _make_extraction(sexe="M")
-        dates = _count_distinct_dates(ext, "chir_date")
+        dates = _count_distinct_dates(ext, "date_chir")
         assert dates == []
 
     def test_null_value(self):
-        ext = _make_extraction(chir_date=None)
-        dates = _count_distinct_dates(ext, "chir_date")
+        ext = _make_extraction(date_chir=None)
+        dates = _count_distinct_dates(ext, "date_chir")
         assert dates == []
 
 
@@ -140,7 +140,7 @@ class TestSingleEventNoduplication:
 
     def test_single_surgery(self):
         ext = _make_extraction(
-            chir_date="01/03/2020",
+            date_chir="01/03/2020",
             type_chirurgie="biopsie",
             sexe="M",
         )
@@ -177,7 +177,7 @@ class TestMultipleSurgeries:
 
     def test_two_surgeries(self):
         ext = _make_extraction(
-            chir_date="01/03/2020, 15/09/2021",
+            date_chir="01/03/2020, 15/09/2021",
             type_chirurgie="biopsie",
             sexe="M",
             tumeur_lateralite="gauche",
@@ -193,12 +193,12 @@ class TestMultipleSurgeries:
             assert row.features["tumeur_lateralite"].value == "gauche"
 
         # Each row should have the correct surgery date
-        dates = [row.features["chir_date"].value for row in result]
+        dates = [row.features["date_chir"].value for row in result]
         assert "01/03/2020" in dates
         assert "15/09/2021" in dates
 
     def test_surgery_audit_log(self):
-        ext = _make_extraction(chir_date="01/03/2020, 15/09/2021")
+        ext = _make_extraction(date_chir="01/03/2020, 15/09/2021")
         result = detect_multiple_events(ext)
         assert len(result) == 2
         for i, row in enumerate(result):
@@ -207,7 +207,7 @@ class TestMultipleSurgeries:
 
     def test_three_surgeries(self):
         ext = _make_extraction(
-            chir_date="01/01/2019, 15/06/2020, 01/12/2021"
+            date_chir="01/01/2019, 15/06/2020, 01/12/2021"
         )
         result = detect_multiple_events(ext)
         assert len(result) == 3
@@ -278,12 +278,12 @@ class TestDuplicationPriority:
 
     def test_surgery_takes_priority_over_chemo(self):
         ext = _make_extraction(
-            chir_date="01/03/2020, 15/09/2021",
+            date_chir="01/03/2020, 15/09/2021",
             chm_date_debut="01/04/2020, 01/01/2021",
         )
         result = detect_multiple_events(ext)
         # Surgery detected first → splits on surgery dates
-        dates = [row.features.get("chir_date") for row in result]
+        dates = [row.features.get("date_chir") for row in result]
         # Should have exactly 2 rows from surgery duplication
         assert len(result) == 2
         assert all(d is not None for d in dates)
@@ -304,7 +304,7 @@ class TestSharedFeaturesCopied:
             ch1p="perte",
             ampli_egfr="oui",
             fusion_fgfr="non",
-            chir_date="01/03/2020, 15/09/2021",
+            date_chir="01/03/2020, 15/09/2021",
         )
         result = detect_multiple_events(ext)
         assert len(result) == 2
@@ -334,7 +334,7 @@ class TestEdgeCases:
 
     def test_all_null_values(self):
         ext = _make_extraction(
-            chir_date=None,
+            date_chir=None,
             chm_date_debut=None,
             rx_date_debut=None,
             date_progression=None,
@@ -343,7 +343,7 @@ class TestEdgeCases:
         assert len(result) == 1
 
     def test_document_metadata_preserved(self):
-        ext = _make_extraction(chir_date="01/03/2020, 15/09/2021")
+        ext = _make_extraction(date_chir="01/03/2020, 15/09/2021")
         ext.document_id = "doc_123"
         ext.document_type = "consultation"
         ext.patient_id = "patient_456"

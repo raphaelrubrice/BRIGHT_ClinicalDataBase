@@ -12,10 +12,10 @@ def test_eds_extractor_demographics():
 def test_eds_extractor_dates():
     extractor = EDSExtractor()
     text = "Il a été opéré le 10 juin 2023 pour une exérèse complète. Début de chimiothérapie le 01 juillet 2023. Fin de radiothérapie le 15 août 2023."
-    fields = ["chir_date", "chm_date_debut", "rx_date_fin"]
+    fields = ["date_chir", "chm_date_debut", "rx_date_fin"]
     res = extractor.extract(text, {}, fields)
     
-    assert "chir_date" in res and res.get("chir_date").value == "10/06/2023"
+    assert "date_chir" in res and res.get("date_chir").value == "10/06/2023"
     assert "chm_date_debut" in res and res.get("chm_date_debut").value == "01/07/2023"
     assert "rx_date_fin" in res and res.get("rx_date_fin").value == "15/08/2023"
 
@@ -104,7 +104,7 @@ def test_eds_extractor_end_to_end():
     
     fields = [
         "sexe", "annee_de_naissance", "ceph_hic_1er_symptome", "epilepsie_1er_symptome",
-        "tumeur_lateralite", "chir_date", "type_chirurgie", "grade", "classification_oms", 
+        "tumeur_lateralite", "date_chir", "type_chirurgie", "grade", "classification_oms", 
         "histo_mitoses", "ihc_p53", "ihc_ki67", "mol_idh1", "mol_mgmt", 
         "chm_date_debut", "ik_clinique"
     ]
@@ -117,7 +117,7 @@ def test_eds_extractor_end_to_end():
     assert res.get("ceph_hic_1er_symptome").value == "oui"
     assert res.get("epilepsie_1er_symptome").value == "non"
     assert res.get("tumeur_lateralite").value == "gauche"
-    assert res.get("chir_date").value == "20/05/2023"
+    assert res.get("date_chir").value == "20/05/2023"
     assert res.get("type_chirurgie").value == "exerese complete"
     assert res.get("grade").value == 4
     assert res.get("classification_oms").value == "2021"

@@ -50,10 +50,6 @@ class ExtractionResult:
         Whether the document type classification was ambiguous.
     tier1_count : int
         Number of features extracted by EDS-NLP / Rules.
-    tier2_count : int
-        Deprecated (kept for backward compatibility). Always 0.
-    gliner_count : int
-        Number of features extracted by GLiNER (primary extractor).
     total_extraction_time_ms : float
         Total time spent on extraction in milliseconds.
     """
@@ -63,21 +59,21 @@ class ExtractionResult:
     document_date: Optional[str] = None
     patient_id: str = ""
     features: dict[str, ExtractionValue] = field(default_factory=dict)
-    
+
     # Per-extractor intermediate results for performance benchmarks
     date_results: dict[str, ExtractionValue] = field(default_factory=dict)
     controlled_results: dict[str, ExtractionValue] = field(default_factory=dict)
-    gliner_results: dict[str, ExtractionValue] = field(default_factory=dict)
-    eds_results: dict[str, ExtractionValue] = field(default_factory=dict)
-    
+    rule_results: dict[str, ExtractionValue] = field(default_factory=dict)
+    rules_merged: dict[str, ExtractionValue] = field(default_factory=dict)
+    eds_results: dict[str, ExtractionValue] = field(default_factory=dict)   # EDSExtractor (RULES branch)
+    hf_results: dict[str, ExtractionValue] = field(default_factory=dict)    # HFExtractor  (ML branch)
+
     sections_detected: list[str] = field(default_factory=list)
     extraction_log: list[str] = field(default_factory=list)
     flagged_for_review: list[str] = field(default_factory=list)
     classification_confidence: float = 0.0
     classification_is_ambiguous: bool = False
     tier1_count: int = 0
-    tier2_count: int = 0
-    gliner_count: int = 0
     total_extraction_time_ms: float = 0.0
 
     # -- Convenience helpers -------------------------------------------------
@@ -110,8 +106,6 @@ class ExtractionResult:
             "patient_id": self.patient_id,
             "total_features": len(self.features),
             "tier1_count": self.tier1_count,
-            "tier2_count": self.tier2_count,
-            "gliner_count": self.gliner_count,
             "flagged_count": len(self.flagged_for_review),
             "sections": self.sections_detected,
             "extraction_time_ms": round(self.total_extraction_time_ms, 1),
