@@ -60,10 +60,6 @@ from .rule_extraction import (  # noqa: E402
 
 HUB_PREFIX = "raphael-r/bright-eds-"
 
-# Documents stacked per transformer forward pass during nlp.pipe().
-# Matches eds-pseudo's batch_size; tune down if OOM on small CPU machines.
-_PIPE_BATCH_SIZE = 8
-
 # Transformer window/stride used on CPU to reduce O(n²) attention cost ~4×.
 # Models were trained with window=510/stride=382; overriding here trades a
 # small amount of long-range context for much faster CPU inference.
@@ -321,7 +317,9 @@ class HFExtractor:
             )
             nlp = self._get_nlp(group)
             t0 = time.perf_counter()
-            for i, doc in enumerate(nlp.pipe(texts, batch_size=_PIPE_BATCH_SIZE)):
+            with torch.inference_mode():
+                docs = list(nlp.pipe(texts))
+            for i, doc in enumerate(docs):
                 for ent in doc.ents:
                     fname = _normalize_label(ent.label_)
                     ev = _span_to_ev(fname, ent)
