@@ -27,18 +27,18 @@ Section Detector (section_detector.py)
     ▼
 Four-Tier Extraction (pipeline.py)
 │
-├── Tier 1 — Date Extractor (date_extractor.py)
+├── Tier 1, Date Extractor (date_extractor.py)
 │   └── Regex-based date parsing for all date fields
 │
-├── Tier 2 — Controlled Vocabulary Extractor (controlled_extractor.py)
+├── Tier 2, Controlled Vocabulary Extractor (controlled_extractor.py)
 │   ├── Find & Check: locate marker terms, then match category values
 │   ├── Regex for short terms (≤3 chars), fuzzy matching (rapidfuzz) for longer
 │   └── Covers: IHC status, molecular status, grade, surgery type, etc.
 │
-├── Tier 3 — EDS Extractor (eds_extractor.py)
+├── Tier 3, EDS Extractor (eds_extractor.py)
 │   └── Rule-based EDS-NLP patterns for specialized fields
 │
-└── Tier 4 — ML Extractor (hf_extractor.py)
+└── Tier 4, ML Extractor (hf_extractor.py)
     ├── 10 fine-tuned EDS-NLP CRF models (raphael-r/bright-eds-{group})
     ├── 10 semantic groups covering all 110 fields
     └── GPU: window=510 tokens, stride=382 / CPU fallback: window=128, stride=96
@@ -118,9 +118,9 @@ Splitting into groups is necessary because EDS-NLP CRF models have a 512-token c
 
 `ControlledExtractor` (`src/extraction/controlled_extractor.py`) handles fields with a fixed value set using a three-step Find & Check algorithm:
 
-1. **Find** — scan for field-specific identification terms (gene names, marker names). Terms ≤3 chars: word-boundary regex. Longer terms: sliding-window fuzzy match via `rapidfuzz`.
-2. **Check** — for each hit, fuzzy-match candidate category values against the surrounding context. A length bonus penalises short coincidental matches.
-3. **Assign** — combined score = id_score × 0.3 + category_score × 0.7; greedy assignment, one value per field.
+1. **Find**, scan for field-specific identification terms (gene names, marker names). Terms ≤3 chars: word-boundary regex. Longer terms: sliding-window fuzzy match via `rapidfuzz`.
+2. **Check**, for each hit, fuzzy-match candidate category values against the surrounding context. A length bonus penalises short coincidental matches.
+3. **Assign**, combined score = id_score × 0.3 + category_score × 0.7; greedy assignment, one value per field.
 
 Vocabularies are in `src/extraction/schema.py`; term lists in `src/extraction/controlled_vocab_data.py`. Covered types:
 
@@ -145,7 +145,7 @@ Vocabularies are in `src/extraction/schema.py`; term lists in `src/extraction/co
 
 `AssertionAnnotator` (`src/extraction/negation.py`) checks whether each entity is negated, hypothetical, or historical.
 
-**EDS-NLP backend (preferred):** uses `eds.negation`, `eds.hypothesis`, `eds.history` — clinical patterns tuned for French.
+**EDS-NLP backend (preferred):** uses `eds.negation`, `eds.hypothesis`, `eds.history`, clinical patterns tuned for French.
 
 **Regex fallback:** 60-character context window before each span (and after for hypothesis/history):
 - Negation: `pas de`, `absence de`, `sans`, `aucun`, `non`, `ne...pas`, `négatif`
@@ -161,7 +161,7 @@ Negated values are inverted via the `SIMILARITY_FLIP` map in `src/extraction/pip
 | mute / muté | wt |
 | methyle / méthylé | non methyle / non méthylé |
 
-Chromosomal gain/perte are **not** inverted — "pas de gain" and "perte" are logically distinct. PRESENCE fields flip to `non`; FREE_TEXT fields get `non ` prepended.
+Chromosomal gain/perte are **not** inverted, "pas de gain" and "perte" are logically distinct. PRESENCE fields flip to `non`; FREE_TEXT fields get `non ` prepended.
 
 ---
 
@@ -182,9 +182,9 @@ Observed failure modes on real data:
 
 ## Output Format
 
-**`bio.csv`** — one row per surgical event per patient, 55 biological fields. If a document references multiple surgical events, `row_duplicator.py` splits it into one row per event.
+**`bio.csv`**, one row per surgical event per patient, 55 biological fields. If a document references multiple surgical events, `row_duplicator.py` splits it into one row per event.
 
-**`clinique.csv`** — one row per consultation per patient, 55 clinical fields. Events are identified by `date_rcp`.
+**`clinique.csv`**, one row per consultation per patient, 55 clinical fields. Events are identified by `date_rcp`.
 
 Both files include an `IPP` column and a source document reference. Unextracted fields are left empty (distinguishable from an explicitly extracted `NA`). Temporal aggregation (`src/aggregation/temporal_aggregation.py`) forward-fills values across timepoints; conflicts are flagged in the audit log.
 
@@ -223,6 +223,6 @@ python main.py extract \
 ```
 
 **Output files:**
-- `results/bio.csv` — biological features, one row per surgical event
-- `results/clinique.csv` — clinical features, one row per consultation
-- `results/cli_extraction_log.txt` — full run log with per-document timing and flagged fields
+- `results/bio.csv`, biological features, one row per surgical event
+- `results/clinique.csv`, clinical features, one row per consultation
+- `results/cli_extraction_log.txt`, full run log with per-document timing and flagged fields

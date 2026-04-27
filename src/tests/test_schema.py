@@ -1,4 +1,4 @@
-"""Tests for src/extraction/schema.py — feature schema and controlled vocabularies.
+"""Tests for src/extraction/schema.py, feature schema and controlled vocabularies.
 
 Validates:
 - All 102 fields (54 BIO + 48 CLINIQUE) are defined.
@@ -60,7 +60,7 @@ class TestFieldCounts:
         )
 
     def test_total_field_count(self):
-        """110 total fields (55 BIO + 55 CLINIQUE — chir_date removed)."""
+        """110 total fields (55 BIO + 55 CLINIQUE, chir_date removed)."""
         total_unique = len(ALL_FIELDS_BY_NAME)
         assert total_unique == 110, (
             f"Expected 110 unique field names, got {total_unique}"

@@ -1,4 +1,4 @@
-# run_hf_demo.ipynb — Results Backup
+# run_hf_demo.ipynb, Results Backup
 
 Captured from notebook outputs before clearing (2026-04-27).
 
@@ -42,7 +42,7 @@ All 3 modes exited cleanly (return code 0).
 
 ---
 
-## Metrics (Section 5) — Macro-averaged over all fields
+## Metrics (Section 5), Macro-averaged over all fields
 
 | Mode | Fields | Macro-F1 (exact) | Macro-F1 (relaxed) |
 |------|--------|-------------------|--------------------|
@@ -52,13 +52,13 @@ All 3 modes exited cleanly (return code 0).
 
 ---
 
-## Summary Table (Section 7) — Full macro P/R/F1
+## Summary Table (Section 7), Full macro P/R/F1
 
 | Mode | macro_P_exact | macro_R_exact | macro_F1_exact | macro_P_relaxed | macro_R_relaxed | macro_F1_relaxed |
 |------|---------------|---------------|----------------|-----------------|-----------------|------------------|
-| rule | — | — | 0.182 | — | — | 0.194 |
-| ml   | — | — | 0.045 | — | — | 0.050 |
-| both | — | — | 0.170 | — | — | 0.185 |
+| rule |, |, | 0.182 |, |, | 0.194 |
+| ml   |, |, | 0.045 |, |, | 0.050 |
+| both |, |, | 0.170 |, |, | 0.185 |
 
 *(Precision and recall per-mode were displayed as a styled DataFrame in the notebook; exact values not captured in text output. F1 values above come from the cell 19 print.)*
 
@@ -67,6 +67,6 @@ All 3 modes exited cleanly (return code 0).
 ## Notes
 
 - The `ml`-only mode underperforms `rule` and `both` significantly on this small set (9 docs).
-- The `both` mode does not consistently outperform `rule` — likely because the HF models are not yet well-tuned on this domain.
+- The `both` mode does not consistently outperform `rule`, likely because the HF models are not yet well-tuned on this domain.
 - Gold standard: 9 documents in `data/gold_standard/`.
 - Per-field plots were saved to `/tmp/bright_eval/plots/` during the Colab session (not persisted).

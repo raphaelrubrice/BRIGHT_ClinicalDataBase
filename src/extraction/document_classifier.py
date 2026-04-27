@@ -10,10 +10,10 @@ Strategy
 
 Public API
 ----------
-- ``DocumentClassifier``          — main classifier object.
-- ``ClassificationResult``        — return value with type, scores & flags.
-- ``DOCUMENT_TYPE_KEYWORDS``      — editable keyword dictionary.
-- ``classify_document(text)``     — convenience function (keyword‑only).
+- ``DocumentClassifier``         , main classifier object.
+- ``ClassificationResult``       , return value with type, scores & flags.
+- ``DOCUMENT_TYPE_KEYWORDS``     , editable keyword dictionary.
+- ``classify_document(text)``    , convenience function (keyword‑only).
 """
 
 from __future__ import annotations

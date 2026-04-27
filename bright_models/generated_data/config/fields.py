@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from profiles_validation import ALL_111_FIELDS  # noqa: E402
 
 # ═════════════════════════════════════════════════════════════════════════════
-# FIELD DESCRIPTIONS (French) — used in LLM prompts
+# FIELD DESCRIPTIONS (French), used in LLM prompts
 # ═════════════════════════════════════════════════════════════════════════════
 
 FIELD_DESCRIPTIONS_FR: dict[str, str] = {
@@ -242,7 +242,7 @@ DOC_TYPE_FIELDS: dict[str, list[str]] = {
 }
 
 # ═════════════════════════════════════════════════════════════════════════════
-# CRITICAL FIELDS — zero tolerance for value_fallback in span resolution
+# CRITICAL FIELDS, zero tolerance for value_fallback in span resolution
 # ═════════════════════════════════════════════════════════════════════════════
 
 CRITICAL_FIELDS: list[str] = [
@@ -251,7 +251,7 @@ CRITICAL_FIELDS: list[str] = [
 ]
 
 # ═════════════════════════════════════════════════════════════════════════════
-# DOCUMENT STRUCTURAL GUIDES — section ordering per document type
+# DOCUMENT STRUCTURAL GUIDES, section ordering per document type
 # ═════════════════════════════════════════════════════════════════════════════
 
 DOC_STRUCTURES: dict[str, list[str]] = {

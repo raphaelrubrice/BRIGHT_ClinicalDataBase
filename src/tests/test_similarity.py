@@ -1,4 +1,4 @@
-"""Tests for src/extraction/similarity.py — vocabulary matching cascade.
+"""Tests for src/extraction/similarity.py, vocabulary matching cascade.
 
 Covers:
 - Tier 1: Exact match (case-insensitive, accent-normalized)
@@ -185,7 +185,7 @@ class TestAutreFallback:
         val, score = match_to_vocab(
             "duplication 7q", MOLECULAR_STATUS_VALUES, "mol_idh1"
         )
-        # Should NOT be "NA" — the vocab has "autre" so novel values are accepted
+        # Should NOT be "NA", the vocab has "autre" so novel values are accepted
         assert val == "duplication 7q"
         assert score == 0.6
 

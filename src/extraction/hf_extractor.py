@@ -1,4 +1,4 @@
-"""HFExtractor — inference over the 10 fine-tuned raphael-r/bright-eds-* models.
+"""HFExtractor, inference over the 10 fine-tuned raphael-r/bright-eds-* models.
 
 Each model is an edsnlp pipeline saved to the HuggingFace Hub.  Models are
 loaded ONE AT A TIME for the whole batch, then released, to minimise GPU
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 from .schema import ExtractionValue
 
 # ---------------------------------------------------------------------------
-# bright_models lives at BRIGHT_ClinicalDataBase/bright_models/ — 2 levels up
+# bright_models lives at BRIGHT_ClinicalDataBase/bright_models/, 2 levels up
 # from src/extraction/.
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "bright_models"))
@@ -243,7 +243,7 @@ class HFExtractor:
 
         Checks ``local_model_dir`` first; otherwise resolves via
         ``snapshot_download``.  On subsequent calls the cached path is returned
-        immediately — no network round-trip.  When the model is already in the
+        immediately, no network round-trip.  When the model is already in the
         HuggingFace cache, ``local_files_only=True`` is tried first so that no
         HTTP request is made; falls back to a normal download if not yet cached.
         """
@@ -298,7 +298,7 @@ class HFExtractor:
         Models are loaded lazily on first call and kept in memory for subsequent
         calls (``_loaded_nlp`` cache).  For every group:
         1. Retrieve the cached model (or load it on first access).
-        2. Run ``nlp.pipe(texts)`` — returns one Doc per text.
+        2. Run ``nlp.pipe(texts)``, returns one Doc per text.
         3. Iterate entities; normalise and store in per-document result dicts.
 
         Returns
@@ -312,7 +312,7 @@ class HFExtractor:
 
         for g_idx, group in enumerate(self.enabled_groups, 1):
             logger.info(
-                "[HFExtractor] Group %d/%d '%s' — running pipe on %d texts …",
+                "[HFExtractor] Group %d/%d '%s', running pipe on %d texts …",
                 g_idx, len(self.enabled_groups), group, n,
             )
             nlp = self._get_nlp(group)

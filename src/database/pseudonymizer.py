@@ -426,10 +426,10 @@ if __name__ == "__main__":
         global _pass_count, _fail_count
         if condition:
             _pass_count += 1
-            print(f"  ✅ PASS — {description}")
+            print(f"  ✅ PASS, {description}")
         else:
             _fail_count += 1
-            print(f"  ❌ FAIL — {description}")
+            print(f"  ❌ FAIL, {description}")
 
     def section(title: str) -> None:
         print(f"\n{'=' * 60}")
@@ -437,7 +437,7 @@ if __name__ == "__main__":
         print(f"{'=' * 60}")
 
     # ──────────────────────────────────────────────────────────
-    # Test text – realistic clinical report mixing patient PHI
+    # Test text, realistic clinical report mixing patient PHI
     # and practitioner names in many formats.
     # ──────────────────────────────────────────────────────────
     test_text = textwrap.dedent("""\
@@ -469,7 +469,7 @@ if __name__ == "__main__":
     # ──────────────────────────────────────────────────────────
     section("1 · Patient PHI is pseudonymized")
 
-    # Patient names — should NOT appear verbatim
+    # Patient names, should NOT appear verbatim
     check("LAURENGE" not in result,
           "Patient surname LAURENGE is replaced")
     check("LEPRINCE" not in result,

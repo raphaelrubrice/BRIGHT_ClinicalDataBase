@@ -45,9 +45,9 @@ def build_patient_timeline(
         Pseudonymised patient identifier.
     documents : list[dict]
         List of document dicts.  Each dict must have:
-        - ``"text"`` (str) — the full document text
-        - ``"document_id"`` (str, optional) — unique ID
-        - ``"document_date"`` (str, optional) — date in DD/MM/YYYY format
+        - ``"text"`` (str), the full document text
+        - ``"document_id"`` (str, optional), unique ID
+        - ``"document_date"`` (str, optional), date in DD/MM/YYYY format
     pipeline : ExtractionPipeline
         A configured extraction pipeline instance.
 

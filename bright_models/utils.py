@@ -25,7 +25,7 @@ DEFAULT_DATASET = GENERATED_DATA_DIR / "generated_dataset.jsonl"
 DEFAULT_DATASET_SMALL = GENERATED_DATA_DIR / "generated_dataset_small.jsonl"
 
 # ---------------------------------------------------------------------------
-# Field descriptions (French) — used as GLiNER entity_descriptions
+# Field descriptions (French), used as GLiNER entity_descriptions
 # ---------------------------------------------------------------------------
 
 # Import canonical descriptions from the generation config
@@ -230,7 +230,7 @@ def split_dataset(
 
 
 # ---------------------------------------------------------------------------
-# Chunking (for GLiNER — long documents)
+# Chunking (for GLiNER, long documents)
 # ---------------------------------------------------------------------------
 
 # Maximum span length in characters before we fall back to value
@@ -375,7 +375,7 @@ def to_eds_spans(
     """Convert annotated docs to a simple span-based format for EDS-NLP.
 
     Returns list of {"note_id", "note_text", "spans": [{"start", "end", "label"}]}.
-    No chunking needed — EDS-NLP handles long docs via sliding window.
+    No chunking needed, EDS-NLP handles long docs via sliding window.
     """
     labels = set(GROUPS[group_name])
     result = []

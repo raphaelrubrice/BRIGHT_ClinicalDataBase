@@ -1,4 +1,4 @@
-"""Tests for src/extraction/document_classifier.py — document type detection.
+"""Tests for src/extraction/document_classifier.py, document type detection.
 
 Validates:
 - Keyword-based scoring correctly classifies each of the 5 document types.
@@ -28,7 +28,7 @@ from src.extraction.document_classifier import (
 
 
 # ======================================================================
-# Sample documents — one per type
+# Sample documents, one per type
 # ======================================================================
 
 SAMPLE_ANAPATH = """\
@@ -127,7 +127,7 @@ Décision thérapeutique collégiale validée à l'unanimité.
 """
 
 SAMPLE_RADIOLOGY = """\
-COMPTE-RENDU RADIOLOGIQUE — IRM CÉRÉBRALE
+COMPTE-RENDU RADIOLOGIQUE, IRM CÉRÉBRALE
 
 IRM encéphalique avec injection de gadolinium.
 Séquences FLAIR, T1 gadolinium, diffusion, perfusion.
@@ -281,7 +281,7 @@ class TestRankingHelpers:
 
 
 # ======================================================================
-# DocumentClassifier — keyword-only tests
+# DocumentClassifier, keyword-only tests
 # ======================================================================
 
 

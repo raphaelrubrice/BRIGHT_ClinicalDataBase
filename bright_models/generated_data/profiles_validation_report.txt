@@ -233,13 +233,13 @@ SUMMARY
       groupe PFA confirmé par méthylation array (EPIC 850K)      1 (  5.9%)
       MYB-QKI confirmée par FISH et RNAseq                       1 (  5.9%)
       oui (ZFTA-RELA confirmée par RNAseq)                       1 (  5.9%)
-      oui (mutation CTNNB1 exon 3 confirmée — sous-groupe WNT)    1 (  5.9%)
-      oui (groupe PFB confirmé par méthylomique EPIC — pas de fusion ZFTA ni YAP1)    1 (  5.9%)
+      oui (mutation CTNNB1 exon 3 confirmée, sous-groupe WNT)    1 (  5.9%)
+      oui (groupe PFB confirmé par méthylomique EPIC, pas de fusion ZFTA ni YAP1)    1 (  5.9%)
       QKI-NTRK2                                                  1 (  5.9%)
       TPR-NTRK2                                                  1 (  5.9%)
       ZFTA::RELA                                                 1 (  5.9%)
-      PTCH1 muté (c.3276+1G>T) – voie SHH activée                1 (  5.9%)
-      CTNNB1 muté (ex3 p.T41A) – voie WNT activée                1 (  5.9%)
+      PTCH1 muté (c.3276+1G>T), voie SHH activée                1 (  5.9%)
+      CTNNB1 muté (ex3 p.T41A), voie WNT activée                1 (  5.9%)
       méthylation profil PFA (CpG island methylator phenotype élevé)    1 (  5.9%)
 
   ── fusion_fgfr (60/630) ──

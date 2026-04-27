@@ -359,7 +359,7 @@ def apply_value_substitutions(text: str, entities: list[dict]) -> str:
                 entities[i]["start"] += delta
                 entities[i]["end"] += delta
             elif e["start"] > start and e["start"] < end:
-                # Overlapping entity starting inside this span — adjust
+                # Overlapping entity starting inside this span, adjust
                 # This shouldn't normally happen but handle gracefully
                 pass
 
@@ -432,7 +432,7 @@ def main():
             text_before = text
             text = apply_typos(text, entities)
             typo_count = sum(1 for a, b in zip(text_before, text) if a != b)
-            # Rough count — not exact due to insertions/deletions
+            # Rough count, not exact due to insertions/deletions
             total_typos += max(typo_count, abs(len(text) - len(text_before)))
 
             doc["note_text"] = text

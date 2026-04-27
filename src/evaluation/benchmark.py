@@ -254,7 +254,7 @@ def run_benchmark(
             extractable = set(get_extractable_fields(result.document_type))
             gt_annotations = {k: v for k, v in gt_annotations.items() if k in extractable}
         except (ValueError, AttributeError):
-            extractable = set()  # Unknown doc type — score all features
+            extractable = set()  # Unknown doc type, score all features
 
         metrics = compute_per_feature_metrics(result.features, gt_annotations)
         all_metrics.append(metrics)

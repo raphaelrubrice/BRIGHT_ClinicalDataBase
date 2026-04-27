@@ -2,11 +2,11 @@
 
 Provides two levels of normalisation:
 
-- ``normalise_text(text)`` — NFC normalisation, strip control characters,
+- ``normalise_text(text)``, NFC normalisation, strip control characters,
   fix typographic quotes/dashes, ensure valid UTF-8.  Applied at document
   ingestion time so downstream processing always gets clean text.
 
-- ``normalise(text)`` — Accent-stripping + lowercase + whitespace collapse.
+- ``normalise(text)``, Accent-stripping + lowercase + whitespace collapse.
   Used *only* for regex matching; extracted values reference the NFC original.
 
 Public API
@@ -133,7 +133,7 @@ def normalise(text: str) -> str:
 
 _ABBREVIATION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bTMZ\b", re.IGNORECASE), "temozolomide"),
-    (re.compile(r"\bRT\b"), "radiotherapie"),  # case-sensitive — avoid "rt" in words
+    (re.compile(r"\bRT\b"), "radiotherapie"),  # case-sensitive, avoid "rt" in words
     (re.compile(r"\bGBM\b", re.IGNORECASE), "glioblastome"),
     (re.compile(r"\bGTR\b", re.IGNORECASE), "exerese complete"),
     (re.compile(r"\bSTR\b", re.IGNORECASE), "exerese partielle"),

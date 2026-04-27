@@ -81,7 +81,7 @@ def main():
                     entities_changed += 1
             doc["note_text"] = text
 
-    print(f"  {patients_fixed} patients had inconsistent values — fixed")
+    print(f"  {patients_fixed} patients had inconsistent values, fixed")
     print(f"  {entities_changed} entities changed")
     if span_skipped:
         print(f"  {span_skipped} spans skipped (text mismatch from augmentation)")

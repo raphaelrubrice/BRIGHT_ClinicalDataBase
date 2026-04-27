@@ -2,7 +2,7 @@
 
 ## Overview
 
-No annotated real clinical records were available during development — IRB
+No annotated real clinical records were available during development, IRB
 approval and data-sharing agreements were out of scope. Synthetic data generated
 by a large language model was therefore the only feasible path for producing
 labelled training examples at scale. The pipeline prompts an LLM with patient

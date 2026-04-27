@@ -5,7 +5,7 @@ document metadata, source spans, and extraction decisions log.
 
 Public API
 ----------
-- ``ExtractionResult`` – Full extraction result for one document.
+- ``ExtractionResult``, Full extraction result for one document.
 """
 
 from __future__ import annotations

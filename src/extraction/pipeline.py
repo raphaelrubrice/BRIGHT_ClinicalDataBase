@@ -6,16 +6,16 @@ HuggingFace fine-tuned model extraction (HFExtractor), validation, and
 provenance tracking into a single ``extract_document()`` function.
 
 Supports three ablatable modes (see ``ExtractionPipeline``):
-- Rules-only  (``use_eds=False``) — DateExtractor + ControlledExtractor +
+- Rules-only  (``use_eds=False``), DateExtractor + ControlledExtractor +
   regex rules + EDSExtractor (rule-based edsnlp patterns).  No HF models.
-- ML-only     (``use_rules=False``) — HFExtractor (10 fine-tuned models)
+- ML-only     (``use_rules=False``), HFExtractor (10 fine-tuned models)
   on all fields.  No rule-based extractors.
-- Rules + ML  (``use_eds=True, use_rules=True``) — both branches run;
+- Rules + ML  (``use_eds=True, use_rules=True``), both branches run;
   HF wins on ``_HF_PASSING_FIELDS``, rules win on others.
 
 Public API
 ----------
-- ``ExtractionPipeline``  – Main pipeline class.
+- ``ExtractionPipeline`` , Main pipeline class.
 """
 
 from __future__ import annotations
@@ -130,7 +130,7 @@ def _apply_negation(field_name: str, value, source_span: str | None = None) -> s
 # EDS passing fields (F1 >= 0.6 on held-out benchmark)
 # Used in Rules + ML mode: HF wins on these fields, rules win on the others.
 # In ML-only mode HF is used on ALL fields (no filter applied).
-# Calibrated from HuggingFace model-card metrics — refine after full evaluation.
+# Calibrated from HuggingFace model-card metrics, refine after full evaluation.
 # ---------------------------------------------------------------------------
 
 _HF_PASSING_FIELDS: frozenset[str] = frozenset({
@@ -383,7 +383,7 @@ class ExtractionPipeline:
         if not d:
             logger.debug("  [%s] (empty)", label)
             return
-        logger.debug("  [%s] — %d field(s):", label, len(d))
+        logger.debug("  [%s], %d field(s):", label, len(d))
         logger.debug(
             "    %-32s %-22s %-20s %s",
             "field", "value", "source_span[:60]", "conf",
@@ -475,7 +475,7 @@ class ExtractionPipeline:
 
         if classification.is_ambiguous:
             result.add_log(
-                "Classification is ambiguous — extracted features may be "
+                "Classification is ambiguous, extracted features may be "
                 "incomplete. Consider manual review."
             )
 
@@ -538,7 +538,7 @@ class ExtractionPipeline:
             )
 
         # =================================================================
-        # RULES BRANCH  (Steps 5–7) — active when use_rules=True
+        # RULES BRANCH  (Steps 5–7), active when use_rules=True
         # =================================================================
 
         # -----------------------------------------------------------------
@@ -626,7 +626,7 @@ class ExtractionPipeline:
                 self._log_extraction_dict("Step7 rule_results", rule_results)
 
         # =================================================================
-        # RULES BRANCH — Step 7.5: EDSExtractor (rule-based edsnlp patterns)
+        # RULES BRANCH, Step 7.5: EDSExtractor (rule-based edsnlp patterns)
         # =================================================================
 
         # -----------------------------------------------------------------
@@ -656,7 +656,7 @@ class ExtractionPipeline:
                 self._log_extraction_dict("Step7.5 eds_results", eds_results)
 
         # =================================================================
-        # ML BRANCH  (Step 8) — active when use_eds=True
+        # ML BRANCH  (Step 8), active when use_eds=True
         # =================================================================
 
         # -----------------------------------------------------------------
@@ -669,7 +669,7 @@ class ExtractionPipeline:
             t_hf_start = time.perf_counter()
             try:
                 if _precomputed_hf is not None:
-                    # Provided by extract_batch() — avoids reloading models per doc.
+                    # Provided by extract_batch(), avoids reloading models per doc.
                     hf_results = _precomputed_hf
                 else:
                     hf_results = self._hf_extractor.extract(text)
@@ -884,7 +884,7 @@ class ExtractionPipeline:
                 "           → %d fields flagged for review", len(result.flagged_for_review)
             )
             logger.debug(
-                "[PIPELINE] ✓ Completed in %.0fms — %d features extracted",
+                "[PIPELINE] ✓ Completed in %.0fms, %d features extracted",
                 result.total_extraction_time_ms, len(merged),
             )
             logger.debug("=" * 60)
@@ -940,7 +940,7 @@ class ExtractionPipeline:
                     self._hf_extractor.extract_batch(texts)
                 )
             except Exception as exc:
-                logger.error("HFExtractor.extract_batch failed: %s — falling back to empty", exc)
+                logger.error("HFExtractor.extract_batch failed: %s, falling back to empty", exc)
                 all_hf = [{} for _ in documents]
 
             results: list[ExtractionResult] = []

@@ -7,12 +7,12 @@ derived from the REQ_BIO.csv and REQ_CLINIQUE.csv annotation files in
 
 Public API
 ----------
-- ``ControlledVocab``          – Enum-like namespace of allowed value sets.
-- ``ExtractionValue``          – Single extracted value with provenance.
-- ``BiologicalFeatures``       – All 55 biological fields.
-- ``ClinicalFeatures``         – All 56 clinical fields.
-- ``DocumentExtraction``       – Full extraction result for one document.
-- ``FEATURE_ROUTING``          – Document-type → extractable feature subsets.
+- ``ControlledVocab``         , Enum-like namespace of allowed value sets.
+- ``ExtractionValue``         , Single extracted value with provenance.
+- ``BiologicalFeatures``      , All 55 biological fields.
+- ``ClinicalFeatures``        , All 56 clinical fields.
+- ``DocumentExtraction``      , Full extraction result for one document.
+- ``FEATURE_ROUTING``         , Document-type → extractable feature subsets.
 """
 
 from __future__ import annotations
@@ -113,7 +113,7 @@ def vocab_has_autre(allowed_values: set | None) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# ExtractionValue — single extracted field with provenance
+# ExtractionValue, single extracted field with provenance
 # ---------------------------------------------------------------------------
 
 class ExtractionValue(BaseModel):
@@ -144,7 +144,7 @@ class ExtractionValue(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Field definitions — metadata per feature
+# Field definitions, metadata per feature
 # ---------------------------------------------------------------------------
 
 class FieldType(str, Enum):
@@ -312,7 +312,7 @@ CLINIQUE_FIELDS: list[FieldDefinition] = [
     FieldDefinition(name="evol_clinique",   display_name="Évolution clinique",      field_type=FieldType.STRING,      group="evolution"),  # validated via is_valid_evolution
     FieldDefinition(name="reponse_radiologique", display_name="Réponse radiologique", field_type=FieldType.FREE_TEXT, group="evolution"),
 
-    # ── Treatment — chemotherapy ──
+    # ── Treatment, chemotherapy ──
     FieldDefinition(name="chimios",           display_name="Chimiothérapie(s)",       field_type=FieldType.FREE_TEXT,    group="treatment_chemo"),
     FieldDefinition(name="chimio_protocole",  display_name="Protocole chimiothérapie", field_type=FieldType.FREE_TEXT,   group="treatment_chemo"),
     FieldDefinition(name="chm_date_debut",    display_name="Date début chimio",       field_type=FieldType.DATE,         group="treatment_chemo"),
@@ -339,7 +339,7 @@ CLINIQUE_FIELDS: list[FieldDefinition] = [
     FieldDefinition(name="type_chirurgie",  display_name="Type chirurgie",    field_type=FieldType.CATEGORICAL, group="surgery", allowed_values=ControlledVocab.SURGERY_TYPE, mapping_type=MappingType.SIMILARITY),
     FieldDefinition(name="qualite_exerese", display_name="Qualité de l'exérèse", field_type=FieldType.STRING,     group="surgery"),
 
-    # ── Treatment — radiotherapy ──
+    # ── Treatment, radiotherapy ──
     FieldDefinition(name="rx_date_debut",  display_name="Date début radiothérapie",   field_type=FieldType.DATE,   group="treatment_radio"),
     FieldDefinition(name="rx_date_fin",    display_name="Date fin radiothérapie",     field_type=FieldType.DATE,   group="treatment_radio"),
     FieldDefinition(name="rx_dose",        display_name="Dose radiothérapie (Gy)",    field_type=FieldType.STRING, group="treatment_radio"),  # "60", "non", "oui", "en attente"
@@ -372,7 +372,7 @@ def get_field(name: str) -> FieldDefinition:
 
 
 # ---------------------------------------------------------------------------
-# Pydantic models — structured extraction results
+# Pydantic models, structured extraction results
 # ---------------------------------------------------------------------------
 
 class BiologicalFeatures(BaseModel):
@@ -498,7 +498,7 @@ class ClinicalFeatures(BaseModel):
     evol_clinique: Optional[ExtractionValue] = None
     reponse_radiologique: Optional[ExtractionValue] = None
 
-    # Treatment — chemo
+    # Treatment, chemo
     chimios: Optional[ExtractionValue] = None
     chimio_protocole: Optional[ExtractionValue] = None
     chm_date_debut: Optional[ExtractionValue] = None
@@ -526,7 +526,7 @@ class ClinicalFeatures(BaseModel):
     type_chirurgie: Optional[ExtractionValue] = None
     qualite_exerese: Optional[ExtractionValue] = None
 
-    # Treatment — radio
+    # Treatment, radio
     rx_date_debut: Optional[ExtractionValue] = None
     rx_date_fin: Optional[ExtractionValue] = None
     rx_dose: Optional[ExtractionValue] = None
@@ -563,7 +563,7 @@ DOCUMENT_TYPES: list[str] = [
 
 
 # ---------------------------------------------------------------------------
-# Feature routing — document type → extractable feature subsets
+# Feature routing, document type → extractable feature subsets
 # ---------------------------------------------------------------------------
 
 # Group names used in FieldDefinition.group

@@ -382,7 +382,7 @@ def _clean_annotations(doc: dict) -> dict:
 
         # --- Step 2c: verify value is consistent with span; repair if not ---
         if span and value and not _value_in_span(value, span):
-            # Span exists in text but doesn't match the value — try to repair
+            # Span exists in text but doesn't match the value, try to repair
             repaired = _find_value_in_text(value, text, text_lower)
             if repaired:
                 logger.debug("Span repaired for %s: '%.40s' -> '%.40s'",

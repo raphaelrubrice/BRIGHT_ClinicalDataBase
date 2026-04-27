@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-correct_who_2021.py — Fix WHO 2021 constraint violations in-place.
+correct_who_2021.py, Fix WHO 2021 constraint violations in-place.
 
 Usage:
   python correct_who_2021.py profiles_dir/
@@ -410,7 +410,7 @@ def main():
     elif total_c:
         print(f"\n  ✅ All corrected profiles pass post-fix verification.")
     if dry_run:
-        print(f"\n  ℹ️  DRY RUN — no files modified.")
+        print(f"\n  ℹ️  DRY RUN, no files modified.")
     print(f"\n{'='*70}\nDONE\n{'='*70}")
 
 

@@ -263,14 +263,14 @@ def main():
         for ipp, doc_rows in docs_by_ipp.items():
             ann_list = merged_annotations.get(ipp, [])
             if not ann_list:
-                logger.debug("No annotations for IPP %s — skipping.", ipp)
+                logger.debug("No annotations for IPP %s, skipping.", ipp)
                 skipped += len(doc_rows)
                 continue
 
             n_match = min(len(doc_rows), len(ann_list))
             if len(doc_rows) != len(ann_list):
                 logger.warning(
-                    "IPP %s: %d DB docs but %d annotation columns — matching first %d.",
+                    "IPP %s: %d DB docs but %d annotation columns, matching first %d.",
                     ipp, len(doc_rows), len(ann_list), n_match,
                 )
 

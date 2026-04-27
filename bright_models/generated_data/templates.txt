@@ -37,7 +37,7 @@ IPP: [8012939402](IPP)
 
 Compte rendu signé par Dr. [ETIENNE](PRENOM) [DOMINIQUE](NOM)
 
-Salles d’hospitalisation : Gerbillot : [01 2048 3632](TEL) – Hadillot : [01 2039 2739](TEL) – Censier : [01 0192 4830](TEL) – Routier USIC : [01 0492 5736](TEL)
+Salles d’hospitalisation : Gerbillot : [01 2048 3632](TEL), Hadillot : [01 2039 2739](TEL), Censier : [01 0192 4830](TEL), Routier USIC : [01 0492 5736](TEL)
 
 Résultat (mg/ml)  191 (2)(0)  [vingt-six 02 2012](DATE) 12:32 9301932:[COROLET](NOM) [Joseph](PRENOM) [vingt-six 02 2012](DATE) 11:11  BIOANALYSE BIOANALYSE HEMATIE NA          203-103  K   0.0012    mol/l   1.0-? CL 10    dmol/l   0,431    mol/l   239-302 CO2           12.8     mmol/l   19.0-22.0
 
@@ -332,7 +332,7 @@ Liste des Cliniciens associés : M. [A.](PRENOM) [DE ROCHEFORT](NOM) [08.10.20.0
 
 RENDEZ-VOUS POUR MME [VERONIQUE](PRENOM) [BONNET](NOM) FIXÉ POUR LE [28.3.2023](DATE) À L'ADRESSE [46 AVENUE DE SEINE](ADRESSE) [92200](ZIP) [CERGY-PERRET](VILLE)
 
-Résumé Clinique : Walks along AB [1CA](HOPITAL) path : AB T17, Smallpox – Dr. [A.](PRENOM) [GUETTIER](NOM) : T [0602225790](TEL)
+Résumé Clinique : Walks along AB [1CA](HOPITAL) path : AB T17, Smallpox, Dr. [A.](PRENOM) [GUETTIER](NOM) : T [0602225790](TEL)
 
 Liste des Cliniciens associés : Dr [S.](PRENOM) [FAURE](NOM) [08.14.15.93.53](TEL) Dr [T.](PRENOM) [MOREAU](NOM) [01.52.63.18.84](TEL) [tmoreau@wellbeing.com](MAIL) Dr [R.](PRENOM) [GINEST](NOM) [01.42.21.47.74](TEL)
 
@@ -349,7 +349,7 @@ Résumé des consultations de chimiothérapie AB 4B2 : AB T18, Lymphome diffus- 
 
 Secrétariat Dr [L.](PRENOM) [SIMON](NOM) [08 19 34 28 37](TEL) Dr [J.](PRENOM) [RENAUD](NOM) [01 57 93 74 93](TEL) [jrenaud@hopitonet.com](MAIL) Pr [F.](PRENOM) [FONTAINE](NOM) [01-42-89-86-71](TEL)
 
-Professionnels collaborateurs : [Isabelle](PRENOM) [BON](NOM) du Centre universitaire, [Joseph](PRENOM) [ARNOULD](NOM)[arnould@institute.org](MAIL), [Centre hospitalier Prince William](HOPITAL) – source principale [20118](ZIP) – [(205)-276-2043 01](TEL) – ([Centre hospitalier Prince William](HOPITAL) pour le suivi spécifique des enfants)
+Professionnels collaborateurs : [Isabelle](PRENOM) [BON](NOM) du Centre universitaire, [Joseph](PRENOM) [ARNOULD](NOM)[arnould@institute.org](MAIL), [Centre hospitalier Prince William](HOPITAL), source principale [20118](ZIP), [(205)-276-2043 01](TEL), ([Centre hospitalier Prince William](HOPITAL) pour le suivi spécifique des enfants)
 
 v CONCLUSION MEDICALE
 Taux de GORE ACUSEAL vascular graft : [O.](PRENOM) [DURIEZ](NOM) : Voie percutanée, doc caro-box 3HASP type 3 : 51 occurrences, Type M2 commodo
@@ -502,7 +502,7 @@ CHALON](VILLE)
 
 Notre établissement Préfecture Parisiene
 Département de Neurologie
-Hôpital [St Anne](HOPITAL) – I. Neurologie Paris – Docteur [Philippe](PRENOM) [Lambert](NOM)
+Hôpital [St Anne](HOPITAL), I. Neurologie Paris, Docteur [Philippe](PRENOM) [Lambert](NOM)
 Adresse : [255 Rue Pierre Charlot](ADRESSE) [Paris](VILLE) [75015](ZIP)
 Téléphone : [(33) 1 45 56 78 90](TEL) - Fax : [(33) 1 45 56 78 92](TEL)
 Nº de la visite: [42bg98765](NDA)
@@ -510,7 +510,7 @@ http://hopital-paul-brousse.aphp.fr
 
 AP-HP. SUD Université de Grenoble
 Département de Chirurgie
-Hôpital [EUROPÉEN GEORGES POMPIDOU](HOPITAL) – [C. COTTIN](HOPITAL) – Pr [JEAN](PRENOM) [MOUCHARD](NOM)
+Hôpital [EUROPÉEN GEORGES POMPIDOU](HOPITAL), [C. COTTIN](HOPITAL), Pr [JEAN](PRENOM) [MOUCHARD](NOM)
 [28 bis chemin Etienne d'ORGE](ADRESSE) [12913](ZIP) [STRASSBOURG cedex 29](VILLE)
  : [(33) 1 20 49 98 13](TEL) - fax : [(33) 1 20 95 23 02](TEL)
 [28BG04493](NDA)
@@ -587,7 +587,7 @@ Dès l'admission, une IRM cérébrale fut prescrite et réalisée en urgence : i
 Conclusion :
 Présence d'un volumineux méningiome de l'angle ponto-cérébelleux droit.
 Rendez-vous dans un mois avec le Dr [Chiraz](NOM) [Mohamadi](PRENOM).
-Imprimé en France par Ateliers d’Imprimerie, [13 rue Jeanne d’Arc](ADRESSE) – [92700](ZIP) [Colombes](VILLE) -
+Imprimé en France par Ateliers d’Imprimerie, [13 rue Jeanne d’Arc](ADRESSE), [92700](ZIP) [Colombes](VILLE) -
 Date d'impression : [10 mars 2021](DATE) 10:30
 Responsable de l'hôpital d'extraction : Dr. [Mohamed](PRENOM) [Laghouag](NOM) - [m.laghouag@aphp.fr](MAIL)
 Hôpital paris croix saint-simon [B. Duhamel](NOM) s/ service des urgences - Pneumo - Ortho - MPU - Cardiologie.
@@ -649,7 +649,7 @@ Suivi par l'équipe du [HCI](HOPITAL) du Dr. [LAURENT](PRENOM) [LECOMTE](NOM).
 (1)13:42 93 2930 293 39 102 102 03 039 02 3920 0394 03 39
 (1)13:52 39 4939 220 39 302 473 48 294 93 9599 9438 41 48
 (1)14:02 30 1939 394 29 293 29  293 29 2 203 3029 192 39
-—————————————————————————— ———————————————————— ———————————————————————
+——————————————————————————,———————————————————,——————————————————————
 (1)15:01 2 93 2930 293 29 293 029 931 9329 920 92 12 32
 (1)15:11 39 3839 230 309 293 303 593 59 3599 599 92 39 97 39
 (1)15:21 13 2939 293 39 393 29  293 39 23 2303 302 13 39
@@ -899,7 +899,7 @@ Premier traitement autour du [08](DATE)-[09/08/07](DATE)
 Erythromicine depuis [06-03-02](DATE);
 
 CR Consultation [AVC](HOPITAL) au CHU de [Lille](VILLE) C. NEPHROPATIE, Imprimé le [01/01/2011](DATE) - 02:03
-————————————————— ———————— ———————————————————— ———————————————————————
+—————————————————,———————,———————————————————,——————————————————————
 [28 ter, place de Beaubourg](ADRESSE)
 [93000](ZIP) [THIELLES CEDEX](VILLE), France
 Standard : [01 29 38 47 10](TEL) ou 23 34
@@ -930,13 +930,13 @@ Standard : [01 29 38 47 10](TEL) ou 23 34
 (1)07:32 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 (1)08:32 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 
-————————————————— ———————— ———————————————————— ———————————————————————
+—————————————————,———————,———————————————————,——————————————————————
 │Glycémie à midi │ 0.94 g/L │ 1,7 à 2.8 │
 │Cholestéraze total │ 31* g/L │ 1,63 à 2,9 │
 │Troglodites │ 4,44* g/L │ 0,35 à 1,9 │
 │HDS Cholestérol │ 0.91* g/L │ 0,41 à 100,77 │
 │PDP Choloctique │ 1,87x g/L │ 0,92 à 1,74 │
-—————————————————————————— ———————————————————— ———————————————————————
+——————————————————————————,———————————————————,——————————————————————
 2 2 2 2 2 2 2 2
 
 GROUPE HOSPITALIER
@@ -976,7 +976,7 @@ METOCLOPRAMIDE 10 mg, 1 cp 3 fois par jour de [jan](DATE) à [fév 2007](DATE)
 Recommendations of the European Working Group for Adult Acute Lymphoblastic Leukemia. 1st edition.
 GÖKBUGET, N., R. BASSAN, H. DOMBRET, Michael DOUBEK, A.K. FIELDING, R. FOÀ, S. GIEBEL, D. HOELZER, G.
 MARTINELLI, G. MELONI, A.D. MOICEAN, O. OTTMANN, P.P. PICCALUGA, J.M. RIBERA, P. ROUSSELOT a J. WALEWSKI.
-Bremen – London – Boston: UNI-MED Verlag AG, 2011. 208 s. Unimed Science.
+Bremen, London, Boston: UNI-MED Verlag AG, 2011. 208 s. Unimed Science.
 
 Diagnosis and management of acute myeloid leukemia in adults: recommendations from an international expert panel, on behalf
 of the European LeukemiaNet.

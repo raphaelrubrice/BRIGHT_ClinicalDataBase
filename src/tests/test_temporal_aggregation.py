@@ -1,4 +1,4 @@
-"""Tests for src/aggregation/temporal_aggregation.py — forward-fill and conflict resolution.
+"""Tests for src/aggregation/temporal_aggregation.py, forward-fill and conflict resolution.
 
 Covers:
 - Static feature forward-fill (set once, update only on correction)
@@ -350,11 +350,11 @@ class TestSyntheticPatientTimeline:
     """A synthetic 5-document patient test case produces the expected timeline.
 
     Documents (in chronological order):
-    1. Consultation (01/2024) — initial assessment, demographics, first symptoms
-    2. Anapath (02/2024) — biopsy results, IHC, molecular
-    3. RCP (03/2024) — treatment decision
-    4. Consultation (06/2024) — follow-up, new IK, progression
-    5. Anapath (09/2024) — re-surgery, new specimen results
+    1. Consultation (01/2024), initial assessment, demographics, first symptoms
+    2. Anapath (02/2024), biopsy results, IHC, molecular
+    3. RCP (03/2024), treatment decision
+    4. Consultation (06/2024), follow-up, new IK, progression
+    5. Anapath (09/2024), re-surgery, new specimen results
     """
 
     def test_full_timeline(self):

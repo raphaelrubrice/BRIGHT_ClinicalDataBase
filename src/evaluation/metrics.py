@@ -75,7 +75,7 @@ def compute_per_feature_metrics(
     results = {}
     # Only score features present in ground truth.  Predicted fields without
     # ground truth (e.g. new schema fields with no annotation data) are
-    # silently skipped — we cannot evaluate them.
+    # silently skipped, we cannot evaluate them.
     all_features = set(ground_truth.keys())
     
     for feature in all_features:

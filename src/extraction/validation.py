@@ -5,9 +5,9 @@ common variants, and flags out-of-vocabulary values for human review.
 
 Public API
 ----------
-- ``validate_extraction()``     – Main validation entry point.
-- ``normalise_value()``         – Normalise a single value for a given field.
-- ``validate_source_spans()``   – Verify source spans exist in original text.
+- ``validate_extraction()``    , Main validation entry point.
+- ``normalise_value()``        , Normalise a single value for a given field.
+- ``validate_source_spans()``  , Verify source spans exist in original text.
 """
 
 from __future__ import annotations
@@ -258,7 +258,7 @@ def _is_value_valid(
     # If the vocab contains "autre", non-empty free-text values are valid.
     # Exception: for purely-numeric vocabularies (e.g. GRADE = {"1","2","3","4"}),
     # a numeric string that doesn't match is an out-of-range number, not a
-    # free-text description — reject it rather than silently accepting it as "autre".
+    # free-text description, reject it rather than silently accepting it as "autre".
     if isinstance(normalised_value, str) and normalised_value.strip():
         if vocab_has_autre(field_def.allowed_values):
             non_meta = {v for v in field_def.allowed_values if v not in ("NA", "autre")}
@@ -306,7 +306,7 @@ def validate_extraction(
     for field_name, ev in extractions.items():
         field_def = feature_definitions.get(field_name)
         if field_def is None:
-            # Unknown field — flag it
+            # Unknown field, flag it
             ev.flagged = True
             ev.vocab_valid = False
             logger.warning("Unknown field '%s' encountered during validation.", field_name)
@@ -427,7 +427,7 @@ def validate_source_spans(
             )
             continue  # Close enough
 
-        # Source span not found — flag
+        # Source span not found, flag
         ev.flagged = True
         logger.warning(
             "Field '%s': source span NOT found in text (%.0f%% match). "

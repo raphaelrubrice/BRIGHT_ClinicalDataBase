@@ -1,4 +1,4 @@
-"""Tests for src/extraction/rule_extraction.py — Tier 1 rule-based extractors.
+"""Tests for src/extraction/rule_extraction.py, Tier 1 rule-based extractors.
 
 Each extractor has at least 5 positive and 3 negative examples per the
 Phase 4 acceptance criteria.

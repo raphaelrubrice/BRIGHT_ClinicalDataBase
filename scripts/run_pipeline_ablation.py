@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Transparent ablation runner — executes the pipeline on gold-standard documents
+"""Transparent ablation runner, executes the pipeline on gold-standard documents
 and saves comprehensive step-by-step logs.
 
 Usage
@@ -36,14 +36,14 @@ Output
 ------
 The script writes two files to --out-dir:
 
-1. ``results_<mode>_<timestamp>.json`` — one record per document with:
+1. ``results_<mode>_<timestamp>.json``, one record per document with:
    - Final features (field → value)
    - Intermediate results per branch (date_results, controlled_results,
      rule_results, eds_results, hf_results, rules_merged)
    - Extraction log (all pipeline events)
    - Flagged fields
 
-2. ``run_<mode>_<timestamp>.log`` — full DEBUG-level log capturing every
+2. ``run_<mode>_<timestamp>.log``, full DEBUG-level log capturing every
    intermediate extraction dict printed by ``transparent=True``.
 """
 
@@ -86,7 +86,7 @@ def _build_pipeline(
     """Instantiate the right pipeline for the requested ablation mode."""
     common = dict(
         use_negation=use_negation,
-        transparent=True,           # always enabled — step-level logging goes to DEBUG
+        transparent=True,           # always enabled, step-level logging goes to DEBUG
         verbose=True,               # step headers go to DEBUG too
         n_jobs=n_jobs,
         enabled_groups=enabled_groups,
@@ -208,7 +208,7 @@ def main() -> None:
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------
-    # Logging setup — file (DEBUG) + console (INFO)
+    # Logging setup, file (DEBUG) + console (INFO)
     # ------------------------------------------------------------------
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_path = args.out_dir / f"run_{args.mode}_{ts}.log"

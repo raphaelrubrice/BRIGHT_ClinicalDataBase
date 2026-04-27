@@ -1,4 +1,4 @@
-"""Tests for src/aggregation/row_duplicator.py — multiple event row splitting.
+"""Tests for src/aggregation/row_duplicator.py, multiple event row splitting.
 
 Covers:
 - Single event → no duplication

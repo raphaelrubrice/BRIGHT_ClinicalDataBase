@@ -188,7 +188,7 @@ class TestOtherCategorical:
         assert res["type_chirurgie"].value == "exerese complete"
 
     def test_evol_initial(self, extractor: ControlledExtractor):
-        text = "Évolution : initial — première consultation."
+        text = "Évolution : initial, première consultation."
         res = extractor.extract(text, ["evol_clinique"], language="fr")
         assert "evol_clinique" in res
         assert res["evol_clinique"].value == "initial"
@@ -209,7 +209,7 @@ class TestEdgeCases:
     def test_no_match_returns_empty(self, extractor: ControlledExtractor):
         text = "Le patient se porte bien."
         res = extractor.extract(text, ["ch1p", "mol_idh1"], language="fr")
-        # May or may not find hits — but if no category matches, should be empty
+        # May or may not find hits, but if no category matches, should be empty
         for ev in res.values():
             assert ev.confidence is not None and ev.confidence > 0
 

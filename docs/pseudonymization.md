@@ -2,7 +2,7 @@
 
 ## Overview
 
-The pseudonymization module detects and replaces PHI in the free-text columns of the BRIGHT clinical database CSV. It covers text extraction from source PDFs, PHI detection via the `eds-pseudo` EDS-NLP model, and deterministic pseudonym generation using a secret salt. It is designed for internal research use only — not as a GDPR-compliant public release mechanism.
+The pseudonymization module detects and replaces PHI in the free-text columns of the BRIGHT clinical database CSV. It covers text extraction from source PDFs, PHI detection via the `eds-pseudo` EDS-NLP model, and deterministic pseudonym generation using a secret salt. It is designed for internal research use only, not as a GDPR-compliant public release mechanism.
 
 ---
 
@@ -81,7 +81,7 @@ pseudonym = SHA256(IPP + "|" + label + "|" + entity_text + "|" + secret_salt)[:1
 
 The 10-character hex token is embedded in a label-specific template (e.g., `[NOM_A3F9C12B70]`). The same entity text always produces the same pseudonym for a given patient, preserving cross-document entity linking within a patient's records.
 
-By default, pseudonyms are scoped per patient (via `ipp`). Setting `consistent_across_ipp=True` produces globally consistent pseudonyms — useful for linking practitioner names across patients.
+By default, pseudonyms are scoped per patient (via `ipp`). Setting `consistent_across_ipp=True` produces globally consistent pseudonyms, useful for linking practitioner names across patients.
 
 ---
 
@@ -94,9 +94,9 @@ path/to/clinical_db.csv
 path/to/clinical_db.csv.pseudonym_salt   ← auto-created on first run
 ```
 
-**If the salt is lost:** re-running pseudonymization on the same documents will produce different tokens, breaking all cross-run linking. Back it up in a secure location separate from the clinical data — treat it like a password.
+**If the salt is lost:** re-running pseudonymization on the same documents will produce different tokens, breaking all cross-run linking. Back it up in a secure location separate from the clinical data, treat it like a password.
 
-Add this to `.gitignore` — never commit the salt:
+Add this to `.gitignore`, never commit the salt:
 ```
 *.pseudonym_salt
 ```
@@ -116,7 +116,7 @@ Detection uses a title-prefix regex (`Dr`, `Pr`, `Professeur`, `Docteur`, `Inter
 - OCR quality degrades for poor-quality scans (low resolution, skewed pages, handwritten annotations). The pipeline does not detect or flag low-confidence OCR output.
 - Entity detection may miss rare name forms, hyphenated surnames, or names that appear without a preceding title or context cue.
 - Dates embedded in structured tables or grid layouts are often not detected by the EDS-NLP model, which is optimized for running text.
-- The pipeline does not pseudonymize images, charts, signatures, or stamps embedded in PDFs — only extracted text is processed.
+- The pipeline does not pseudonymize images, charts, signatures, or stamps embedded in PDFs, only extracted text is processed.
 - This system has not been reviewed for GDPR compliance. Consult a data protection officer before using it in any regulated context or for any purpose beyond internal research.
 
 ---

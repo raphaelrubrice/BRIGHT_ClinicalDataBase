@@ -120,7 +120,7 @@ def append_rows_locked(db_path: str | Path, new_rows: pd.DataFrame) -> None:
         save_db(df2, db_path)
 
 # ---------------------------------------------------------------------------
-# LLM singleton – lazy-loaded on first fallback call
+# LLM singleton, lazy-loaded on first fallback call
 # ---------------------------------------------------------------------------
 _LLM_PIPELINE = None
 _LLM_MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"

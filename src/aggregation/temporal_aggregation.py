@@ -1,9 +1,9 @@
 """Temporal forward-fill and conflict resolution across a patient's documents.
 
 Implements three feature temporal categories:
-- **Static** — set once, update only on explicit correction.
-- **Specimen-bound** — carried from specimen date until next surgery.
-- **Time-varying** — carry latest explicit value; ``NA`` does NOT overwrite.
+- **Static**, set once, update only on explicit correction.
+- **Specimen-bound**, carried from specimen date until next surgery.
+- **Time-varying**, carry latest explicit value; ``NA`` does NOT overwrite.
 
 And document-type priority for conflict resolution:
 - BIO fields: anapath > molecular_report > rcp > consultation
@@ -56,7 +56,7 @@ STATIC_FEATURES: set[str] = {
 }
 
 SPECIMEN_BOUND_FEATURES: set[str] = {
-    # All BIO features — tied to a surgical specimen
+    # All BIO features, tied to a surgical specimen
     "date_chir", "num_labo",
     "diag_histologique", "diag_integre", "classification_oms", "grade",
     # IHC
@@ -110,7 +110,7 @@ def _priority_rank(doc_type: str, field_name: str) -> int:
     elif field_name in ALL_CLINIQUE_FIELD_NAMES:
         priority_list = CLINIQUE_PRIORITY
     else:
-        # Unknown field — use CLINIQUE priority by default
+        # Unknown field, use CLINIQUE priority by default
         priority_list = CLINIQUE_PRIORITY
 
     try:
@@ -224,7 +224,7 @@ def aggregate_patient_timeline(
         if is_new_surgery:
             specimen_state.clear()
             logger.debug(
-                "New surgery detected in %s — resetting specimen-bound features",
+                "New surgery detected in %s, resetting specimen-bound features",
                 extraction.document_id,
             )
 
@@ -247,7 +247,7 @@ def aggregate_patient_timeline(
                     time_varying_state,
                 )
             else:
-                # Unknown category — treat as time-varying
+                # Unknown category, treat as time-varying
                 _apply_time_varying(
                     fname, new_value, extraction.document_type,
                     time_varying_state,

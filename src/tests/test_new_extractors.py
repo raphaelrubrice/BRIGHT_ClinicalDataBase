@@ -24,7 +24,7 @@ from src.extraction.schema import ExtractionValue
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# A1 — sexe
+# A1, sexe
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestSexeExtraction:
@@ -87,7 +87,7 @@ class TestSexeExtraction:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# A2 — tumeur_lateralite
+# A2, tumeur_lateralite
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestLateraliteExtraction:
@@ -139,7 +139,7 @@ class TestLateraliteExtraction:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# A3 — evol_clinique
+# A3, evol_clinique
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestEvolCliniqueExtraction:
@@ -189,7 +189,7 @@ class TestEvolCliniqueExtraction:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# A4 — type_chirurgie
+# A4, type_chirurgie
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestTypeChirurgieExtraction:
@@ -248,7 +248,7 @@ class TestTypeChirurgieExtraction:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# A5 — classification_oms
+# A5, classification_oms
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestClassificationOMSExtraction:
@@ -285,7 +285,7 @@ class TestClassificationOMSExtraction:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# B1 — chimios
+# B1, chimios
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestChimiosExtraction:
@@ -318,7 +318,7 @@ class TestChimiosExtraction:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# B2 — tumeur_position
+# B2, tumeur_position
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestTumeurPositionExtraction:
@@ -347,7 +347,7 @@ class TestTumeurPositionExtraction:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# C5 — diag_histologique
+# C5, diag_histologique
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestDiagHistologiqueExtraction:
@@ -465,7 +465,7 @@ class TestRunRuleExtractionNewExtractors:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# C2 — Extended IHC synonym tables
+# C2, Extended IHC synonym tables
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestIHCExtendedAliases:
@@ -526,7 +526,7 @@ class TestIHCExtendedAliases:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# C3 — Extended molecular synonym tables
+# C3, Extended molecular synonym tables
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestMolecularExtendedAliases:
@@ -583,7 +583,7 @@ class TestMolecularExtendedAliases:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# C4 — Extended chromosomal synonym tables
+# C4, Extended chromosomal synonym tables
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestChromosomalExtendedAliases:
@@ -647,7 +647,7 @@ class TestChromosomalExtendedAliases:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# C6 — Improved date context assignment
+# C6, Improved date context assignment
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestDateContextImproved:

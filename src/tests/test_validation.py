@@ -1,4 +1,4 @@
-"""Tests for src/extraction/validation.py — controlled vocabulary enforcement."""
+"""Tests for src/extraction/validation.py, controlled vocabulary enforcement."""
 
 import pytest
 

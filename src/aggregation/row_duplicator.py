@@ -6,7 +6,7 @@ splits into separate ``ExtractionResult`` rows.
 
 Public API
 ----------
-- ``detect_multiple_events(extraction)`` – Returns a list of
+- ``detect_multiple_events(extraction)``, Returns a list of
   ``ExtractionResult`` (length ≥ 1).  If only one event is found the
   original is returned unchanged (wrapped in a one-element list).
 """
@@ -49,7 +49,7 @@ _NON_SPECIMEN_SHARED_FEATURES: set[str] = {
     "oedeme_1er_symptome", "calcif_1er_symptome",
 }
 
-# date_chir triggers duplication — exclude it from the shared set.
+# date_chir triggers duplication, exclude it from the shared set.
 # All other specimen-bound fields (IHC / molecular / chromosomal / amplifications /
 # fusions / histology / diagnosis) are shared across duplicate rows.
 # Importing from temporal_aggregation ensures these lists stay in sync.
@@ -105,7 +105,7 @@ def _parse_multiple_values(value_str: str) -> list[str]:
     """
     if not value_str:
         return []
-    # Split on common delimiters (NOT slash — dates use DD/MM/YYYY)
+    # Split on common delimiters (NOT slash, dates use DD/MM/YYYY)
     parts = re.split(r"[;,]|\bet\b|\bpuis\b", value_str, flags=re.IGNORECASE)
     return [p.strip() for p in parts if p.strip()]
 
@@ -354,7 +354,7 @@ def detect_multiple_events(
     """
     # Try each event type.  The first type that yields multiple events
     # triggers duplication.  We do *not* combine multiple event types
-    # in a single pass — that would lead to a combinatorial explosion.
+    # in a single pass, that would lead to a combinatorial explosion.
     for detector, event_type in [
         (_detect_surgery_events, "surgery"),
         (_detect_chemo_events, "chemotherapy"),
@@ -369,5 +369,5 @@ def detect_multiple_events(
             ]
             return rows
 
-    # No duplication needed — return original as-is
+    # No duplication needed, return original as-is
     return [extraction]

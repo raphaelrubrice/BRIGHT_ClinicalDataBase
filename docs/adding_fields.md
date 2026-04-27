@@ -7,7 +7,7 @@ CSV without raising an error.
 
 ---
 
-## Step 1 — Define the field in the schema (`src/extraction/schema.py`)
+## Step 1, Define the field in the schema (`src/extraction/schema.py`)
 
 Open `schema.py` and locate either `BiologicalFeatures` or `ClinicalFeatures`
 (both are Pydantic v2 models). Add:
@@ -24,7 +24,7 @@ If the field has a fixed set of allowed values, add a constant to `ControlledVoc
 (the namespace class defined earlier in `schema.py`):
 
 ```python
-# In ControlledVocab — add a new class variable:
+# In ControlledVocab, add a new class variable:
 MY_NEW_STATUS: set[str] = {"value_a", "value_b", "NA"}
 ```
 
@@ -44,7 +44,7 @@ For simple yes/no fields, reuse `ControlledVocab.BINARY = {"oui", "non", "NA"}`.
 
 ---
 
-## Step 2 — Add to `FEATURE_ROUTING` (`src/extraction/schema.py`)
+## Step 2, Add to `FEATURE_ROUTING` (`src/extraction/schema.py`)
 
 `FEATURE_ROUTING` is a dict that maps each document type to the set of fields
 that should be extracted from it. Locate the dict and add `"my_new_field"` to
@@ -72,7 +72,7 @@ extract it, regardless of which extractor it is wired to.
 
 ---
 
-## Step 3 — Add extraction logic
+## Step 3, Add extraction logic
 
 Choose the appropriate extraction tier based on the field's nature.
 
@@ -113,7 +113,7 @@ resources.
 
 ---
 
-## Step 4 — Add to the ML training pipeline
+## Step 4, Add to the ML training pipeline
 
 Open `bright_models/generated_data/config/fields.py`. Add an entry describing
 the new field **in French**, following the structure of existing entries. Each
@@ -134,11 +134,11 @@ output is correctly attributed.
 If the field belongs to a new clinical category not covered by any existing
 group, you will need to create a new semantic group in `fields.py` **and** train
 a new model for it (adding a new entry to the group list in `hf_extractor.py`).
-This is rare — prefer assigning to the closest existing group.
+This is rare, prefer assigning to the closest existing group.
 
 ---
 
-## Step 5 — Generate new training data and retrain
+## Step 5, Generate new training data and retrain
 
 Follow the full pipeline described in [`docs/training_data.md`](training_data.md).
 In summary: update the field config, regenerate synthetic documents with the LLM,
@@ -147,7 +147,7 @@ group.
 
 ---
 
-## Step 6 — Add validation (`src/extraction/validation.py`)
+## Step 6, Add validation (`src/extraction/validation.py`)
 
 If the new field has constraints, register them:
 
@@ -162,7 +162,7 @@ If the new field has constraints, register them:
 
 ---
 
-## Step 7 — Write a test
+## Step 7, Write a test
 
 Add a test in `src/tests/` that exercises the new field end-to-end. The
 simplest approach is to add cases to an existing extractor test file, or create

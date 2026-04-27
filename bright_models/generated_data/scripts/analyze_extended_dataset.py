@@ -191,7 +191,7 @@ def analyze_dataset(docs, label="Dataset"):
 
 def print_comparison(orig, ext, aug_only):
     print("=" * 70)
-    print("EXTENDED DATASET ANALYSIS — COMPARISON")
+    print("EXTENDED DATASET ANALYSIS, COMPARISON")
     print("=" * 70)
 
     print(f"\n{'Metric':<35} {'Original':>12} {'Extended':>12} {'Aug-only':>12}")

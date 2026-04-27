@@ -3,15 +3,15 @@
 Each field with a controlled vocabulary gets a ``FieldVocabConfig`` that
 specifies:
 
-* **identification_list** – surface forms to *find* in the document
+* **identification_list**, surface forms to *find* in the document
   (marker names, gene names, chromosome arms, …).
-* **category_specific_dict** – for each allowed category value, a list
+* **category_specific_dict**, for each allowed category value, a list
   of surface-form terms expected in the surrounding context.
 
 Two registries are provided:
 
-* ``CONTROLLED_REGISTRY_FR`` – French clinical documents.
-* ``CONTROLLED_REGISTRY_EN`` – English clinical documents (unused — all
+* ``CONTROLLED_REGISTRY_FR``, French clinical documents.
+* ``CONTROLLED_REGISTRY_EN``, English clinical documents (unused, all
   documents are French; kept for potential future use).
 
 Categories with value ``"autre"`` or ``"NA"`` are intentionally **not**

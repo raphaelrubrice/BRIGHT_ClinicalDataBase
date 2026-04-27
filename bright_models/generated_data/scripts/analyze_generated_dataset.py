@@ -250,7 +250,7 @@ for field in KEY_FIELDS:
 for field, top_n in FREE_TEXT_TOP.items():
     dist = value_distributions[field]
     total = sum(dist.values())
-    print(f"\n  {field} — top {top_n} (n={total}):")
+    print(f"\n  {field}, top {top_n} (n={total}):")
     for val, cnt in dist.most_common(top_n):
         print(f"    {val:50s}: {cnt:5d} ({100*cnt/total:5.1f}%)")
 

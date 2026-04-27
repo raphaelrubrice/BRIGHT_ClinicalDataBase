@@ -1,4 +1,4 @@
-"""Tests for src/extraction/pipeline.py — end-to-end extraction pipeline.
+"""Tests for src/extraction/pipeline.py, end-to-end extraction pipeline.
 
 Tests use EDS/Rules extraction with GLiNER disabled to avoid model
 download overhead in CI.
@@ -125,7 +125,7 @@ SAMPLE_SHORT_TEXT = "Ceci est un texte très court sans structure."
 
 
 # ---------------------------------------------------------------------------
-# ExtractionPipeline tests — rule-based only
+# ExtractionPipeline tests, rule-based only
 # ---------------------------------------------------------------------------
 
 class TestExtractionPipelineRuleOnly:
@@ -162,7 +162,7 @@ class TestExtractionPipelineRuleOnly:
         # Check molecular results
         if "mol_idh1" in result.features:
             # EDS may pick up IHC "négatif" instead of molecular "wt" when
-            # both sections are in the same document — accept either.
+            # both sections are in the same document, accept either.
             assert result.features["mol_idh1"].value in ("wt", "mute")
         if "mol_tert" in result.features:
             assert result.features["mol_tert"].value == "mute"
@@ -172,7 +172,7 @@ class TestExtractionPipelineRuleOnly:
             assert result.features["ch10p"].value == "perte"
         if "ch7p" in result.features:
             # EDS may produce different value from rule extraction when
-            # both sections are in the same document — accept either.
+            # both sections are in the same document, accept either.
             assert result.features["ch7p"].value in ("gain", "perte")
 
         # Check amplifications
@@ -462,7 +462,7 @@ class TestExtractionResult:
 
 
 # ---------------------------------------------------------------------------
-# _apply_negation tests — mapping_type-aware negation
+# _apply_negation tests, mapping_type-aware negation
 # ---------------------------------------------------------------------------
 
 class TestApplyNegation:
@@ -586,7 +586,7 @@ class TestAblationModes:
         )
         # mol_idh1 should not be flipped to "wt" since negation is off
         if "mol_idh1" in r.features and r.features["mol_idh1"].value is not None:
-            # The raw extracted value might be "mute"/"muté" — it should NOT be "wt"
+            # The raw extracted value might be "mute"/"muté", it should NOT be "wt"
             # (which would only happen if negation were active)
             pass  # acceptably absent or non-negated
 

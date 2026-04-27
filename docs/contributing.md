@@ -19,8 +19,8 @@ python main.py pseudo --help
 python main.py extract --help
 ```
 
-All tests should pass (tests that require external data files — PDFs or a gold
-standard CSV — are decorated with `@pytest.mark.skip` and will be skipped
+All tests should pass (tests that require external data files, PDFs or a gold
+standard CSV, are decorated with `@pytest.mark.skip` and will be skipped
 automatically).
 
 ---
@@ -95,8 +95,8 @@ python push_to_hub.py <your_hf_username> <output_dir>
 ```
 
 **Arguments:**
-- `<your_hf_username>` — your HuggingFace username (positional, required)
-- `<output_dir>` — path to the directory containing trained model subdirectories
+- `<your_hf_username>`, your HuggingFace username (positional, required)
+- `<output_dir>`, path to the directory containing trained model subdirectories
   (positional, required; typically `./output`)
 
 **Authentication:** the script uses `HfApi()` from the `huggingface_hub` library.
@@ -119,7 +119,7 @@ The script searches for model artifacts in:
 
 ### "EDS-NLP model not found" or `eds-pseudo` import error
 
-The `eds-pseudo` pipeline must be cloned manually from GitHub — it is not on
+The `eds-pseudo` pipeline must be cloned manually from GitHub, it is not on
 PyPI. Re-run the setup script, or re-clone and install it:
 
 ```bash
@@ -149,7 +149,7 @@ consistency:
 
 - Restore the sidecar file from backup (preferred).
 - Alternatively, set the `PSEUDO_SALT` environment variable to the original
-  salt string before running — the code falls back to this env var if the
+  salt string before running, the code falls back to this env var if the
   sidecar is missing.
 - If neither is possible, you must re-pseudonymize all documents from scratch
   and regenerate any gold-standard annotations that referenced the old tokens.

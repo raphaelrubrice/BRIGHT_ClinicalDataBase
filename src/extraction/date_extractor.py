@@ -8,11 +8,11 @@ Strategy
    neighbouring date spans) and fuzzy-match against bilingual (FR / EN)
    keyword repertoires to decide which clinical date field it belongs to.
 4. Greedily assign dates to fields (highest confidence first).  Unmatched
-   dates are left unassigned — better NA than a wrong date.
+   dates are left unassigned, better NA than a wrong date.
 
 Public API
 ----------
-- ``DateExtractor``  – instantiate once, call ``.extract()`` per document.
+- ``DateExtractor`` , instantiate once, call ``.extract()`` per document.
 """
 
 from __future__ import annotations
@@ -351,7 +351,7 @@ class DateExtractor:
         feature_subset : list[str]
             Date field names to extract (only DATE-type fields expected).
         language : str
-            ``"fr"`` or ``"en"`` — selects keyword repertoire.
+            ``"fr"`` or ``"en"``, selects keyword repertoire.
         consultation_date : str | None
             Consultation date in DD/MM/YYYY to exclude.  If ``None``, an
             automatic regex-based extraction is attempted.

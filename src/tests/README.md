@@ -1,4 +1,4 @@
-# Test Suite — Skipped Tests
+# Test Suite, Skipped Tests
 
 **Current status:** 726 passed, 39 skipped, 0 failures.
 
@@ -6,7 +6,7 @@ Run with: `pytest src/tests/ -v --tb=short`
 
 ---
 
-## Skipped: requires `edsnlp` (7 modules — all tests in each)
+## Skipped: requires `edsnlp` (7 modules, all tests in each)
 
 These test modules import `edsnlp` at module level. `edsnlp` requires PyTorch and the
 full ML environment (installed via `scripts/setup.sh` or `scripts/setup.ps1`). They are
@@ -30,9 +30,9 @@ The `DocumentClassifier` was simplified to keyword-only classification; the Olla
 fallback and its helper functions (`_parse_llm_response`, `_truncate_to_tokens`) were
 removed. Tests for that functionality are kept but marked skip to preserve intent.
 
-- `TestLLMFallback` (6 tests) — `ollama_client` parameter no longer exists
-- `TestLLMResponseParsing` (10 tests) — `_parse_llm_response` removed
-- `TestTextTruncation` (3 tests) — `_truncate_to_tokens` removed
+- `TestLLMFallback` (6 tests), `ollama_client` parameter no longer exists
+- `TestLLMResponseParsing` (10 tests), `_parse_llm_response` removed
+- `TestTextTruncation` (3 tests), `_truncate_to_tokens` removed
 
 ---
 

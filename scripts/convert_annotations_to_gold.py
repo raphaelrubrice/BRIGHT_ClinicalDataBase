@@ -2,9 +2,9 @@
 
 Produces two sets of files:
 
-  data/gold_standard/lines/       — one file per (patient × visit) line.
+  data/gold_standard/lines/      , one file per (patient × visit) line.
                                     Annotations = merged BIO + CLINIQUE for that visit.
-  data/gold_standard/aggregates/  — one file per patient.
+  data/gold_standard/aggregates/ , one file per patient.
                                     Annotations = union of ALL their REQ rows.
 
 Both use raw_text = all pseudonymised documents for that patient concatenated
@@ -147,7 +147,7 @@ def clean_annotations(annotations: dict[str, str | None]) -> dict[str, object]:
         if value is None:
             continue
         if field in ("nip", "date_chir", "chir_date"):
-            # Identifier / matching fields — not features to be extracted
+            # Identifier / matching fields, not features to be extracted
             continue
         if field not in ALL_FIELDS_BY_NAME:
             SKIPPED_FIELDS[field] = SKIPPED_FIELDS.get(field, 0) + 1
@@ -227,7 +227,7 @@ def build_lines(
             lines[matched_idx]["evol"] = evol or lines[matched_idx]["evol"]
             used_line_indices.add(matched_idx)
         else:
-            # No matching BIO row — create a CLINIQUE-only line
+            # No matching BIO row, create a CLINIQUE-only line
             lines.append({"nip": nip, "evol": evol, "bio": {}, "clinique": clinique})
 
     return lines
@@ -267,7 +267,7 @@ def main() -> None:
         print(f"Loaded document texts for {len(raw_texts_by_ipp)} patients from {db_path.name}")
     else:
         raw_texts_by_ipp = {}
-        print(f"WARNING: clinical_db not found at {db_path} — gold standard will have no raw_text")
+        print(f"WARNING: clinical_db not found at {db_path}, gold standard will have no raw_text")
 
     # ------------------------------------------------------------------
     # Parse REQ CSVs
@@ -301,7 +301,7 @@ def main() -> None:
         annotations = clean_annotations(merged_raw)
 
         if not annotations:
-            print(f"  [skip] {doc_id} — no annotations after cleaning")
+            print(f"  [skip] {doc_id}, no annotations after cleaning")
             continue
 
         entry = {

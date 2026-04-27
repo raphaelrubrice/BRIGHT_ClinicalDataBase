@@ -1,4 +1,4 @@
-# BRIGHT — Architecture
+# BRIGHT, Architecture
 
 ## Module Map
 
@@ -31,9 +31,9 @@ Input: PDF files in a folder
          ├─ Section detection  (IHC / molecular / microscopy / conclusion / full_text)
          ├─ Feature routing  (FEATURE_ROUTING maps doc type → extractable field set)
          │
-         ├─ Tier 1 — DateExtractor      (regex + context-keyword date assignment)
-         ├─ Tier 2 — ControlledExtractor (marker-term fuzzy matching for vocab fields)
-         ├─ Tier 3 — RuleExtractor       (regex heuristics for IHC, molecular, binary, etc.)
+         ├─ Tier 1, DateExtractor      (regex + context-keyword date assignment)
+         ├─ Tier 2, ControlledExtractor (marker-term fuzzy matching for vocab fields)
+         ├─ Tier 3, RuleExtractor       (regex heuristics for IHC, molecular, binary, etc.)
          ├─ Tier 4a— EDSExtractor        (edsnlp CRF rules)
          ├─ Tier 4b— HFExtractor         (10 fine-tuned edsnlp models, one per semantic group)
          │
@@ -68,9 +68,8 @@ alongside the CSV) provides the security guarantee: the mapping cannot be invert
 without it.
 
 **Why synthetic training data?**
-No annotated real clinical records were available during development — access would have
-required IRB approval and data-sharing agreements that were not in scope. LLM-generated
-documents were the only feasible path for creating labelled training examples at scale.
+Not enough annotated real clinical records were available during development, access would have
+required additional approvals and data-sharing agreements that were not in scope of this 4 month project. LLM-generated documents were the only feasible path for creating labelled training examples at scale.
 The gap between synthetic and real vocabulary and structure is the primary source of
 performance degradation on live data.
 
@@ -83,16 +82,14 @@ inference latency low on CPU-only hospital workstations.
 
 **Why 10 semantic model groups?**
 EDS-NLP's CRF models operate on documents tokenized with a sliding context window.
-Grouping the 111 fields by clinical semantics (IHC, molecular, chromosomal, demographics,
+Grouping 111 fields by clinical semantics (IHC, molecular, chromosomal, demographics,
 treatment, etc.) keeps intra-group context coherent, makes each model's label space
 manageable, and lets the system load only the relevant groups for a given document type.
 
-**Why EDS-NLP / ONNX runtime?**
+**Why EDS-NLP ?**
 `edsnlp` is the standard French clinical NLP framework at AP-HP / Inria and ships with
 pre-built pseudonymization and rule pipelines that would otherwise require months of
-engineering. ONNX export of the fine-tuned CRF models enables CPU inference without a
-GPU, making the system deployable on standard hospital workstations without special
-hardware.
+engineering.
 
 ---
 

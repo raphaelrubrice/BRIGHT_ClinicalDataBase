@@ -3,7 +3,7 @@ CONSIGNES DE GÉNÉRATION:
 2. Le texte doit refléter le style réel des documents hospitaliers français:
    abréviations médicales, phrases télégraphiques, en-têtes administratifs,
    formules de politesse entre confrères
-3. Intègre NATURELLEMENT les informations du profil patient — seulement celles
+3. Intègre NATURELLEMENT les informations du profil patient, seulement celles
    pertinentes pour ce type de document
 4. Pour chaque champ du profil EFFECTIVEMENT MENTIONNÉ dans le texte,
    remplis "annotations" avec:
@@ -52,7 +52,7 @@ CONSIGNES DE GÉNÉRATION:
 7. Les dates dans le texte doivent être écrites en format français
    (ex: "15 mars 2023", "15/03/2023")
 
-FORMAT DE SORTIE — JSON valide uniquement, pas de texte avant ou après:
+FORMAT DE SORTIE, JSON valide uniquement, pas de texte avant ou après:
 {
   "document_text": "...",
   "annotations": {

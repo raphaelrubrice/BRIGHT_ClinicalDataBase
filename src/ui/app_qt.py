@@ -951,7 +951,7 @@ class MainWindow(QMainWindow):
             skipped: list[str] = []
 
             # -------------------------
-            # Phase 1 — Extraction + IPP + duplicate check
+            # Phase 1, Extraction + IPP + duplicate check
             # -------------------------
             extract_dlg = self._make_progress(
                 self.tr("progress_commit_title"),
@@ -1006,7 +1006,7 @@ class MainWindow(QMainWindow):
                 return
 
             # -------------------------
-            # Phase 2 — Pseudonymization + chunked commit
+            # Phase 2, Pseudonymization + chunked commit
             # -------------------------
             pseudo_dlg = self._make_progress(
                 self.tr("progress_commit_title"),
@@ -1153,7 +1153,7 @@ class MainWindow(QMainWindow):
             append_rows_locked(db_path, pd.DataFrame(pending_rows))
             committed_files.extend(pending_names)
         except Exception:
-            # Chunk failed — try rows individually to salvage what we can
+            # Chunk failed, try rows individually to salvage what we can
             for row_dict, name in zip(pending_rows, pending_names):
                 try:
                     append_rows_locked(db_path, pd.DataFrame([row_dict]))
@@ -1177,7 +1177,7 @@ class MainWindow(QMainWindow):
 
         lines = [
             f"{'=' * 60}",
-            f"Commit — {timestamp}",
+            f"Commit, {timestamp}",
             f"Database: {p}",
             f"{'=' * 60}",
             "",
@@ -1212,7 +1212,7 @@ class MainWindow(QMainWindow):
         self._selection_mode = not self._selection_mode
 
         if self._selection_mode:
-            # Entering selection mode — add checkboxes to every row's column-0 item
+            # Entering selection mode, add checkboxes to every row's column-0 item
             self.btn_select_mode.setText(self.tr("btn_cancel_select"))
             self.chk_select_all.setVisible(True)
             self.btn_remove_selected.setVisible(True)
@@ -1224,7 +1224,7 @@ class MainWindow(QMainWindow):
                     it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
                     it.setCheckState(Qt.Checked)
         else:
-            # Leaving selection mode — strip checkboxes
+            # Leaving selection mode, strip checkboxes
             self.btn_select_mode.setText(self.tr("btn_select_mode"))
             self.chk_select_all.setVisible(False)
             self.btn_remove_selected.setVisible(False)

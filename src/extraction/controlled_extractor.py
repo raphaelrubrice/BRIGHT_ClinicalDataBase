@@ -2,12 +2,12 @@
 
 Mirrors the ``DateExtractor`` strategy:
 
-1. **Find** – scan the document for field-specific identification terms
+1. **Find**, scan the document for field-specific identification terms
    (marker names, gene names, chromosome arms, …) using exact or fuzzy
    matching.
-2. **Check** – in the surrounding context of each hit, fuzzy-match
+2. **Check**, in the surrounding context of each hit, fuzzy-match
    against all category surface-form terms to assign a category value.
-3. **Assign** – greedy allocation (highest combined score first, one
+3. **Assign**, greedy allocation (highest combined score first, one
    value per field).
 
 Fields whose best candidate does not pass the category threshold remain
@@ -104,7 +104,7 @@ class ControlledExtractor:
             Field names to extract (only those with a registry entry
             will be processed).
         language : str
-            ``"fr"`` or ``"en"`` — selects the vocabulary registry.
+            ``"fr"`` or ``"en"``, selects the vocabulary registry.
 
         Returns
         -------
@@ -120,7 +120,7 @@ class ControlledExtractor:
         text_norm = normalise(text)
 
         # ------------------------------------------------------------------
-        # Step 1: FIND — collect identification hits across all fields
+        # Step 1: FIND, collect identification hits across all fields
         # ------------------------------------------------------------------
         # Each hit: (field_name, start, end, id_score)
         hits: list[tuple[str, int, int, float]] = []
@@ -137,7 +137,7 @@ class ControlledExtractor:
             return {}
 
         # ------------------------------------------------------------------
-        # Step 2: CHECK — for each hit, score all categories
+        # Step 2: CHECK, for each hit, score all categories
         # ------------------------------------------------------------------
         # candidate: (field, category, combined_score, start, end, source_span)
         candidates: list[tuple[str, str, float, int, int, str]] = []
@@ -181,7 +181,7 @@ class ControlledExtractor:
             return {}
 
         # ------------------------------------------------------------------
-        # Step 3: ASSIGN — greedy, highest combined score first
+        # Step 3: ASSIGN, greedy, highest combined score first
         # ------------------------------------------------------------------
         candidates.sort(key=lambda c: c[2], reverse=True)
 

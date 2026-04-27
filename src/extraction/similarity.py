@@ -12,7 +12,7 @@ Falls back to ``"NA"`` when no tier produces a match.
 
 Public API
 ----------
-- ``match_to_vocab()`` — Main entry point for span → vocab matching.
+- ``match_to_vocab()``, Main entry point for span → vocab matching.
 """
 
 from __future__ import annotations
@@ -136,7 +136,7 @@ def _match_to_vocab_impl(
     Returns
     -------
     tuple[str, float]
-        ``(matched_value, confidence)`` — ``"NA"`` with ``0.0`` if
+        ``(matched_value, confidence)``, ``"NA"`` with ``0.0`` if
         no tier matched.
     """
     if not span_text or not span_text.strip():
@@ -235,21 +235,21 @@ def _match_to_vocab_impl(
         _best_tier_score = max(_best_tier_score, best_sim_score)
 
     # ------------------------------------------------------------------
-    # Tier 5: "autre" fallback — accept raw value as free text
+    # Tier 5: "autre" fallback, accept raw value as free text
     # ------------------------------------------------------------------
     # If the vocab has an "autre" category and no tier produced a decent
-    # match (best < 0.45), the extracted value is genuinely novel —
+    # match (best < 0.45), the extracted value is genuinely novel,
     # accept it as-is with moderate confidence.
     if vocab_has_autre(allowed_values) and _best_tier_score < 0.45:
         logger.info(
             "Field '%s': no vocab match for '%s' (best_score=%.2f) but "
-            "'autre' category present — accepting raw value.",
+            "'autre' category present, accepting raw value.",
             field_name, span_stripped, _best_tier_score,
         )
         return (span_stripped, 0.6)
 
     # ------------------------------------------------------------------
-    # Tier 6: No match — return "NA"
+    # Tier 6: No match, return "NA"
     # ------------------------------------------------------------------
     logger.info(
         "Field '%s': no match for '%s' in %s. Returning 'NA'.",

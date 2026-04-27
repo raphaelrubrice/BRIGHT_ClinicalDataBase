@@ -6,23 +6,23 @@ amplifications, and fusions from French neuro-oncology documents.
 
 Public API
 ----------
-- ``extract_dates``              – Generic date extraction + normalisation.
-- ``extract_ihc``                – IHC marker extraction.
-- ``extract_molecular``          – Molecular status extraction.
-- ``extract_chromosomal``        – Chromosomal alteration extraction.
-- ``extract_binary``             – Binary (oui/non) field extraction.
-- ``extract_numerical``          – Numerical value extraction (Ki67, IK, …).
-- ``extract_amplifications``     – Gene amplification extraction.
-- ``extract_fusions``            – Gene fusion extraction.
-- ``extract_sexe``               – Patient sex (M/F) extraction.
-- ``extract_tumeur_lateralite``  – Tumour laterality extraction.
-- ``extract_evol_clinique``      – Clinical evolution label extraction.
-- ``extract_type_chirurgie``     – Surgery type extraction.
-- ``extract_classification_oms`` – WHO classification year extraction.
-- ``extract_chimios``            – Chemotherapy drug name extraction.
-- ``extract_tumeur_position``    – Tumour anatomical position extraction.
-- ``extract_diag_histologique``  – Histological diagnosis extraction.
-- ``run_rule_extraction``        – Master function running all extractors.
+- ``extract_dates``             , Generic date extraction + normalisation.
+- ``extract_ihc``               , IHC marker extraction.
+- ``extract_molecular``         , Molecular status extraction.
+- ``extract_chromosomal``       , Chromosomal alteration extraction.
+- ``extract_binary``            , Binary (oui/non) field extraction.
+- ``extract_numerical``         , Numerical value extraction (Ki67, IK, …).
+- ``extract_amplifications``    , Gene amplification extraction.
+- ``extract_fusions``           , Gene fusion extraction.
+- ``extract_sexe``              , Patient sex (M/F) extraction.
+- ``extract_tumeur_lateralite`` , Tumour laterality extraction.
+- ``extract_evol_clinique``     , Clinical evolution label extraction.
+- ``extract_type_chirurgie``    , Surgery type extraction.
+- ``extract_classification_oms``, WHO classification year extraction.
+- ``extract_chimios``           , Chemotherapy drug name extraction.
+- ``extract_tumeur_position``   , Tumour anatomical position extraction.
+- ``extract_diag_histologique`` , Histological diagnosis extraction.
+- ``run_rule_extraction``       , Master function running all extractors.
 """
 
 from __future__ import annotations
@@ -1218,7 +1218,7 @@ def extract_amplifications(text: str) -> dict[str, ExtractionValue]:
                 vocab_valid=True,
             )
 
-    # Negated amplifications (check FIRST — negated patterns are more
+    # Negated amplifications (check FIRST, negated patterns are more
     # specific and must take priority via the "first match wins" `_set`).
     for m in _AMPLI_NEGATED_PATTERN.finditer(text):
         gene = m.group("gene").lower()
@@ -1286,7 +1286,7 @@ def extract_fusions(text: str) -> dict[str, ExtractionValue]:
                 vocab_valid=True,
             )
 
-    # Negated fusions (check FIRST — more specific pattern wins).
+    # Negated fusions (check FIRST, more specific pattern wins).
     for m in _FUSION_NEGATED_PATTERN.finditer(text):
         gene = m.group("gene").lower()
         field_name = _FUSION_CANONICAL.get(gene, "fusion_autre")
@@ -1591,7 +1591,7 @@ def extract_evol_clinique(text: str) -> dict[str, ExtractionValue]:
                 confidence=0.85, vocab_valid=True,
             )}
 
-    # 4. Context inference (flagged — lower confidence)
+    # 4. Context inference (flagged, lower confidence)
     m = _PAT_EVOL_INITIAL_CONTEXT.search(text)
     if m:
         # If we are in a history context, this is likely a past "initial" mention, not the current one.
@@ -1765,7 +1765,7 @@ def extract_classification_oms(text: str) -> dict[str, ExtractionValue]:
                 confidence=0.95, vocab_valid=True,
             )}
 
-    # Pass 2: fallback — pick the highest (most recent) valid year
+    # Pass 2: fallback, pick the highest (most recent) valid year
     valid_matches = [(int(m.group("year")), m) for m in all_matches if m.group("year") in _VALID_OMS_YEARS]
     
     if valid_matches:
@@ -1926,7 +1926,7 @@ def extract_tumeur_position(text: str) -> dict[str, ExtractionValue]:
 
     Uses a closed neuro-oncology anatomical vocabulary.
     Multiple structures are joined with ' + '.
-    Returns None (empty dict) for unmatched — no LLM fallback.
+    Returns None (empty dict) for unmatched, no LLM fallback.
     """
     found: list[tuple[str, int, int]] = []
 

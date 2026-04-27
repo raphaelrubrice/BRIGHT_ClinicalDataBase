@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-profile_validation.py — Validation of synthetic neuro-oncology patient profiles.
+profile_validation.py, Validation of synthetic neuro-oncology patient profiles.
 
 Checks:
   1. Diagnosis proportions

@@ -1,4 +1,4 @@
-"""Tests for src/extraction/negation.py — EDS-NLP assertion annotation."""
+"""Tests for src/extraction/negation.py, EDS-NLP assertion annotation."""
 
 import pytest
 

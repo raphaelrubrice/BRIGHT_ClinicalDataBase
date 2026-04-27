@@ -5,12 +5,12 @@ feature extraction.
 
 Public API
 ----------
-- ``SECTION_PATTERNS``        – regex patterns keyed by canonical section name.
-- ``SECTION_TO_FEATURES``     – maps each section to the feature fields likely
+- ``SECTION_PATTERNS``       , regex patterns keyed by canonical section name.
+- ``SECTION_TO_FEATURES``    , maps each section to the feature fields likely
                                 to appear within it.
-- ``SectionDetector``         – stateless detector: call ``detect(text)`` to
+- ``SectionDetector``        , stateless detector: call ``detect(text)`` to
                                 obtain a ``dict[str, str]`` of section → text.
-- ``get_features_for_sections`` – given detected section names, return the
+- ``get_features_for_sections``, given detected section names, return the
                                   union of relevant feature fields.
 """
 
@@ -202,7 +202,7 @@ SECTION_PATTERNS_LENIENT: dict[str, re.Pattern[str]] = {
 # one section (e.g., ``grade`` in both ``conclusion`` and ``microscopy``).
 #
 # ``full_text`` is not listed here because it is a fallback that targets
-# *all* fields — handled separately via ``get_features_for_sections()``.
+# *all* fields, handled separately via ``get_features_for_sections()``.
 
 SECTION_TO_FEATURES: dict[str, list[str]] = {
     # --- Biological sections (primarily from anapath / molecular reports) ---
@@ -513,7 +513,7 @@ class SectionDetector:
 
 
 # ---------------------------------------------------------------------------
-# DetectionResult — richer return type
+# DetectionResult, richer return type
 # ---------------------------------------------------------------------------
 
 @dataclass

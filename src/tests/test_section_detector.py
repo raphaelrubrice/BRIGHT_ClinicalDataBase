@@ -1,4 +1,4 @@
-"""Tests for src/extraction/section_detector.py — section segmentation.
+"""Tests for src/extraction/section_detector.py, section segmentation.
 
 Covers:
 - Correct segmentation of a sample anapath report (IHC, molecular, microscopy, conclusion).
@@ -32,7 +32,7 @@ from src.extraction.schema import (
 # ---------------------------------------------------------------------------
 
 SAMPLE_ANAPATH_REPORT = """\
-Hôpital Universitaire — Service d'Anatomie Pathologique
+Hôpital Universitaire, Service d'Anatomie Pathologique
 Date_chir: 15/03/2024   N° labo: AP24-1234
 
 Examen macroscopique
@@ -73,7 +73,7 @@ Profil moléculaire défavorable : TERT muté, MGMT non méthylé.
 
 SAMPLE_CONSULTATION_NOTE = """\
 Compte-rendu de consultation du 22/01/2025
-Dr Martin — Neuro-oncologie
+Dr Martin, Neuro-oncologie
 
 Antécédents
 Patient de 54 ans, homme, enseignant.
@@ -102,7 +102,7 @@ Poursuite de la surveillance.
 """
 
 SAMPLE_MOLECULAR_ONLY = """\
-Service de biologie moléculaire — Résultats
+Service de biologie moléculaire, Résultats
 
 Biologie moléculaire
 IDH1 R132H : muté
@@ -119,7 +119,7 @@ Pas d'amplification EGFR. Pas d'amplification MDM2.
 
 
 # ---------------------------------------------------------------------------
-# Tests — Pattern matching
+# Tests, Pattern matching
 # ---------------------------------------------------------------------------
 
 class TestSectionPatterns:
@@ -227,7 +227,7 @@ class TestSectionPatterns:
 
 
 # ---------------------------------------------------------------------------
-# Tests — SectionDetector on full documents
+# Tests, SectionDetector on full documents
 # ---------------------------------------------------------------------------
 
 class TestSectionDetectorAnapath:
@@ -357,7 +357,7 @@ class TestSectionDetectorMolecular:
 
 
 # ---------------------------------------------------------------------------
-# Tests — Edge cases
+# Tests, Edge cases
 # ---------------------------------------------------------------------------
 
 class TestSectionDetectorEdgeCases:
@@ -403,7 +403,7 @@ class TestSectionDetectorEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# Tests — detect_with_metadata()
+# Tests, detect_with_metadata()
 # ---------------------------------------------------------------------------
 
 class TestDetectWithMetadata:
@@ -432,7 +432,7 @@ class TestDetectWithMetadata:
 
 
 # ---------------------------------------------------------------------------
-# Tests — SECTION_TO_FEATURES mapping completeness
+# Tests, SECTION_TO_FEATURES mapping completeness
 # ---------------------------------------------------------------------------
 
 class TestSectionToFeaturesCompleteness:
@@ -513,7 +513,7 @@ class TestSectionToFeaturesCompleteness:
 
 
 # ---------------------------------------------------------------------------
-# Tests — get_features_for_sections / get_section_for_feature
+# Tests, get_features_for_sections / get_section_for_feature
 # ---------------------------------------------------------------------------
 
 class TestFeatureHelpers:
@@ -569,13 +569,13 @@ class TestFeatureHelpers:
 
     def test_features_sorted_and_deduplicated(self):
         features = get_features_for_sections(["ihc", "conclusion"])
-        # ihc_idh1 appears in both sections — should appear only once
+        # ihc_idh1 appears in both sections, should appear only once
         assert features.count("ihc_idh1") == 1
         assert features == sorted(features)
 
 
 # ---------------------------------------------------------------------------
-# Tests — Integration: end-to-end detection + feature lookup
+# Tests, Integration: end-to-end detection + feature lookup
 # ---------------------------------------------------------------------------
 
 class TestIntegrationDetectAndMap:

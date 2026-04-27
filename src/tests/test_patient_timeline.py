@@ -1,4 +1,4 @@
-"""Tests for src/aggregation/patient_timeline.py — end-to-end patient timeline.
+"""Tests for src/aggregation/patient_timeline.py, end-to-end patient timeline.
 
 Covers:
 - Building timeline from a single document

@@ -9,10 +9,10 @@ existing database operations (``src.database.ops``).  Provides helpers to:
 
 Public API
 ----------
-- ``FEATURE_COLUMNS``            – List of all 102 feature column names.
-- ``EXTENDED_COLUMNS``           – ``DEFAULT_COLUMNS`` + feature columns.
-- ``extraction_result_to_row()`` – Convert ExtractionResult to a flat row dict.
-- ``extract_and_store()``        – Extract features and append to the DB.
+- ``FEATURE_COLUMNS``           , List of all 102 feature column names.
+- ``EXTENDED_COLUMNS``          , ``DEFAULT_COLUMNS`` + feature columns.
+- ``extraction_result_to_row()``, Convert ExtractionResult to a flat row dict.
+- ``extract_and_store()``       , Extract features and append to the DB.
 """
 
 from __future__ import annotations

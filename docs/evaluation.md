@@ -2,7 +2,7 @@
 
 ## Overview
 
-Evaluating extraction quality requires a **gold standard** — a set of documents
+Evaluating extraction quality requires a **gold standard**, a set of documents
 whose fields have been manually annotated by a clinician or trained annotator.
 The benchmark compares the pipeline's output against this gold standard and
 reports per-field precision, recall, and F1 scores, along with hallucination,
@@ -53,8 +53,8 @@ python scripts/convert_annotations_to_gold.py --db path/to/clinical_db_pseudo_on
 The `--db` argument is optional; if omitted the script uses its default paths
 (see the script's argparse help). The script writes two output sets:
 
-- `data/gold_standard/lines/` — one JSON per (patient × visit) line
-- `data/gold_standard/aggregates/` — one JSON per patient (all visits merged)
+- `data/gold_standard/lines/`, one JSON per (patient × visit) line
+- `data/gold_standard/aggregates/`, one JSON per patient (all visits merged)
 
 Use the `lines/` directory for per-document benchmarking and `aggregates/` for
 patient-level evaluation.
@@ -151,11 +151,11 @@ correct at the year level.
 For each field across all evaluated documents:
 
 ```
-TP               — predicted value matches gold (exact or fuzzy)
-TN               — both predicted and gold are None
-FP_hallucination — predicted has a value, gold is None
-FN_omission      — predicted is None, gold has a value
-alteration       — both have values but they do not match
+TP              , predicted value matches gold (exact or fuzzy)
+TN              , both predicted and gold are None
+FP_hallucination, predicted has a value, gold is None
+FN_omission     , predicted is None, gold has a value
+alteration      , both have values but they do not match
                    (counts 0.5 toward FP and 0.5 toward FN)
 
 precision = TP / (TP + FP_hallucination + 0.5 × alteration)
@@ -201,7 +201,7 @@ precise and models add little).
 
 ## Interpreting Results
 
-**High precision + low recall**: the extractor is conservative — it only fires
+**High precision + low recall**: the extractor is conservative, it only fires
 when highly confident, missing many instances. Consider lowering similarity
 thresholds in the controlled extractor or adding more training examples.
 
