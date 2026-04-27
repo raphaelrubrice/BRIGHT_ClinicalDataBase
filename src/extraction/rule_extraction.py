@@ -1064,10 +1064,14 @@ def extract_binary(
 _PAT_KI67 = re.compile(
     r"(?:ki[- ]?67|index\s+de\s+prolif[ée]ration)"
     r"\s*[:=\-\s]\s*"
-    r"(?:(?:environ|~)\s*)?"
-    r"(?P<value>\d+(?:\s*(?:[àa-]\s*\d+))?)\s*%",
+    r"(?:(?:environ|jusqu[''']?\s*[àa]|~)\s*)?"
+    r"(?:entre\s+)?"
+    r"(?P<value>\d+(?:\s*(?:[àa-]|et)\s*\d+)?)\s*%",
     _RE_FLAGS,
 )
+
+# Normalise ki67 range separators ("40 à 50", "40 et 50") → "40-50"
+_KI67_RANGE_SEP = re.compile(r"\s*(?:[àa]|et)\s*", re.UNICODE | re.IGNORECASE)
 
 _PAT_KARNOFSKY = re.compile(
     r"(?:IK|Karnofsky|KPS|indice\s+de\s+Karnofsky)"
@@ -1123,9 +1127,9 @@ def extract_numerical(text: str) -> dict[str, ExtractionValue]:
                 vocab_valid=True,
             )
 
-    # Ki67
+    # Ki67 — normalise range separators so "40 à 50" and "40 et 50" → "40-50"
     for m in _PAT_KI67.finditer(text):
-        val = m.group("value").strip()
+        val = _KI67_RANGE_SEP.sub("-", m.group("value").strip())
         _set("ihc_ki67", val, m.group(), m.start(), m.end())
 
     # Karnofsky

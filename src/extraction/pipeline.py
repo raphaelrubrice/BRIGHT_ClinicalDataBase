@@ -127,6 +127,29 @@ def _apply_negation(field_name: str, value, source_span: str | None = None) -> s
 
 
 # ---------------------------------------------------------------------------
+# HF value plausibility check
+# ---------------------------------------------------------------------------
+
+def _hf_value_is_plausible(field_name: str, hf_val: ExtractionValue) -> bool:
+    """Return False if the HF value obviously violates the field's controlled vocabulary.
+
+    For fields with no allowed_values constraint (free-text, dates, integers)
+    this always returns True so existing behaviour is unchanged.
+    For vocabulary-constrained fields (categorical) it rejects spans that are
+    not in the allowed set — e.g. hallucinated years for classification_oms or
+    arbitrary tokens for IHC/molecular status fields.
+    """
+    if hf_val is None or hf_val.value is None:
+        return False
+    field_def = ALL_FIELDS_BY_NAME.get(field_name)
+    if field_def is None or not field_def.allowed_values:
+        return True
+    value_lower = str(hf_val.value).strip().lower()
+    allowed_lower = {str(v).lower() for v in field_def.allowed_values}
+    return value_lower in allowed_lower
+
+
+# ---------------------------------------------------------------------------
 # EDS passing fields (F1 >= 0.6 on held-out benchmark)
 # Used in Rules + ML mode: HF wins on these fields, rules win on the others.
 # In ML-only mode HF is used on ALL fields (no filter applied).
@@ -199,7 +222,14 @@ def _decide_extraction(
     merged = dict(rules_merged)
     for fname, hf_val in hf_results.items():
         if fname in _HF_PASSING_FIELDS:
-            merged[fname] = hf_val
+            if _hf_value_is_plausible(fname, hf_val):
+                merged[fname] = hf_val
+            else:
+                logger.debug(
+                    "HF value rejected for %s (value=%r not in allowed vocab); "
+                    "keeping rule result.",
+                    fname, hf_val.value if hf_val else None,
+                )
     return merged
 
 

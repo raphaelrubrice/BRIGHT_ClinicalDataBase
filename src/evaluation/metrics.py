@@ -16,6 +16,8 @@ _FUZZY_ELIGIBLE_FIELDS = {
     "activite_professionnelle", "chimios", "localisation_chir",
     "localisation_radiotherapie", "neuroncologue", "neurochirurgien",
     "radiotherapeute", "infos_deces", "autre_trouble",
+    # Range/format variation: GT encodes "40-50", text has "40 à 50 %" etc.
+    "ihc_ki67", "histo_mitoses",
 }
 
 _ALTERATION_WEIGHT = 0.5
@@ -337,9 +339,12 @@ def compute_category_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
     records = []
     for category, features in _FEATURE_CATEGORIES.items():
-        present = [f for f in features if f in df.index and df.loc[f, "Predominant_Tier"] != "unknown"]
+        # Include all fields that appear in the benchmark dataframe, regardless
+        # of whether they were ever extracted (Predominant_Tier == "unknown").
+        # Excluding un-attempted fields was silently inflating category scores.
+        present = [f for f in features if f in df.index]
         num_total_features = len(features)
-        
+
         if not present:
             records.append({
                 "category": category,
@@ -352,12 +357,13 @@ def compute_category_metrics(df: pd.DataFrame) -> pd.DataFrame:
             continue
 
         subset = df.loc[present]
+        attempted = subset[subset["Predominant_Tier"] != "unknown"]
         records.append({
             "category": category,
             "F1_mean": subset["F1"].mean(),
             "Precision_mean": subset["Precision"].mean(),
             "Recall_mean": subset["Recall"].mean(),
-            "num_features_attempted": len(present),
+            "num_features_attempted": len(attempted),
             "num_features_total": num_total_features,
         })
 

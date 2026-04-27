@@ -134,13 +134,14 @@ to `--out-dir`.
 accents are removed, integers and floats are normalized, and dates are unified to
 `YYYY-MM-DD`. If the normalized strings are identical, the extraction is a TP.
 
-**Fuzzy match** (85% threshold): for the 12 free-text fields listed below, a
+**Fuzzy match** (85% threshold): for the 14 fields listed below, a
 predicted value that scores ≥ 85% rapidfuzz similarity against the gold value
-also counts as a TP. These fields contain diagnostic phrases, drug names, or
-place names where minor spelling and accent variations are expected:
+also counts as a TP. These fields contain diagnostic phrases, drug names, place
+names, or numeric ranges where minor spelling and format variations are expected:
 `diag_histologique`, `diag_integre`, `tumeur_position`, `activite_professionnelle`,
 `chimios`, `localisation_chir`, `localisation_radiotherapie`, `neuroncologue`,
-`neurochirurgien`, `radiotherapeute`, `infos_deces`, `autre_trouble`.
+`neurochirurgien`, `radiotherapeute`, `infos_deces`, `autre_trouble`,
+`ihc_ki67`, `histo_mitoses`.
 
 **Date coarsening**: dates are compared at their shared granularity. A predicted
 value of `2024` matches a gold value of `2024-03-15` because the prediction is

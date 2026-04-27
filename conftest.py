@@ -1,4 +1,4 @@
-"""Root conftest — ensure the project root is on sys.path so that
+"""Root conftest, ensure the project root is on sys.path so that
 ``from src.extraction import …`` works when running pytest from the
 BRIGHT_ClinicalDataBase directory.
 """
