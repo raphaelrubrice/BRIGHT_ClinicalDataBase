@@ -1,4 +1,4 @@
-"""Tests for src/aggregation/patient_timeline.py — end-to-end patient timeline.
+"""Tests for src/aggregation/patient_timeline.py, end-to-end patient timeline.
 
 Covers:
 - Building timeline from a single document
@@ -9,6 +9,7 @@ Covers:
 """
 
 import pytest
+pytest.importorskip("edsnlp", reason="requires edsnlp (install via setup.sh)")
 import pandas as pd
 from unittest.mock import MagicMock, patch
 
@@ -94,7 +95,7 @@ class TestBuildTimelineFromExtractions:
 
     def test_with_row_duplication(self):
         ext = _make_extraction(
-            chir_date="01/03/2020, 15/09/2021",
+            date_chir="01/03/2020, 15/09/2021",
             sexe="M",
         )
         df = build_patient_timeline_from_extractions("patient_1", [ext])

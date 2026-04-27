@@ -120,19 +120,10 @@ def append_rows_locked(db_path: str | Path, new_rows: pd.DataFrame) -> None:
         save_db(df2, db_path)
 
 # ---------------------------------------------------------------------------
-# LLM singleton – lazy-loaded on first fallback call
+# LLM singleton, lazy-loaded on first fallback call
 # ---------------------------------------------------------------------------
 _LLM_PIPELINE = None
 _LLM_MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"
-
-# _LLM_PROMPT = """\
-# You are a medical document date extractor. Given the text of a clinical report (in french or english), find the **consultation date** — that is, the date the patient was seen by the doctor and on which the clinical report was made initially (not a birth date, not a print/download date, not a confirmation date, not a date of arrival in hospital, not any other date).
-# The consultation date is can usually be found at the beginning or the end of the text. It is not necessarily explicitly indicated as a consultation date. For example having "Paris le DD/MM/YYYY" before the beginning or at the end is the consultation date
-# Return ONLY the date in DD/MM/YYYY format. Nothing else.
-# If no consultation date can be robustly identified, return exactly: Not found
-
-# Text:
-# {text}"""
 
 _LLM_PROMPT = """\
 You are a medical document date extractor. Your task is to extract the **consultation date** from the clinical report below (English or French).
@@ -442,8 +433,6 @@ Compte-Rendu de consultation du 2004/01/12
 Madame LAURENGE ep. LEPRINCE Alice, née le 18/05/1989, âgée de 36 ans, a été vue en
 consultation."""]})
 
-    print("DB BEFORE\n", test_df)
     new_db = insert_documents_with_order(test_df, new_df)
-    print("DB AFTER\n", new_db)
     
     

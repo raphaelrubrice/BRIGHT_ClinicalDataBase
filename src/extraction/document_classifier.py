@@ -5,19 +5,15 @@ Classifies clinical documents as one of five types:
 
 Strategy
 --------
-1. **Keyword scoring** (primary): weighted keyword matching.  ``strong``
-   keyword  → 3 points, ``moderate`` keyword → 1 point.  The document type
-   with the highest score wins.
-2. **LLM fallback** (optional): when the top‑two scores are within 2 points
-   (ambiguous), the first ~500 tokens of the document are sent to an Ollama
-   model for a lightweight classification call.
+**Keyword scoring**: weighted keyword matching.  ``strong`` keyword → 3 points,
+``moderate`` keyword → 1 point.  The document type with the highest score wins.
 
 Public API
 ----------
-- ``DocumentClassifier``          — main classifier object.
-- ``ClassificationResult``        — return value with type, scores & flags.
-- ``DOCUMENT_TYPE_KEYWORDS``      — editable keyword dictionary.
-- ``classify_document(text)``     — convenience function (keyword‑only).
+- ``DocumentClassifier``         , main classifier object.
+- ``ClassificationResult``       , return value with type, scores & flags.
+- ``DOCUMENT_TYPE_KEYWORDS``     , editable keyword dictionary.
+- ``classify_document(text)``    , convenience function (keyword‑only).
 """
 
 from __future__ import annotations
@@ -276,64 +272,14 @@ def _compute_confidence(ranked: list[tuple[str, int]]) -> float:
 
 
 # ---------------------------------------------------------------------------
-# LLM fallback prompt
-# ---------------------------------------------------------------------------
-
-_LLM_CLASSIFICATION_PROMPT = """\
-Tu es un classifieur de documents médicaux. Classe le document ci-dessous dans \
-EXACTEMENT UNE des 5 catégories suivantes :
-
-- anapath          : compte-rendu anatomopathologique (histologie, IHC, biopsie)
-- molecular_report : résultats de biologie moléculaire (CGH-array, NGS, séquençage)
-- consultation     : compte-rendu de consultation médicale
-- rcp              : réunion de concertation pluridisciplinaire
-- radiology        : compte-rendu d'imagerie (IRM, scanner)
-
-Réponds UNIQUEMENT avec le nom de la catégorie, sans explication.
-
-### Document (début) :
-{text_excerpt}
-"""
-
-
-def _truncate_to_tokens(text: str, max_tokens: int = 500) -> str:
-    """Rough truncation to approximately *max_tokens*.
-
-    Heuristic: 1 token ≈ 4 characters for French text.
-    """
-    max_chars = max_tokens * 4
-    if len(text) <= max_chars:
-        return text
-    return text[:max_chars] + "…"
-
-
-def _parse_llm_response(response_text: str) -> Optional[str]:
-    """Extract a valid document type from the LLM response.
-
-    The LLM should return one of the valid types.  We search for the first
-    valid type that appears in the (lowercased) response.
-    """
-    response_lower = response_text.strip().lower()
-    for doc_type in VALID_DOCUMENT_TYPES:
-        if doc_type in response_lower:
-            return doc_type
-    return None
-
-
-# ---------------------------------------------------------------------------
 # Main classifier
 # ---------------------------------------------------------------------------
 
 class DocumentClassifier:
-    """Weighted keyword classifier with optional LLM fallback.
+    """Weighted keyword classifier.
 
     Parameters
     ----------
-    ollama_client : object, optional
-        An ``OllamaClient`` instance (from ``src.extraction.ollama_client``).
-        If provided, the LLM fallback is used for ambiguous cases.
-    ollama_model : str
-        Model name for the Ollama call.  Ignored if *ollama_client* is None.
     keywords : dict, optional
         Override the default ``DOCUMENT_TYPE_KEYWORDS``.
     ambiguity_threshold : int
@@ -342,13 +288,9 @@ class DocumentClassifier:
 
     def __init__(
         self,
-        ollama_client: object | None = None,
-        ollama_model: str = "qwen3:4b-instruct",
         keywords: dict[str, dict[str, list[str]]] | None = None,
         ambiguity_threshold: int = _AMBIGUITY_THRESHOLD,
     ) -> None:
-        self._client = ollama_client
-        self._model = ollama_model
         self._keywords = keywords or DOCUMENT_TYPE_KEYWORDS
         self._ambiguity_threshold = ambiguity_threshold
 
@@ -361,9 +303,7 @@ class DocumentClassifier:
         -----
         1. Compute keyword scores for every document type.
         2. Rank types by score.
-        3. If ambiguous (gap ≤ threshold) and an Ollama client is
-           available, invoke the LLM fallback.
-        4. Return the prediction, scores, confidence, and matched keywords.
+        3. Return the prediction, scores, confidence, and matched keywords.
         """
         if not text or not text.strip():
             return ClassificationResult(
@@ -383,86 +323,27 @@ class DocumentClassifier:
         is_ambiguous = (top_score - second_score) <= self._ambiguity_threshold
         confidence = _compute_confidence(ranked)
 
-        used_llm = False
-        final_type = top_type
-
-        # All-zero scores → ambiguous, try LLM
+        # All-zero scores → ambiguous
         if top_score == 0:
             is_ambiguous = True
 
-        # LLM fallback for ambiguous cases
-        if is_ambiguous and self._client is not None:
-            llm_type = self._call_llm_fallback(text)
-            if llm_type is not None:
-                final_type = llm_type
-                used_llm = True
-                # Boost confidence slightly when LLM confirms
-                if llm_type == top_type:
-                    confidence = min(confidence + 0.3, 1.0)
-                else:
-                    confidence = 0.5  # LLM overrode keyword result
-                logger.info(
-                    "LLM fallback resolved ambiguous classification: %s → %s",
-                    top_type,
-                    llm_type,
-                )
-
         return ClassificationResult(
-            document_type=final_type,
+            document_type=top_type,
             scores=scores,
             confidence=confidence,
             is_ambiguous=is_ambiguous,
-            used_llm_fallback=used_llm,
+            used_llm_fallback=False,
             matched_keywords=matched,
         )
 
-    # ── LLM fallback ───────────────────────────────────────────────────
-
-    def _call_llm_fallback(self, text: str) -> Optional[str]:
-        """Send an abbreviated excerpt to the LLM for classification.
-
-        Returns one of ``VALID_DOCUMENT_TYPES`` or ``None`` on failure.
-        """
-        if self._client is None:
-            return None
-
-        excerpt = _truncate_to_tokens(text, max_tokens=500)
-        prompt = _LLM_CLASSIFICATION_PROMPT.format(text_excerpt=excerpt)
-
-        try:
-            # The OllamaClient.generate() method is expected to return a dict
-            # with at least a 'response' key containing the model's text.
-            response = self._client.generate(
-                prompt=prompt,
-                temperature=0.0,
-            )
-            if isinstance(response, dict):
-                response_text = response.get("response", "")
-            else:
-                response_text = str(response)
-
-            result = _parse_llm_response(response_text)
-            if result is not None:
-                return result
-
-            logger.warning(
-                "LLM fallback returned unparseable response: %r",
-                response_text[:200],
-            )
-        except Exception:
-            logger.exception("LLM fallback failed")
-
-        return None
-
 
 # ---------------------------------------------------------------------------
-# Convenience function (keyword‑only, no LLM)
+# Convenience function
 # ---------------------------------------------------------------------------
 
 def classify_document(text: str) -> ClassificationResult:
-    """Classify *text* using keyword scoring only (no LLM fallback).
+    """Classify *text* using keyword scoring.
 
-    This is a convenience shortcut equivalent to
-    ``DocumentClassifier().classify(text)``.
+    Convenience shortcut equivalent to ``DocumentClassifier().classify(text)``.
     """
     return DocumentClassifier().classify(text)

@@ -1,4 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.venv
+venv/
+env/
+
+# Data & sensitive files
+data/
+*.csv
+*.jsonl
+hf_cache/
 *cache*/
+*.key
+*.salt
+
+# Temporary
+tmp/
+tmp_*/
+checkpoints/
+demo_outputs/
+plans_and_analyses/
+old_*
+
+# Logs
+*log*.txt
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific
 eds-pseudo/
-*data/
-tmp_*
+profiles/
+tuto*
+data_ablation/
+../final_stripes/

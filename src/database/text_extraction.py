@@ -185,28 +185,6 @@ def _ocr_with_surya(pdf_path: Path) -> str:
     return "\n\n".join(page_texts)
 
 
-# def _ocr_with_tesseract(pdf_path: Path) -> str:
-#     """
-#     OCR using pytesseract + pdf2image.
-#     Install: pip install pytesseract pdf2image
-#     System dep: sudo apt install tesseract-ocr tesseract-ocr-fra poppler-utils
-#     """
-#     import pytesseract
-#     from pdf2image import convert_from_path
-
-#     # Convert PDF pages to PIL images (300 DPI for good OCR quality)
-#     images = convert_from_path(str(pdf_path), dpi=100)
-
-#     page_texts = []
-#     for img in images:
-#         # fra+eng for French medical docs; adjust as needed
-#         text = pytesseract.image_to_string(img, lang="fra+eng")
-#         if text.strip():
-#             page_texts.append(text)
-
-#     return "\n\n".join(page_texts)
-
-
 def _ocr_with_easyocr(pdf_path: Path) -> str:
     """
     OCR using EasyOCR.

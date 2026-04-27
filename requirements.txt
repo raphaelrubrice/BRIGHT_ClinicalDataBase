@@ -6,6 +6,7 @@ portalocker
 pypdf
 edspdf
 rapidfuzz
+spacy
 
 huggingface_hub
 transformers
@@ -17,11 +18,13 @@ surya-ocr
 easyocr
 
 # Clinical feature extraction pipeline
-ollama
-edsnlp>=0.17.0
+edsnlp[ml]>=0.17.0
 pydantic>=2.0
-gliner
+langdetect
 onnxruntime
+gliner
+gliner2==1.2.4  # pinned: monkey-patch in gliner_bright/ targets this version (upstream PR #96)
+gliner2-onnx
 
 # Testing
 pydantic

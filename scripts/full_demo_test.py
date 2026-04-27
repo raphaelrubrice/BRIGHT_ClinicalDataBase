@@ -1,7 +1,12 @@
+"""End-to-end smoke test: loads a clinical DB CSV and annotation files, runs
+ExtractionPipeline (with optional HF/EDS/negation flags), generates gold-standard
+JSONs, runs benchmark evaluation, and builds a patient timeline.
+Usage: python scripts/full_demo_test.py [--no-hf] [--no-eds] [--no-neg]
+"""
 import argparse
 import csv
 import json
-import sys
+import sys, os
 import logging
 from collections import defaultdict
 from pathlib import Path
@@ -14,15 +19,12 @@ FILEPATH = Path(__file__).resolve()
 REPO_ROOT = FILEPATH.parent.parent
 sys.path.append(str(REPO_ROOT))
 
+from src.extraction.schema import ALL_FIELDS_BY_NAME
 from src.extraction.pipeline import ExtractionPipeline
 from src.evaluation.benchmark import run_benchmark
 from src.aggregation.patient_timeline import build_patient_timeline
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-# Default paths
+# Base defaults
 PARENT_REPO = REPO_ROOT.parent
 DEFAULT_BASE_DIR = PARENT_REPO / "test_annotated"
 DEFAULT_DB_PATH = DEFAULT_BASE_DIR / "RE MAJ Infos cliniques Braincap" / "clinical_db_pseudo_only.csv"
@@ -30,23 +32,48 @@ DEFAULT_CLI_ANN_PATH = DEFAULT_BASE_DIR / "ANNOTATIONS_RE MAJ Infos cliniques Br
 DEFAULT_BIO_ANN_PATH = DEFAULT_BASE_DIR / "ANNOTATIONS_RE MAJ Infos cliniques Braincap" / "REQ_BIO.csv"
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "demo_output"
 
+# ---------------------------------------------------------------------------
+# Dual Logger: Write standard output to BOTH terminal and log file
+# ---------------------------------------------------------------------------
+
+class LoggerTee:
+    """Intercepte les flux (stdout/stderr) pour écrire dans un fichier ET dans la console."""
+    def __init__(self, filename: Path, stream):
+        self.stream = stream
+        self.log_file = open(filename, "a", encoding="utf-8")
+
+    def write(self, message):
+        self.stream.write(message)
+        self.log_file.write(message)
+        # Flush pour écrire en direct dans le fichier texte 
+        self.flush()
+
+    def flush(self):
+        self.stream.flush()
+        self.log_file.flush()
+
+# Pre-configuration avant l'éventuel override par LoggerTee
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Full demo pipeline: extraction, benchmark & timeline.")
-    parser.add_argument("--model", type=str, default="qwen3:8b",
-                        help="Ollama model to use (default: qwen3:8b)")
-    parser.add_argument("--timeout", type=int, default=None,
-                        help="Request timeout in seconds for the extraction pipeline")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH,
                         help="Path to the document database CSV")
     parser.add_argument("--cli-annotations", type=Path, default=DEFAULT_CLI_ANN_PATH,
                         help="Path to clinical annotations CSV (REQ_CLINIQUE)")
     parser.add_argument("--bio-annotations", type=Path, default=DEFAULT_BIO_ANN_PATH,
                         help="Path to biological annotations CSV (REQ_BIO)")
-    parser.add_argument("--pipeline-version", type=str, choices=["v2", "v3"], default="v3",
-                        help="Pipeline version to run (default: v3)")
     parser.add_argument("--use-gliner", action=argparse.BooleanOptionalAction, default=True,
                         help="Enable or disable GLiNER extraction for v3 (default: enabled)")
+    parser.add_argument("--batching-strategy", type=str, default="heterogeneous",
+                        choices=["semantic_context", "semantic_only", "heterogeneous"],
+                        help="GLiNER field batching strategy (default: heterogeneous)")
+    parser.add_argument("--parallel", type=int, default=os.cpu_count()-2,
+                        help="Number of workers for parallel processing (-1 for Max CPUs, 0 or 1 for sequential processing).")
+    parser.add_argument("--no-disambiguator", action="store_true",
+                        help="Disable textual context disambiguation before GLiNER")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_DIR,
                         help="Path to output directory (created if missing)")
     return parser.parse_args()
@@ -56,14 +83,14 @@ def load_transposed_annotations(path: Path) -> dict[str, list[dict[str, str]]]:
     """Load a transposed annotation CSV, preserving duplicate NIP columns.
 
     The annotation files are transposed: rows are features, columns are
-    documents identified by NIP (patient ID) in the header.  The same NIP
+    documents identified by NIP (patient ID) in the header. The same NIP
     can appear multiple times (one column per document for that patient).
 
     Returns
     -------
     dict[str, list[dict[str, str]]]
         Mapping from NIP → list of annotation dicts (one per column),
-        in the order they appear in the file.  Each annotation dict maps
+        in the order they appear in the file. Each annotation dict maps
         feature_name → value (strings, empty values omitted).
     """
     with open(path, 'r', encoding='utf-8', errors='replace') as f:
@@ -112,7 +139,7 @@ def merge_annotation_lists(
 
     For each NIP, the two files may have different numbers of columns.
     We merge positionally: the first CLINIQUE column is merged with the
-    first BIO column, etc.  If one list is longer, the extra entries
+    first BIO column, etc. If one list is longer, the extra entries
     are kept as-is.
 
     Returns
@@ -147,11 +174,29 @@ def main():
     cli_ann_path = args.cli_annotations
     bio_ann_path = args.bio_annotations
     output_dir = args.output
+    
+    # Création du dossier d'output si nécessaire *avant* de monter le LoggerTee
     output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Configuration du DualLogger pour enregistrer tous les prints + logs dans un log.txt
+    log_file_path = output_dir / "log.txt"
+    sys.stdout = LoggerTee(log_file_path, sys.stdout)
+    sys.stderr = LoggerTee(log_file_path, sys.stderr)
+
+    # Reconfigurer `logging` pour qu'il route via le nouveau `sys.stdout`
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        stream=sys.stdout, 
+        force=True
+    )
+    # Re-fetch the logger instance for the module
+    global logger
+    logger = logging.getLogger(__name__)
 
     logger.info("Starting Full Demo Pipeline Test")
-    logger.info("Model: %s | Timeout: %s | DB: %s | Output: %s",
-                args.model, args.timeout, db_path, output_dir)
+    logger.info("DB: %s | Output: %s", db_path, output_dir)
+    logger.info("Log file dynamically saving to %s", log_file_path)
 
     if not db_path.exists() or not cli_ann_path.exists() or not bio_ann_path.exists():
         logger.error("Missing necessary data files. Check paths:\n  DB: %s\n  CLI: %s\n  BIO: %s",
@@ -192,20 +237,17 @@ def main():
     # ------------------------------------------------------------------
     # 4. Initialise pipeline
     # ------------------------------------------------------------------
-    logger.info("Initializing ExtractionPipeline (version: %s)...", args.pipeline_version)
-    pipeline_kwargs = {"ollama_model": args.model}
-    if args.timeout is not None:
-        pipeline_kwargs["ollama_timeout"] = args.timeout
-    
-    if args.pipeline_version == "v2":
-        pipeline_kwargs["use_llm"] = True
-        pipeline_kwargs["use_gliner"] = False
-        pipeline_kwargs["use_eds"] = False # using rule_extraction.py
-    else:
-        pipeline_kwargs["use_llm"] = True
-        pipeline_kwargs["use_gliner"] = args.use_gliner
-        pipeline_kwargs["use_eds"] = True
-        
+    logger.info("Initializing ExtractionPipeline (GLiNER First, batching=%s, n_jobs=%s)...", args.batching_strategy, args.parallel)
+    pipeline_kwargs = {
+        "use_gliner": args.use_gliner,
+        "use_eds": True,
+        "use_negation": True,
+        "batching_strategy": args.batching_strategy,
+        "verbose": True,
+        "n_jobs": args.parallel, # Injects parallel configuration directly inside the pipeline 
+        "use_disambiguator": not args.no_disambiguator,
+    }
+
     pipeline = ExtractionPipeline(**pipeline_kwargs)
 
     # ------------------------------------------------------------------
@@ -221,14 +263,14 @@ def main():
         for ipp, doc_rows in docs_by_ipp.items():
             ann_list = merged_annotations.get(ipp, [])
             if not ann_list:
-                logger.debug("No annotations for IPP %s — skipping.", ipp)
+                logger.debug("No annotations for IPP %s, skipping.", ipp)
                 skipped += len(doc_rows)
                 continue
 
             n_match = min(len(doc_rows), len(ann_list))
             if len(doc_rows) != len(ann_list):
                 logger.warning(
-                    "IPP %s: %d DB docs but %d annotation columns — matching first %d.",
+                    "IPP %s: %d DB docs but %d annotation columns, matching first %d.",
                     ipp, len(doc_rows), len(ann_list), n_match,
                 )
 
@@ -244,8 +286,8 @@ def main():
                     skipped += 1
                     continue
 
-                # Wrap annotation values in {"value": ...} for gold_standard format
-                gs_annotations = {k: {"value": v} for k, v in annotations.items()}
+                # Wrap annotation values in {"value": ...} for gold_standard format (filtered by schema)
+                gs_annotations = {k: {"value": v} for k, v in annotations.items() if k in ALL_FIELDS_BY_NAME}
 
                 gs_data = {
                     "document_id": doc_id,
@@ -275,6 +317,8 @@ def main():
         )
 
         logger.info("Running evaluation benchmark...")
+        # Since pipeline.n_jobs is correctly set, internal usage of extract_batch
+        # will benefit directly from the parallelization configuration here.
         benchmark_metrics = run_benchmark(str(temp_gs_dir), pipeline, str(output_dir))
 
         logger.info("Benchmark completed. Metrics saved to %s/benchmark_metrics.csv", output_dir)

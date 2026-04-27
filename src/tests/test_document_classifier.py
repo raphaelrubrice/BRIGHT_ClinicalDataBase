@@ -1,4 +1,4 @@
-"""Tests for src/extraction/document_classifier.py — document type detection.
+"""Tests for src/extraction/document_classifier.py, document type detection.
 
 Validates:
 - Keyword-based scoring correctly classifies each of the 5 document types.
@@ -21,16 +21,14 @@ from src.extraction.document_classifier import (
     ClassificationResult,
     DocumentClassifier,
     _compute_confidence,
-    _parse_llm_response,
     _rank_scores,
     _score_text,
-    _truncate_to_tokens,
     classify_document,
 )
 
 
 # ======================================================================
-# Sample documents — one per type
+# Sample documents, one per type
 # ======================================================================
 
 SAMPLE_ANAPATH = """\
@@ -129,7 +127,7 @@ Décision thérapeutique collégiale validée à l'unanimité.
 """
 
 SAMPLE_RADIOLOGY = """\
-COMPTE-RENDU RADIOLOGIQUE — IRM CÉRÉBRALE
+COMPTE-RENDU RADIOLOGIQUE, IRM CÉRÉBRALE
 
 IRM encéphalique avec injection de gadolinium.
 Séquences FLAIR, T1 gadolinium, diffusion, perfusion.
@@ -283,7 +281,7 @@ class TestRankingHelpers:
 
 
 # ======================================================================
-# DocumentClassifier — keyword-only tests
+# DocumentClassifier, keyword-only tests
 # ======================================================================
 
 
@@ -374,6 +372,7 @@ class TestAmbiguityDetection:
 # ======================================================================
 
 
+@pytest.mark.skip(reason="LLM fallback (ollama_client) was removed from DocumentClassifier")
 class TestLLMFallback:
     """Test LLM fallback with a mock Ollama client."""
 
@@ -459,6 +458,7 @@ class TestLLMFallback:
 # ======================================================================
 
 
+@pytest.mark.skip(reason="_parse_llm_response was removed when LLM fallback was removed from DocumentClassifier")
 class TestLLMResponseParsing:
     """Test _parse_llm_response helper."""
 
@@ -487,6 +487,7 @@ class TestLLMResponseParsing:
 # ======================================================================
 
 
+@pytest.mark.skip(reason="_truncate_to_tokens was removed when LLM fallback was removed from DocumentClassifier")
 class TestTextTruncation:
     """Test _truncate_to_tokens helper."""
 

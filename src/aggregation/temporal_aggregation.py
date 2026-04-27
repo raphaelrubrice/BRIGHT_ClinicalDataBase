@@ -1,9 +1,9 @@
 """Temporal forward-fill and conflict resolution across a patient's documents.
 
 Implements three feature temporal categories:
-- **Static** — set once, update only on explicit correction.
-- **Specimen-bound** — carried from specimen date until next surgery.
-- **Time-varying** — carry latest explicit value; ``NA`` does NOT overwrite.
+- **Static**, set once, update only on explicit correction.
+- **Specimen-bound**, carried from specimen date until next surgery.
+- **Time-varying**, carry latest explicit value; ``NA`` does NOT overwrite.
 
 And document-type priority for conflict resolution:
 - BIO fields: anapath > molecular_report > rcp > consultation
@@ -37,12 +37,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 STATIC_FEATURES: set[str] = {
-    "nip", "sexe", "date_de_naissance", "tumeur_lateralite",
-    "tumeur_position", "activite_professionnelle",
+    "date_rcp", "sexe", "annee_de_naissance", "tumeur_lateralite",
+    "tumeur_position", "dominance_cerebrale", "activite_professionnelle",
     "antecedent_tumoral",
     # Outcome (set when known, not forward-filled in the traditional sense,
     # but once recorded it persists)
-    "date_deces", "infos_deces",
+    "date_deces", "infos_deces", "survie_globale",
     # First symptoms (historical, set once)
     "date_1er_symptome", "epilepsie_1er_symptome",
     "ceph_hic_1er_symptome", "deficit_1er_symptome",
@@ -51,12 +51,12 @@ STATIC_FEATURES: set[str] = {
     "exam_radio_date_decouverte", "contraste_1er_symptome",
     "oedeme_1er_symptome", "calcif_1er_symptome",
     # Care team
-    "neuroncologue", "neurochirurgien", "radiotherapeute",
+    "neuroncologue", "neurochirurgien", "radiotherapeute", "anatomo_pathologiste",
     "localisation_radiotherapie", "localisation_chir",
 }
 
 SPECIMEN_BOUND_FEATURES: set[str] = {
-    # All BIO features — tied to a surgical specimen
+    # All BIO features, tied to a surgical specimen
     "date_chir", "num_labo",
     "diag_histologique", "diag_integre", "classification_oms", "grade",
     # IHC
@@ -64,13 +64,13 @@ SPECIMEN_BOUND_FEATURES: set[str] = {
     "ihc_hist_h3k27m", "ihc_hist_h3k27me3", "ihc_egfr_hirsch",
     "ihc_gfap", "ihc_olig2", "ihc_ki67", "ihc_mmr",
     # Histology
-    "histo_necrose", "histo_pec", "histo_mitoses",
+    "histo_necrose", "histo_pec", "histo_mitoses", "aspect_cellulaire",
     # Molecular
     "mol_idh1", "mol_idh2", "mol_tert", "mol_CDKN2A", "mol_h3f3a",
     "mol_hist1h3b", "mol_braf", "mol_mgmt", "mol_fgfr1", "mol_egfr_mut",
     "mol_prkca", "mol_p53", "mol_pten", "mol_cic", "mol_fubp1", "mol_atrx",
     # Chromosomal
-    "ch1p", "ch19q", "ch10p", "ch10q", "ch7p", "ch7q", "ch9p", "ch9q",
+    "ch1p", "ch19q", "ch10p", "ch10q", "ch7p", "ch7q", "ch9p", "ch9q", "ch1p19q_codel",
     # Amplifications
     "ampli_mdm2", "ampli_cdk4", "ampli_egfr", "ampli_met", "ampli_mdm4",
     # Fusions
@@ -80,12 +80,13 @@ SPECIMEN_BOUND_FEATURES: set[str] = {
 TIME_VARYING_FEATURES: set[str] = {
     "ik_clinique", "epilepsie", "ceph_hic", "deficit", "cognitif",
     "autre_trouble",
-    "chimios", "chm_date_debut", "chm_date_fin", "chm_cycles",
-    "chir_date", "type_chirurgie",
-    "rx_date_debut", "rx_date_fin", "rx_dose",
+    "chimios", "chimio_protocole", "chm_date_debut", "chm_date_fin", "chm_cycles",
+    "date_chir", "type_chirurgie", "qualite_exerese",
+    "rx_date_debut", "rx_date_fin", "rx_dose", "rx_fractionnement",
     "corticoides", "optune",
     "anti_epileptiques", "essai_therapeutique",
-    "progress_clinique", "progress_radiologique", "date_progression",
+    "progress_clinique", "progress_radiologique", "reponse_radiologique", "date_progression",
+    "prise_de_contraste",
     "dn_date", "evol_clinique",
 }
 
@@ -109,7 +110,7 @@ def _priority_rank(doc_type: str, field_name: str) -> int:
     elif field_name in ALL_CLINIQUE_FIELD_NAMES:
         priority_list = CLINIQUE_PRIORITY
     else:
-        # Unknown field — use CLINIQUE priority by default
+        # Unknown field, use CLINIQUE priority by default
         priority_list = CLINIQUE_PRIORITY
 
     try:
@@ -124,11 +125,8 @@ def _priority_rank(doc_type: str, field_name: str) -> int:
 
 def _is_surgery_event(extraction: ExtractionResult) -> bool:
     """Check if this extraction reports a new surgery event."""
-    for field in ("chir_date", "date_chir"):
-        ev = extraction.features.get(field)
-        if ev is not None and ev.value is not None:
-            return True
-    return False
+    ev = extraction.features.get("date_chir")
+    return ev is not None and ev.value is not None
 
 
 def _extraction_sort_key(extraction: ExtractionResult) -> str:
@@ -226,7 +224,7 @@ def aggregate_patient_timeline(
         if is_new_surgery:
             specimen_state.clear()
             logger.debug(
-                "New surgery detected in %s — resetting specimen-bound features",
+                "New surgery detected in %s, resetting specimen-bound features",
                 extraction.document_id,
             )
 
@@ -249,7 +247,7 @@ def aggregate_patient_timeline(
                     time_varying_state,
                 )
             else:
-                # Unknown category — treat as time-varying
+                # Unknown category, treat as time-varying
                 _apply_time_varying(
                     fname, new_value, extraction.document_type,
                     time_varying_state,
@@ -283,6 +281,30 @@ def aggregate_patient_timeline(
 # State update helpers
 # ---------------------------------------------------------------------------
 
+def _update_state_with_priority(
+    fname: str,
+    new_value: Any,
+    doc_type: str,
+    state: dict[str, tuple[Any, str]],
+) -> None:
+    """Update *state[fname]* only when *new_value* is non-None and the source
+    has equal or higher priority than the current value.
+
+    This is the shared core used by both static and specimen-bound rules.
+    Time-varying fields also use it (latest document at the same date wins
+    by priority; across different dates the last chronological value wins).
+    """
+    if new_value is None:
+        return
+
+    if fname not in state:
+        state[fname] = (new_value, doc_type)
+    else:
+        _, existing_doc_type = state[fname]
+        if _priority_rank(doc_type, fname) < _priority_rank(existing_doc_type, fname):
+            state[fname] = (new_value, doc_type)
+
+
 def _apply_static(
     fname: str,
     new_value: Any,
@@ -295,16 +317,7 @@ def _apply_static(
     Subsequent non-None values update only if they come from a
     higher-priority document type.
     """
-    if new_value is None:
-        return
-
-    if fname not in state:
-        state[fname] = (new_value, doc_type)
-    else:
-        _, existing_doc_type = state[fname]
-        # Update only if the new source has higher priority
-        if _priority_rank(doc_type, fname) < _priority_rank(existing_doc_type, fname):
-            state[fname] = (new_value, doc_type)
+    _update_state_with_priority(fname, new_value, doc_type, state)
 
 
 def _apply_specimen_bound(
@@ -323,15 +336,7 @@ def _apply_specimen_bound(
     After reset, the feature is set from the first non-None value seen.
     Conflicts are resolved via document-type priority.
     """
-    if new_value is None:
-        return
-
-    if fname not in state:
-        state[fname] = (new_value, doc_type)
-    else:
-        _, existing_doc_type = state[fname]
-        if _priority_rank(doc_type, fname) < _priority_rank(existing_doc_type, fname):
-            state[fname] = (new_value, doc_type)
+    _update_state_with_priority(fname, new_value, doc_type, state)
 
 
 def _apply_time_varying(
@@ -342,9 +347,11 @@ def _apply_time_varying(
 ) -> None:
     """Apply time-varying update rule.
 
-    Carry the latest explicit value.  ``None`` does NOT overwrite a
-    previous explicit value.  When two documents at the same timepoint
-    conflict, resolve via document-type priority.
+    Carry the latest explicit value forward.  ``None`` does NOT overwrite
+    a previous explicit value.  When documents share the same timepoint,
+    the higher-priority document type wins.  Across different timepoints,
+    the most recent chronological value wins (priority still applies within
+    the same timepoint since we call ``_update_state_with_priority``).
     """
     if new_value is None:
         return  # NA does NOT overwrite
@@ -352,10 +359,7 @@ def _apply_time_varying(
     if fname not in state:
         state[fname] = (new_value, doc_type)
     else:
-        # Always take the latest explicit value (chronological ordering
-        # means we process in order).  But if we're still "at the same
-        # timepoint" we use priority.  Since we iterate chronologically,
-        # the latest document wins unless priority says otherwise.
-        # For simplicity: always update when we have a new explicit value,
-        # but prefer higher-priority doc type if the value is the same timepoint.
-        state[fname] = (new_value, doc_type)
+        _, existing_doc_type = state[fname]
+        # Accept the new value if higher or equal priority
+        if _priority_rank(doc_type, fname) <= _priority_rank(existing_doc_type, fname):
+            state[fname] = (new_value, doc_type)

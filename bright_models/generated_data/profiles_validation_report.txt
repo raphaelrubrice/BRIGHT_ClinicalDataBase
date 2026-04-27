@@ -1,0 +1,669 @@
+Loading 21 file(s)...
+Loaded 630 profiles.
+  ✅ Self-tests passed.
+
+======================================================================
+SUMMARY
+======================================================================
+
+  Profiles: 630 | Unique IDs: 630
+  Sex: M=322, F=308 | Deceased: 191 (30.3%)
+  Documents: consultation=597, rcp=578, anapath=452
+
+======================================================================
+1. DIAGNOSIS PROPORTIONS
+======================================================================
+
+  Total: 630
+
+  Category                                     N  Actual  Target       Δ
+  ---------------------------------------- ----- ------- ------- -------
+  Glioblastome IDH-sauvage                   314   49.8%     45%   +4.8%
+  Astrocytome IDH-muté                       118   18.7%     20%   -1.3%
+  Oligodendrogliome                          126   20.0%     20%   +0.0%
+  Autres (pilocytique, DIPG, NEC…)            72   11.4%     15%   -3.6%
+
+======================================================================
+2. WHO 2021 CLASSIFICATION CONSTRAINTS
+======================================================================
+
+  ✅ All 630 profiles pass OMS 2021 constraints.
+
+======================================================================
+3. VALUE DISTRIBUTIONS (fields with <15 unique values)
+======================================================================
+
+  Total: 630
+
+  ── ampli_cdk4 (14/630) ──
+      True                                                       8 ( 57.1%)
+      False                                                      5 ( 35.7%)
+      amplifié                                                   1 (  7.1%)
+
+  ── ampli_egfr (312/630) ──
+      True                                                     167 ( 53.5%)
+      False                                                     73 ( 23.4%)
+      amplifié                                                  52 ( 16.7%)
+      non amplifié                                              20 (  6.4%)
+
+  ── ampli_mdm2 (18/630) ──
+      True                                                      10 ( 55.6%)
+      amplifié                                                   4 ( 22.2%)
+      False                                                      4 ( 22.2%)
+
+  ── ampli_mdm4 (5/630) ──
+      True                                                       3 ( 60.0%)
+      False                                                      2 ( 40.0%)
+
+  ── ampli_met (11/630) ──
+      True                                                       7 ( 63.6%)
+      False                                                      4 ( 36.4%)
+
+  ── anatomo_pathologiste (630/630) ──
+      Dr Bielle                                                170 ( 27.0%)
+      Dr. Bielle                                               111 ( 17.6%)
+      Dr. Varlet                                               111 ( 17.6%)
+      Dr Mokhtari                                               73 ( 11.6%)
+      Dr. Mokhtari                                              50 (  7.9%)
+      Dr Delattre                                               34 (  5.4%)
+      Dr. Laquerrière                                           34 (  5.4%)
+      Dr. Figarella-Branger                                     24 (  3.8%)
+      Dr Varlet                                                 23 (  3.7%)
+
+  ── anti_epileptiques (487/630) ──
+      lévétiracétam 500 mg x2/j                                297 ( 61.0%)
+      lévétiracétam 1000 mg x2/j                               148 ( 30.4%)
+      lévétiracétam 750 mg x2/j                                 34 (  7.0%)
+      oxcarbazépine 600 mg x2/j                                  4 (  0.8%)
+      valproate 500 mg x2/j                                      4 (  0.8%)
+
+  ── autre_trouble (10/630) ──
+      aphasie                                                    9 ( 90.0%)
+      ataxie résiduelle légère                                   1 ( 10.0%)
+
+  ── calcif_1er_symptome (132/630) ──
+      True                                                      78 ( 59.1%)
+      False                                                     54 ( 40.9%)
+
+  ── ceph_hic (2/630) ──
+      True                                                       2 (100.0%)
+
+  ── ceph_hic_1er_symptome (196/630) ──
+      True                                                     179 ( 91.3%)
+      False                                                     17 (  8.7%)
+
+  ── ch10p (37/630) ──
+      perte                                                     18 ( 48.6%)
+      perte partielle                                           10 ( 27.0%)
+      délétion                                                   9 ( 24.3%)
+
+  ── ch10q (309/630) ──
+      perte                                                    235 ( 76.1%)
+      délétion                                                  73 ( 23.6%)
+      perte partielle                                            1 (  0.3%)
+
+  ── ch19q (142/630) ──
+      perte                                                     93 ( 65.5%)
+      délétion                                                  33 ( 23.2%)
+      non délété                                                 9 (  6.3%)
+      gain                                                       7 (  4.9%)
+
+  ── ch1p (144/630) ──
+      perte                                                     93 ( 64.6%)
+      délétion                                                  33 ( 22.9%)
+      non délété                                                 9 (  6.2%)
+      gain                                                       8 (  5.6%)
+      perte partielle                                            1 (  0.7%)
+
+  ── ch1p19q_codel (266/630) ──
+      False                                                     73 ( 27.4%)
+      True                                                      63 ( 23.7%)
+      absence de codélétion                                     34 ( 12.8%)
+      codélétion confirmée                                      33 ( 12.4%)
+      non                                                       33 ( 12.4%)
+      oui                                                       30 ( 11.3%)
+
+  ── ch7p (273/630) ──
+      gain                                                     272 ( 99.6%)
+      gain partiel                                               1 (  0.4%)
+
+  ── ch7q (120/630) ──
+      gain                                                     120 (100.0%)
+
+  ── ch9p (60/630) ──
+      perte                                                     42 ( 70.0%)
+      perte partielle                                           13 ( 21.7%)
+      délétion                                                   5 (  8.3%)
+
+  ── ch9q (2/630) ──
+      perte                                                      2 (100.0%)
+
+  ── chimios (424/630) ──
+      ['témozolomide']                                         176 ( 41.5%)
+      témozolomide                                             147 ( 34.7%)
+      procarbazine, lomustine, vincristine                      54 ( 12.7%)
+      ['procarbazine', 'lomustine', 'vincristine']              34 (  8.0%)
+      carboplatine, vincristine                                  5 (  1.2%)
+      ['cisplatine', 'cyclophosphamide', 'vincristine']          2 (  0.5%)
+      bévacizumab (2ème ligne)                                   2 (  0.5%)
+      carboplatine, vincristine, cyclophosphamide                2 (  0.5%)
+      témozolomide (1ère ligne), bévacizumab (2ème ligne)        1 (  0.2%)
+      témozolomide (1ère ligne), lomustine + bévacizumab (2ème ligne)    1 (  0.2%)
+
+  ── chimios_2eme_ligne (38/630) ──
+      ['bévacizumab']                                           17 ( 44.7%)
+      ['bévacizumab', 'irinotécan']                              9 ( 23.7%)
+      ['bévacizumab', 'lomustine']                               5 ( 13.2%)
+      ['lomustine']                                              3 (  7.9%)
+      ['bévacizumab', 'témozolomide métronomique']               1 (  2.6%)
+      ['vémurafénib + cobimétinib (BRAF V600E)']                 1 (  2.6%)
+      ['lomustine', 'bévacizumab']                               1 (  2.6%)
+      ['dabrafénib + tramétinib (BRAF V600E)']                   1 (  2.6%)
+
+  ── chm_cycles (396/630) ──
+      6                                                        359 ( 90.7%)
+      3                                                         27 (  6.8%)
+      10                                                         5 (  1.3%)
+      8                                                          4 (  1.0%)
+      4                                                          1 (  0.3%)
+
+  ── classification_oms (630/630) ──
+      2021                                                     630 (100.0%)
+
+  ── cognitif (70/630) ──
+      True                                                      69 ( 98.6%)
+      False                                                      1 (  1.4%)
+
+  ── cognitif_1er_symptome (118/630) ──
+      True                                                     114 ( 96.6%)
+      False                                                      4 (  3.4%)
+
+  ── contraste_1er_symptome (515/630) ──
+      True                                                     383 ( 74.4%)
+      False                                                    132 ( 25.6%)
+
+  ── corticoides (239/630) ──
+      dexaméthasone 4 mg/j                                      73 ( 30.5%)
+      dexaméthasone 8 mg/j                                      64 ( 26.8%)
+      dexaméthasone 6 mg/j                                      48 ( 20.1%)
+      dexaméthasone 8 mg/j en décroissance                      14 (  5.9%)
+      dexaméthasone 4 mg/j en décroissance                      14 (  5.9%)
+      dexaméthasone 12 mg/j                                      5 (  2.1%)
+      dexaméthasone 8 mg/j puis sevrage                          5 (  2.1%)
+      dexaméthasone 8 mg/j puis sevrage progressif               4 (  1.7%)
+      dexaméthasone 2 mg/j                                       3 (  1.3%)
+      dexaméthasone 6 mg/j en décroissance                       2 (  0.8%)
+      dexaméthasone 4 mg/j puis sevrage                          2 (  0.8%)
+      dexaméthasone 10 mg/j                                      2 (  0.8%)
+      dexaméthasone 4 mg x2/j                                    1 (  0.4%)
+      dexaméthasone 8 mg/j puis décroissance                     1 (  0.4%)
+      dexaméthasone 4 mg/j puis sevrage progressif               1 (  0.4%)
+
+  ── deficit (92/630) ──
+      True                                                      91 ( 98.9%)
+      False                                                      1 (  1.1%)
+
+  ── deficit_1er_symptome (142/630) ──
+      True                                                     131 ( 92.3%)
+      False                                                     11 (  7.7%)
+
+  ── dominance_cerebrale (630/630) ──
+      droitier                                                 573 ( 91.0%)
+      gaucher                                                   41 (  6.5%)
+      ambidextre                                                16 (  2.5%)
+
+  ── epilepsie (378/630) ──
+      False                                                    272 ( 72.0%)
+      True                                                     106 ( 28.0%)
+
+  ── epilepsie_1er_symptome (518/630) ──
+      True                                                     387 ( 74.7%)
+      False                                                    131 ( 25.3%)
+
+  ── evol_clinique (629/630) ──
+      stable                                                   356 ( 56.6%)
+      progression                                              239 ( 38.0%)
+      en cours de traitement                                    34 (  5.4%)
+
+  ── fusion_autre (17/630) ──
+      FGFR1-TACC1                                                2 ( 11.8%)
+      ETV6-NTRK3                                                 2 ( 11.8%)
+      ZFTA-RELA confirmée par RNAseq                             1 (  5.9%)
+      isochromosome 17q confirmé par FISH                        1 (  5.9%)
+      groupe PFA confirmé par méthylation array (EPIC 850K)      1 (  5.9%)
+      MYB-QKI confirmée par FISH et RNAseq                       1 (  5.9%)
+      oui (ZFTA-RELA confirmée par RNAseq)                       1 (  5.9%)
+      oui (mutation CTNNB1 exon 3 confirmée, sous-groupe WNT)    1 (  5.9%)
+      oui (groupe PFB confirmé par méthylomique EPIC, pas de fusion ZFTA ni YAP1)    1 (  5.9%)
+      QKI-NTRK2                                                  1 (  5.9%)
+      TPR-NTRK2                                                  1 (  5.9%)
+      ZFTA::RELA                                                 1 (  5.9%)
+      PTCH1 muté (c.3276+1G>T), voie SHH activée                1 (  5.9%)
+      CTNNB1 muté (ex3 p.T41A), voie WNT activée                1 (  5.9%)
+      méthylation profil PFA (CpG island methylator phenotype élevé)    1 (  5.9%)
+
+  ── fusion_fgfr (60/630) ──
+      False                                                     37 ( 61.7%)
+      non                                                       13 ( 21.7%)
+      absent                                                     5 (  8.3%)
+      True                                                       3 (  5.0%)
+      FGFR1-TACC1 détectée                                       1 (  1.7%)
+      FGFR2-TACC2 confirmée par RNAseq                           1 (  1.7%)
+
+  ── fusion_ntrk (46/630) ──
+      False                                                     36 ( 78.3%)
+      non                                                        4 (  8.7%)
+      True                                                       4 (  8.7%)
+      ETV6-NTRK2 confirmée par RNAseq                            1 (  2.2%)
+      absent                                                     1 (  2.2%)
+
+  ── grade (630/630) ──
+      4                                                        390 ( 61.9%)
+      2                                                        114 ( 18.1%)
+      3                                                        108 ( 17.1%)
+      1                                                         18 (  2.9%)
+
+  ── histo_necrose (569/630) ──
+      True                                                     323 ( 56.8%)
+      False                                                    246 ( 43.2%)
+
+  ── histo_pec (569/630) ──
+      True                                                     367 ( 64.5%)
+      False                                                    202 ( 35.5%)
+
+  ── ihc_atrx (556/630) ──
+      maintenu                                                 335 ( 60.3%)
+      conservé                                                 100 ( 18.0%)
+      perdu                                                     92 ( 16.5%)
+      negatif                                                   29 (  5.2%)
+
+  ── ihc_braf (38/630) ──
+      positif                                                   20 ( 52.6%)
+      négatif                                                    9 ( 23.7%)
+      positif (V600E)                                            4 ( 10.5%)
+      negatif                                                    3 (  7.9%)
+      négatif (pas de V600E)                                     1 (  2.6%)
+      négatif (pas de V600E, confirme adamantinomateux)          1 (  2.6%)
+
+  ── ihc_egfr_hirsch (17/630) ──
+      3                                                         13 ( 76.5%)
+      2                                                          4 ( 23.5%)
+
+  ── ihc_fgfr3 (3/630) ──
+      positif                                                    3 (100.0%)
+
+  ── ihc_gfap (504/630) ──
+      positif                                                  395 ( 78.4%)
+      négatif                                                   80 ( 15.9%)
+      negatif                                                   19 (  3.8%)
+      positif focal                                             10 (  2.0%)
+
+  ── ihc_hist_h3k27m (31/630) ──
+      positif                                                   17 ( 54.8%)
+      négatif                                                    9 ( 29.0%)
+      negatif                                                    5 ( 16.1%)
+
+  ── ihc_hist_h3k27me3 (25/630) ──
+      négatif                                                   12 ( 48.0%)
+      conservé                                                   4 ( 16.0%)
+      negatif                                                    3 ( 12.0%)
+      maintenu                                                   3 ( 12.0%)
+      perte d'expression                                         2 (  8.0%)
+      perte d'expression (caractéristique PFA)                   1 (  4.0%)
+
+  ── ihc_idh1 (629/630) ──
+      négatif                                                  303 ( 48.2%)
+      positif                                                  235 ( 37.4%)
+      negatif                                                   91 ( 14.5%)
+
+  ── ihc_mmr (7/630) ──
+      protéines MMR conservées                                   4 ( 57.1%)
+      positif (MMR conservées)                                   3 ( 42.9%)
+
+  ── ik_clinique (630/630) ──
+      90                                                       183 ( 29.0%)
+      80                                                       174 ( 27.6%)
+      100                                                      114 ( 18.1%)
+      70                                                        90 ( 14.3%)
+      60                                                        35 (  5.6%)
+      50                                                        17 (  2.7%)
+      40                                                        12 (  1.9%)
+      30                                                         5 (  0.8%)
+
+  ── mol_CDKN2A (278/630) ──
+      False                                                    110 ( 39.6%)
+      wt                                                        78 ( 28.1%)
+      non délété                                                41 ( 14.7%)
+      muté (délétion homozygote)                                17 (  6.1%)
+      True                                                      17 (  6.1%)
+      délété (homozygote)                                       15 (  5.4%)
+
+  ── mol_atrx (121/630) ──
+      muté                                                     120 ( 99.2%)
+      muté (perte somatique sans IDH)                            1 (  0.8%)
+
+  ── mol_braf (46/630) ──
+      wt                                                        13 ( 28.3%)
+      muté (V600E)                                              13 ( 28.3%)
+      muté (fusion KIAA1549-BRAF)                               12 ( 26.1%)
+      non muté                                                   3 (  6.5%)
+      fusion KIAA1549-BRAF                                       2 (  4.3%)
+      non muté (V600E négatif)                                   1 (  2.2%)
+      muté V600E                                                 1 (  2.2%)
+      fusion KIAA1549-BRAF (confirmée sur biopsie récidive)      1 (  2.2%)
+
+  ── mol_cic (119/630) ──
+      muté                                                      97 ( 81.5%)
+      wt                                                        16 ( 13.4%)
+      non muté                                                   6 (  5.0%)
+
+  ── mol_egfr_mut (2/630) ──
+      muté (amplification)                                       1 ( 50.0%)
+      wt                                                         1 ( 50.0%)
+
+  ── mol_fgfr1 (8/630) ──
+      wt                                                         6 ( 75.0%)
+      muté (p.N546K)                                             1 ( 12.5%)
+      muté (p.K656E)                                             1 ( 12.5%)
+
+  ── mol_fubp1 (92/630) ──
+      wt                                                        49 ( 53.3%)
+      muté                                                      32 ( 34.8%)
+      non muté                                                  11 ( 12.0%)
+
+  ── mol_h3f3a (30/630) ──
+      muté (K27M)                                               15 ( 50.0%)
+      non muté                                                   7 ( 23.3%)
+      wt                                                         4 ( 13.3%)
+      muté K27M                                                  2 (  6.7%)
+      muté G34R                                                  1 (  3.3%)
+      muté G34V                                                  1 (  3.3%)
+
+  ── mol_hist1h3b (2/630) ──
+      non muté                                                   1 ( 50.0%)
+      wt                                                         1 ( 50.0%)
+
+  ── mol_idh1 (629/630) ──
+      wt                                                       306 ( 48.6%)
+      muté (R132H)                                             174 ( 27.7%)
+      non muté                                                  85 ( 13.5%)
+      muté R132H                                                61 (  9.7%)
+      non muté (séquençage étendu)                               2 (  0.3%)
+      non muté (séquençage étendu en cours)                      1 (  0.2%)
+
+  ── mol_idh2 (437/630) ──
+      wt                                                       319 ( 73.0%)
+      non muté                                                 109 ( 24.9%)
+      muté (R172K)                                               4 (  0.9%)
+      muté (R172W)                                               2 (  0.5%)
+      muté (R172G)                                               1 (  0.2%)
+      muté (R172M)                                               1 (  0.2%)
+      muté (R172S)                                               1 (  0.2%)
+
+  ── mol_mgmt (530/630) ──
+      méthylé                                                  273 ( 51.5%)
+      methyle                                                  116 ( 21.9%)
+      non méthylé                                              109 ( 20.6%)
+      non methyle                                               32 (  6.0%)
+
+  ── mol_p53 (8/630) ──
+      muté                                                       8 (100.0%)
+
+  ── mol_prkca (3/630) ──
+      muté (D463H)                                               3 (100.0%)
+
+  ── mol_pten (27/630) ──
+      muté                                                      24 ( 88.9%)
+      wt                                                         3 ( 11.1%)
+
+  ── mol_tert (437/630) ──
+      muté                                                     281 ( 64.3%)
+      muté (C228T)                                              87 ( 19.9%)
+      wt                                                        34 (  7.8%)
+      muté (C250T)                                              22 (  5.0%)
+      non muté                                                  13 (  3.0%)
+
+  ── neurochirurgien (629/630) ──
+      Pr. Pallud                                               105 ( 16.7%)
+      Dr Capelle                                               101 ( 16.1%)
+      Pr. Mandonnet                                             98 ( 15.6%)
+      Dr Dhermain                                               75 ( 11.9%)
+      Dr Fontaine                                               55 (  8.7%)
+      Dr Carpentier                                             44 (  7.0%)
+      Pr. Sanai                                                 42 (  6.7%)
+      Pr. Bauchet                                               30 (  4.8%)
+      Pr. Zerah                                                 30 (  4.8%)
+      Pr. Froelich                                              24 (  3.8%)
+      Dr Doz                                                    22 (  3.5%)
+      Dr Gallet                                                  3 (  0.5%)
+
+  ── neuroncologue (630/630) ──
+      Dr. Ducray                                                89 ( 14.1%)
+      Dr Sanson                                                 85 ( 13.5%)
+      Dr Martin                                                 68 ( 10.8%)
+      Dr Hoang-Xuan                                             66 ( 10.5%)
+      Dr Idbaih                                                 59 (  9.4%)
+      Dr. Martin                                                55 (  8.7%)
+      Dr. Idbaih                                                43 (  6.8%)
+      Dr. Carpentier                                            43 (  6.8%)
+      Dr. Dufour                                                23 (  3.7%)
+      Dr. Hoang-Xuan                                            23 (  3.7%)
+      Dr Grill                                                  22 (  3.5%)
+      Dr. Taillandier                                           20 (  3.2%)
+      Dr. Lorgis                                                19 (  3.0%)
+      Dr. Chinot                                                15 (  2.4%)
+
+  ── oedeme_1er_symptome (628/630) ──
+      True                                                     345 ( 54.9%)
+      False                                                    283 ( 45.1%)
+
+  ── optune (152/630) ──
+      True                                                     104 ( 68.4%)
+      False                                                     48 ( 31.6%)
+
+  ── prise_de_contraste (630/630) ──
+      True                                                     384 ( 61.0%)
+      False                                                    246 ( 39.0%)
+
+  ── progress_clinique (19/630) ──
+      True                                                      19 (100.0%)
+
+  ── progress_radiologique (92/630) ──
+      True                                                      90 ( 97.8%)
+      False                                                      2 (  2.2%)
+
+  ── qualite_exerese (630/630) ──
+      totale                                                   378 ( 60.0%)
+      biopsie                                                  108 ( 17.1%)
+      subtotale                                                106 ( 16.8%)
+      partielle                                                 38 (  6.0%)
+
+  ── radiotherapeute (474/630) ──
+      Dr. Feuvret                                              117 ( 24.7%)
+      Dr Feuvret                                               101 ( 21.3%)
+      Dr Simon                                                  70 ( 14.8%)
+      Dr. Ricard                                                50 ( 10.5%)
+      Dr Leroy                                                  49 ( 10.3%)
+      Dr. Noël                                                  40 (  8.4%)
+      Dr. Lerouge                                               30 (  6.3%)
+      Dr Alapetite                                              17 (  3.6%)
+
+  ── rx_dose (475/630) ──
+      60                                                       147 ( 30.9%)
+      60 Gy                                                    128 ( 26.9%)
+      59.4                                                      55 ( 11.6%)
+      40 Gy                                                     38 (  8.0%)
+      54 Gy                                                     36 (  7.6%)
+      59.4 Gy                                                   32 (  6.7%)
+      40                                                        21 (  4.4%)
+      54                                                        13 (  2.7%)
+      50.4                                                       2 (  0.4%)
+      23.4                                                       1 (  0.2%)
+      54 Gy (craniospinal 36 Gy + boost fosse postérieure 54 Gy)    1 (  0.2%)
+      54 Gy (craniospinal 23.4 Gy + boost fosse postérieure)     1 (  0.2%)
+
+  ── rx_fractionnement (475/630) ──
+      30                                                       325 ( 68.4%)
+      33                                                        87 ( 18.3%)
+      15                                                        59 ( 12.4%)
+      28                                                         3 (  0.6%)
+      13                                                         1 (  0.2%)
+
+  ── sexe (630/630) ──
+      M                                                        322 ( 51.1%)
+      F                                                        308 ( 48.9%)
+
+  ── tumeur_lateralite (630/630) ──
+      droite                                                   310 ( 49.2%)
+      gauche                                                   291 ( 46.2%)
+      bilatérale                                                29 (  4.6%)
+
+  ── type_chirurgie (630/630) ──
+      exérèse totale                                           378 ( 60.0%)
+      exérèse partielle                                         75 ( 11.9%)
+      exérèse subtotale                                         69 ( 11.0%)
+      biopsie stéréotaxique                                     57 (  9.0%)
+      biopsie                                                   51 (  8.1%)
+
+
+======================================================================
+4. DATE COHERENCE
+======================================================================
+
+  ❌ 0 error(s):
+
+  ⚠️  7 warning(s):
+  P018: chemo start (2013-12-10) BEFORE surgery (2014-01-14) [néoadjuvant?]
+  P055: progression (2019-06-15) BEFORE treatment end (2020-04-08)
+  P106: progression (2022-06-10) BEFORE treatment end (2023-02-20)
+  P122: progression (2022-03-10) BEFORE treatment end (2023-01-09)
+  P220: progression (2022-09-14) BEFORE treatment end (2023-07-10)
+  P256: progression (2020-09-14) BEFORE treatment end (2021-05-17)
+  P0589: survie_globale=17m vs computed ~164m
+
+======================================================================
+5. FIELD COVERAGE (111 fields)
+======================================================================
+
+  Total: 630 | Covered: 111/111 | Never seen: 0
+
+  Field                                        N      %
+  ---------------------------------------- ----- ------
+  date_chir                                  626  99.4%
+  num_labo                                   630 100.0%
+  date_rcp                                   622  98.7%
+  dn_date                                    630 100.0%
+  date_deces                                 191  30.3%
+  sexe                                       630 100.0%
+  annee_de_naissance                         630 100.0%
+  activite_professionnelle                   590  93.7%
+  antecedent_tumoral                          62   9.8%
+  ik_clinique                                630 100.0%
+  diag_histologique                          630 100.0%
+  diag_integre                               630 100.0%
+  classification_oms                         630 100.0%
+  grade                                      630 100.0%
+  tumeur_lateralite                          630 100.0%
+  tumeur_position                            630 100.0%
+  dominance_cerebrale                        630 100.0%
+  exam_radio_date_decouverte                 630 100.0%
+  contraste_1er_symptome                     515  81.7%
+  prise_de_contraste                         630 100.0%
+  oedeme_1er_symptome                        628  99.7%
+  calcif_1er_symptome                        132  21.0%
+  date_1er_symptome                          630 100.0%
+  epilepsie_1er_symptome                     518  82.2%
+  ceph_hic_1er_symptome                      196  31.1%
+  deficit_1er_symptome                       142  22.5%
+  cognitif_1er_symptome                      118  18.7%
+  autre_trouble_1er_symptome                  94  14.9%
+  epilepsie                                  378  60.0%
+  ceph_hic                                     2   0.3%
+  deficit                                     92  14.6%
+  cognitif                                    70  11.1%
+  autre_trouble                               10   1.6%
+  histo_necrose                              569  90.3%
+  histo_pec                                  569  90.3%
+  histo_mitoses                              529  84.0%
+  aspect_cellulaire                          546  86.7%
+  ihc_idh1                                   629  99.8%
+  ihc_atrx                                   556  88.3%
+  ihc_p53                                    529  84.0%
+  ihc_fgfr3                                    3   0.5%
+  ihc_braf                                    38   6.0%
+  ihc_gfap                                   504  80.0%
+  ihc_olig2                                  543  86.2%
+  ihc_ki67                                   630 100.0%
+  ihc_hist_h3k27m                             31   4.9%
+  ihc_hist_h3k27me3                           25   4.0%
+  ihc_egfr_hirsch                             17   2.7%
+  ihc_mmr                                      7   1.1%
+  mol_idh1                                   629  99.8%
+  mol_idh2                                   437  69.4%
+  mol_mgmt                                   530  84.1%
+  mol_h3f3a                                   30   4.8%
+  mol_hist1h3b                                 2   0.3%
+  mol_tert                                   437  69.4%
+  mol_CDKN2A                                 278  44.1%
+  ch1p                                       144  22.9%
+  ch19q                                      142  22.5%
+  ch1p19q_codel                              266  42.2%
+  ch7p                                       273  43.3%
+  ch7q                                       120  19.0%
+  ch10p                                       37   5.9%
+  ch10q                                      309  49.0%
+  ch9p                                        60   9.5%
+  ch9q                                         2   0.3%
+  mol_p53                                      8   1.3%
+  mol_atrx                                   121  19.2%
+  mol_cic                                    119  18.9%
+  mol_fubp1                                   92  14.6%
+  mol_fgfr1                                    8   1.3%
+  mol_egfr_mut                                 2   0.3%
+  mol_prkca                                    3   0.5%
+  mol_pten                                    27   4.3%
+  mol_braf                                    46   7.3%
+  ampli_egfr                                 312  49.5%
+  ampli_mdm2                                  18   2.9%
+  ampli_cdk4                                  14   2.2%
+  ampli_met                                   11   1.7%
+  ampli_mdm4                                   5   0.8%
+  fusion_fgfr                                 60   9.5%
+  fusion_ntrk                                 46   7.3%
+  fusion_autre                                17   2.7%
+  type_chirurgie                             630 100.0%
+  localisation_chir                          630 100.0%
+  qualite_exerese                            630 100.0%
+  chir_date                                  300  47.6%
+  chimios                                    424  67.3%
+  chimio_protocole                           442  70.2%
+  chm_date_debut                             424  67.3%
+  chm_date_fin                               374  59.4%
+  chm_cycles                                 396  62.9%
+  rx_date_debut                              477  75.7%
+  rx_date_fin                                475  75.4%
+  rx_dose                                    475  75.4%
+  rx_fractionnement                          475  75.4%
+  localisation_radiotherapie                  92  14.6%
+  anti_epileptiques                          487  77.3%
+  essai_therapeutique                         55   8.7%
+  corticoides                                239  37.9%
+  optune                                     152  24.1%
+  evol_clinique                              629  99.8%
+  progress_clinique                           19   3.0%
+  progress_radiologique                       92  14.6%
+  reponse_radiologique                        24   3.8%
+  date_progression                           228  36.2%
+  neuroncologue                              630 100.0%
+  neurochirurgien                            629  99.8%
+  radiotherapeute                            474  75.2%
+  anatomo_pathologiste                       630 100.0%
+  infos_deces                                191  30.3%
+  survie_globale                             191  30.3%
+
+  ℹ️  Extra fields (not in 111 spec):
+      - chimios_2eme_ligne (38)
+
+======================================================================
+VALIDATION COMPLETE
+======================================================================

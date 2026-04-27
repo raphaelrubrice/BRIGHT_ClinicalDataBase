@@ -1,4 +1,4 @@
-"""Tests for src/aggregation/temporal_aggregation.py — forward-fill and conflict resolution.
+"""Tests for src/aggregation/temporal_aggregation.py, forward-fill and conflict resolution.
 
 Covers:
 - Static feature forward-fill (set once, update only on correction)
@@ -11,6 +11,7 @@ Covers:
 """
 
 import pytest
+pytest.importorskip("edsnlp", reason="requires edsnlp (install via setup.sh)")
 import pandas as pd
 
 from src.aggregation.temporal_aggregation import (
@@ -169,7 +170,7 @@ class TestSpecimenBoundFeatures:
         # A new surgery event
         ext2 = _make_extraction(
             doc_id="d2", doc_date="01/06/2024", doc_type="anapath",
-            chir_date="01/06/2024",
+            date_chir="01/06/2024",
             ihc_idh1="negatif",
         )
 
@@ -187,7 +188,7 @@ class TestSpecimenBoundFeatures:
         # New surgery only sets ihc_idh1, not mol_tert
         ext2 = _make_extraction(
             doc_id="d2", doc_date="01/06/2024", doc_type="anapath",
-            chir_date="01/06/2024",
+            date_chir="01/06/2024",
             ihc_idh1="negatif",
         )
 
@@ -349,18 +350,18 @@ class TestSyntheticPatientTimeline:
     """A synthetic 5-document patient test case produces the expected timeline.
 
     Documents (in chronological order):
-    1. Consultation (01/2024) — initial assessment, demographics, first symptoms
-    2. Anapath (02/2024) — biopsy results, IHC, molecular
-    3. RCP (03/2024) — treatment decision
-    4. Consultation (06/2024) — follow-up, new IK, progression
-    5. Anapath (09/2024) — re-surgery, new specimen results
+    1. Consultation (01/2024), initial assessment, demographics, first symptoms
+    2. Anapath (02/2024), biopsy results, IHC, molecular
+    3. RCP (03/2024), treatment decision
+    4. Consultation (06/2024), follow-up, new IK, progression
+    5. Anapath (09/2024), re-surgery, new specimen results
     """
 
     def test_full_timeline(self):
         ext1 = _make_extraction(
             doc_id="consult_1", doc_date="15/01/2024", doc_type="consultation",
             sexe="M",
-            date_de_naissance="01/05/1960",
+            annee_de_naissance=1960,
             tumeur_lateralite="gauche",
             epilepsie="oui",
             ik_clinique=90,
@@ -373,7 +374,6 @@ class TestSyntheticPatientTimeline:
             grade=3,
             ch1p="perte",
             ch19q="perte",
-            chir_date="10/02/2024",
             date_chir="10/02/2024",
         )
         ext3 = _make_extraction(
@@ -391,7 +391,6 @@ class TestSyntheticPatientTimeline:
         )
         ext5 = _make_extraction(
             doc_id="anapath_2", doc_date="01/09/2024", doc_type="anapath",
-            chir_date="01/09/2024",
             date_chir="01/09/2024",
             ihc_idh1="positif",
             mol_tert="wt",

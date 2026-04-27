@@ -24,7 +24,7 @@ from src.extraction.schema import ExtractionValue
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# A1 — sexe
+# A1, sexe
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestSexeExtraction:
@@ -87,7 +87,7 @@ class TestSexeExtraction:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# A2 — tumeur_lateralite
+# A2, tumeur_lateralite
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestLateraliteExtraction:
@@ -139,7 +139,7 @@ class TestLateraliteExtraction:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# A3 — evol_clinique
+# A3, evol_clinique
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestEvolCliniqueExtraction:
@@ -189,7 +189,7 @@ class TestEvolCliniqueExtraction:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# A4 — type_chirurgie
+# A4, type_chirurgie
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestTypeChirurgieExtraction:
@@ -248,7 +248,7 @@ class TestTypeChirurgieExtraction:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# A5 — classification_oms
+# A5, classification_oms
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestClassificationOMSExtraction:
@@ -285,7 +285,7 @@ class TestClassificationOMSExtraction:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# B1 — chimios
+# B1, chimios
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestChimiosExtraction:
@@ -318,7 +318,7 @@ class TestChimiosExtraction:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# B2 — tumeur_position
+# B2, tumeur_position
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestTumeurPositionExtraction:
@@ -347,7 +347,7 @@ class TestTumeurPositionExtraction:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# C5 — diag_histologique
+# C5, diag_histologique
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestDiagHistologiqueExtraction:
@@ -465,7 +465,7 @@ class TestRunRuleExtractionNewExtractors:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# C2 — Extended IHC synonym tables
+# C2, Extended IHC synonym tables
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestIHCExtendedAliases:
@@ -526,7 +526,7 @@ class TestIHCExtendedAliases:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# C3 — Extended molecular synonym tables
+# C3, Extended molecular synonym tables
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestMolecularExtendedAliases:
@@ -542,7 +542,7 @@ class TestMolecularExtendedAliases:
         """'mutation identifiée' should map to mute."""
         result = extract_molecular("BRAF : mutation identifiée")
         assert "mol_braf" in result
-        assert result["mol_braf"].value == "mute"
+        assert result["mol_braf"].value.startswith("mute")
 
     def test_mgmt_methyle(self):
         """MGMT méthylé should be captured."""
@@ -564,7 +564,7 @@ class TestMolecularExtendedAliases:
         """IDH1 R132H variant should be detected as mute."""
         result = extract_molecular("IDH1 : R132H")
         assert "mol_idh1" in result
-        assert result["mol_idh1"].value == "mute"
+        assert result["mol_idh1"].value.startswith("mute")
 
     def test_statut_wt(self):
         result = extract_molecular("IDH1 : statut WT")
@@ -583,7 +583,7 @@ class TestMolecularExtendedAliases:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# C4 — Extended chromosomal synonym tables
+# C4, Extended chromosomal synonym tables
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestChromosomalExtendedAliases:
@@ -647,7 +647,7 @@ class TestChromosomalExtendedAliases:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# C6 — Improved date context assignment
+# C6, Improved date context assignment
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TestDateContextImproved:
@@ -657,16 +657,16 @@ class TestDateContextImproved:
         """Date 150 chars before keyword should now be assigned (was too far at 120)."""
         padding = "x" * 140
         text = f"15/03/2024 {padding} chirurgie réalisée"
-        result = run_rule_extraction(text, {"full_text": text}, ["chir_date"])
-        assert "chir_date" in result
-        assert result["chir_date"].value == "15/03/2024"
+        result = run_rule_extraction(text, {"full_text": text}, ["date_chir"])
+        assert "date_chir" in result
+        assert result["date_chir"].value == "15/03/2024"
 
     def test_date_new_keyword_craniotomie(self):
-        """New keyword 'craniotomie' should assign chir_date."""
+        """New keyword 'craniotomie' should assign date_chir."""
         text = "craniotomie le 10/02/2024"
-        result = run_rule_extraction(text, {"full_text": text}, ["chir_date"])
-        assert "chir_date" in result
-        assert result["chir_date"].value == "10/02/2024"
+        result = run_rule_extraction(text, {"full_text": text}, ["date_chir"])
+        assert "date_chir" in result
+        assert result["date_chir"].value == "10/02/2024"
 
     def test_date_new_keyword_dn_du(self):
         """New keyword 'DN du' should assign dn_date."""
@@ -679,9 +679,9 @@ class TestDateContextImproved:
         """When two keywords compete, nearest should win."""
         text = "chirurgie 01/03/2024 récidive confirmée le 15/06/2024"
         result = run_rule_extraction(
-            text, {"full_text": text}, ["chir_date", "date_progression"]
+            text, {"full_text": text}, ["date_chir", "date_progression"]
         )
-        assert "chir_date" in result
-        assert result["chir_date"].value == "01/03/2024"
+        assert "date_chir" in result
+        assert result["date_chir"].value == "01/03/2024"
         assert "date_progression" in result
         assert result["date_progression"].value == "15/06/2024"

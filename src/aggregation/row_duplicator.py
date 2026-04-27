@@ -6,7 +6,7 @@ splits into separate ``ExtractionResult`` rows.
 
 Public API
 ----------
-- ``detect_multiple_events(extraction)`` – Returns a list of
+- ``detect_multiple_events(extraction)``, Returns a list of
   ``ExtractionResult`` (length ≥ 1).  If only one event is found the
   original is returned unchanged (wrapped in a one-element list).
 """
@@ -20,28 +20,26 @@ from typing import Optional
 
 from ..extraction.provenance import ExtractionResult
 from ..extraction.schema import ExtractionValue
+from .temporal_aggregation import SPECIMEN_BOUND_FEATURES as _SPECIMEN_BOUND_FEATURES
 
 
 # ---------------------------------------------------------------------------
 # Feature groupings for duplication logic
 # ---------------------------------------------------------------------------
 
-# Fields that are shared across all rows (demographics, tumour location, etc.)
-SHARED_FEATURES: set[str] = {
+# Non-specimen-bound fields that are still shared across all duplicate rows
+# (demographics, care team, tumour location, outcome, historical symptoms …)
+_NON_SPECIMEN_SHARED_FEATURES: set[str] = {
     # Demographics
-    "nip", "date_de_naissance", "sexe", "activite_professionnelle",
+    "date_rcp", "annee_de_naissance", "sexe", "activite_professionnelle",
     "antecedent_tumoral",
     # Care team
-    "neuroncologue", "neurochirurgien", "radiotherapeute",
+    "neuroncologue", "neurochirurgien", "radiotherapeute", "anatomo_pathologiste",
     "localisation_radiotherapie", "localisation_chir",
     # Tumour location
-    "tumeur_lateralite", "tumeur_position",
+    "tumeur_lateralite", "tumeur_position", "dominance_cerebrale",
     # Outcome (shared across timeline)
-    "date_deces", "infos_deces",
-    # Biological identifiers
-    "num_labo",
-    # Diagnosis (shared unless explicitly different per specimen)
-    "diag_histologique", "diag_integre", "classification_oms", "grade",
+    "date_deces", "infos_deces", "survie_globale",
     # First symptoms (historical, shared)
     "date_1er_symptome", "epilepsie_1er_symptome", "ceph_hic_1er_symptome",
     "deficit_1er_symptome", "cognitif_1er_symptome",
@@ -49,36 +47,33 @@ SHARED_FEATURES: set[str] = {
     # Radiology at discovery
     "exam_radio_date_decouverte", "contraste_1er_symptome",
     "oedeme_1er_symptome", "calcif_1er_symptome",
-    # All IHC / molecular / chromosomal / amplification / fusion (specimen-bound)
-    "ihc_idh1", "ihc_p53", "ihc_atrx", "ihc_fgfr3", "ihc_braf",
-    "ihc_hist_h3k27m", "ihc_hist_h3k27me3", "ihc_egfr_hirsch",
-    "ihc_gfap", "ihc_olig2", "ihc_ki67", "ihc_mmr",
-    "histo_necrose", "histo_pec", "histo_mitoses",
-    "mol_idh1", "mol_idh2", "mol_tert", "mol_CDKN2A", "mol_h3f3a",
-    "mol_hist1h3b", "mol_braf", "mol_mgmt", "mol_fgfr1", "mol_egfr_mut",
-    "mol_prkca", "mol_p53", "mol_pten", "mol_cic", "mol_fubp1", "mol_atrx",
-    "ch1p", "ch19q", "ch10p", "ch10q", "ch7p", "ch7q", "ch9p", "ch9q",
-    "ampli_mdm2", "ampli_cdk4", "ampli_egfr", "ampli_met", "ampli_mdm4",
-    "fusion_fgfr", "fusion_ntrk", "fusion_autre",
 }
+
+# date_chir triggers duplication, exclude it from the shared set.
+# All other specimen-bound fields (IHC / molecular / chromosomal / amplifications /
+# fusions / histology / diagnosis) are shared across duplicate rows.
+# Importing from temporal_aggregation ensures these lists stay in sync.
+SHARED_FEATURES: set[str] = (
+    _SPECIMEN_BOUND_FEATURES - {"date_chir"}
+) | _NON_SPECIMEN_SHARED_FEATURES
 
 # Treatment-event-specific field groups
 # Each group represents a distinct "event axis" that can trigger duplication.
 
 SURGERY_EVENT_FIELDS: list[str] = [
-    "chir_date", "type_chirurgie", "date_chir",
+    "date_chir", "type_chirurgie", "qualite_exerese",
 ]
 
 CHEMO_EVENT_FIELDS: list[str] = [
-    "chimios", "chm_date_debut", "chm_date_fin", "chm_cycles",
+    "chimios", "chimio_protocole", "chm_date_debut", "chm_date_fin", "chm_cycles",
 ]
 
 RADIO_EVENT_FIELDS: list[str] = [
-    "rx_date_debut", "rx_date_fin", "rx_dose",
+    "rx_date_debut", "rx_date_fin", "rx_dose", "rx_fractionnement",
 ]
 
 PROGRESSION_EVENT_FIELDS: list[str] = [
-    "date_progression", "progress_clinique", "progress_radiologique",
+    "date_progression", "progress_clinique", "progress_radiologique", "reponse_radiologique",
 ]
 
 # Clinical state fields that accompany the timepoint
@@ -110,7 +105,7 @@ def _parse_multiple_values(value_str: str) -> list[str]:
     """
     if not value_str:
         return []
-    # Split on common delimiters (NOT slash — dates use DD/MM/YYYY)
+    # Split on common delimiters (NOT slash, dates use DD/MM/YYYY)
     parts = re.split(r"[;,]|\bet\b|\bpuis\b", value_str, flags=re.IGNORECASE)
     return [p.strip() for p in parts if p.strip()]
 
@@ -181,18 +176,9 @@ def _create_event_row(
 def _detect_surgery_events(
     extraction: ExtractionResult,
 ) -> list[dict[str, ExtractionValue]]:
-    """Detect multiple surgery events from chir_date / date_chir fields."""
-    dates: list[str] = []
-    for field in ("chir_date", "date_chir"):
-        dates.extend(_count_distinct_dates(extraction, field))
-
-    # Deduplicate across both fields
-    seen: set[str] = set()
-    unique_dates: list[str] = []
-    for d in dates:
-        if d not in seen:
-            seen.add(d)
-            unique_dates.append(d)
+    """Detect multiple surgery events from date_chir field."""
+    dates: list[str] = _count_distinct_dates(extraction, "date_chir")
+    unique_dates: list[str] = list(dict.fromkeys(dates))  # deduplicate, preserve order
 
     if len(unique_dates) <= 1:
         return []
@@ -202,7 +188,7 @@ def _detect_surgery_events(
     for date_val in unique_dates:
         event: dict[str, ExtractionValue] = {}
         # Set the surgery date
-        event["chir_date"] = ExtractionValue(
+        event["date_chir"] = ExtractionValue(
             value=date_val,
             extraction_tier="rule",
             source_span=date_val,
@@ -213,8 +199,9 @@ def _detect_surgery_events(
             source_span=date_val,
         )
         # Copy type_chirurgie from original (same for all unless LLM split it)
-        if "type_chirurgie" in extraction.features:
-            event["type_chirurgie"] = extraction.features["type_chirurgie"]
+        for f in ("type_chirurgie", "qualite_exerese"):
+            if f in extraction.features:
+                event[f] = extraction.features[f]
 
         # Copy clinical state fields from original
         for f in CLINICAL_STATE_FIELDS:
@@ -258,7 +245,7 @@ def _detect_chemo_events(
             event["chimios"] = extraction.features["chimios"]
 
         # Copy other chemo fields from original
-        for f in ("chm_date_fin", "chm_cycles"):
+        for f in ("chm_date_fin", "chm_cycles", "chimio_protocole"):
             if f in extraction.features:
                 event[f] = extraction.features[f]
 
@@ -289,7 +276,7 @@ def _detect_radio_events(
             source_span=date_val,
         )
         # Copy dose / end date from original
-        for f in ("rx_date_fin", "rx_dose"):
+        for f in ("rx_date_fin", "rx_dose", "rx_fractionnement"):
             if f in extraction.features:
                 event[f] = extraction.features[f]
 
@@ -320,7 +307,7 @@ def _detect_progression_events(
             source_span=date_val,
         )
         # Copy progression flags from original
-        for f in ("progress_clinique", "progress_radiologique"):
+        for f in ("progress_clinique", "progress_radiologique", "reponse_radiologique"):
             if f in extraction.features:
                 event[f] = extraction.features[f]
 
@@ -344,7 +331,7 @@ def detect_multiple_events(
     """Check if the document reports multiple distinct treatment events.
 
     Duplication triggers (checked in priority order):
-    - Multiple distinct surgery dates (``chir_date`` / ``date_chir``)
+    - Multiple distinct surgery dates (``date_chir``)
     - Multiple chemotherapy lines (``chimios`` + ``chm_date_debut``)
     - Multiple radiotherapy courses (``rx_date_debut`` + ``rx_dose``)
     - Multiple progression events (``date_progression``)
@@ -367,7 +354,7 @@ def detect_multiple_events(
     """
     # Try each event type.  The first type that yields multiple events
     # triggers duplication.  We do *not* combine multiple event types
-    # in a single pass — that would lead to a combinatorial explosion.
+    # in a single pass, that would lead to a combinatorial explosion.
     for detector, event_type in [
         (_detect_surgery_events, "surgery"),
         (_detect_chemo_events, "chemotherapy"),
@@ -382,5 +369,5 @@ def detect_multiple_events(
             ]
             return rows
 
-    # No duplication needed — return original as-is
+    # No duplication needed, return original as-is
     return [extraction]

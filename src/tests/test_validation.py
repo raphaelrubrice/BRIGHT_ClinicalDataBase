@@ -1,4 +1,4 @@
-"""Tests for src/extraction/validation.py — controlled vocabulary enforcement."""
+"""Tests for src/extraction/validation.py, controlled vocabulary enforcement."""
 
 import pytest
 
@@ -31,7 +31,7 @@ class TestNormaliseValue:
         assert normalise_value("ihc_idh1", "null") is None
         assert normalise_value("ihc_idh1", "None") is None
         assert normalise_value("ihc_idh1", "N/A") is None
-        assert normalise_value("ihc_idh1", "na") is None
+        assert normalise_value("ihc_idh1", "na") == "NA"
         assert normalise_value("ihc_idh1", "") is None
 
     def test_boolean_to_oui_non(self):
@@ -77,6 +77,20 @@ class TestNormaliseValue:
         assert normalise_value("sexe", "féminin") == "F"
         assert normalise_value("sexe", "h") == "M"
         assert normalise_value("sexe", "f") == "F"
+        # Titles / honorifics
+        assert normalise_value("sexe", "Mr") == "M"
+        assert normalise_value("sexe", "Mme") == "F"
+        assert normalise_value("sexe", "Monsieur") == "M"
+        assert normalise_value("sexe", "Madame") == "F"
+        assert normalise_value("sexe", "Mademoiselle") == "F"
+        # Mixed case
+        assert normalise_value("sexe", "MONSIEUR") == "M"
+        assert normalise_value("sexe", "madame") == "F"
+        assert normalise_value("sexe", "MR") == "M"
+        assert normalise_value("sexe", "MME") == "F"
+        # English gender words
+        assert normalise_value("sexe", "male") == "M"
+        assert normalise_value("sexe", "female") == "F"
 
     def test_laterality_normalisation(self):
         assert normalise_value("tumeur_lateralite", "bilatéral") == "bilateral"
@@ -95,12 +109,14 @@ class TestNormaliseValue:
         assert normalise_value("mol_idh1", "wt") == "wt"
 
     def test_integer_field_parsing(self):
+        # Grade vocab is string-keyed; string digits pass through as strings.
         result = normalise_value("grade", "3")
-        assert result == 3
+        assert result == "3"
 
     def test_integer_passthrough(self):
+        # Integer inputs are converted to strings for CATEGORICAL fields.
         result = normalise_value("grade", 3)
-        assert result == 3
+        assert result == "3"
 
     def test_ihc_maintenu_synonym(self):
         assert normalise_value("ihc_atrx", "conservé") == "maintenu"
@@ -147,13 +163,14 @@ class TestIsValueValid:
         assert _is_value_valid(field_def, "maybe") is False
 
     def test_valid_grade(self):
+        # Grade values are stored as strings after normalisation.
         field_def = ALL_FIELDS_BY_NAME["grade"]
-        assert _is_value_valid(field_def, 1) is True
-        assert _is_value_valid(field_def, 4) is True
+        assert _is_value_valid(field_def, "1") is True
+        assert _is_value_valid(field_def, "4") is True
 
     def test_invalid_grade(self):
         field_def = ALL_FIELDS_BY_NAME["grade"]
-        assert _is_value_valid(field_def, 5) is False
+        assert _is_value_valid(field_def, "5") is False
 
     def test_valid_chromosomal(self):
         field_def = ALL_FIELDS_BY_NAME["ch1p"]
@@ -318,12 +335,13 @@ class TestValidateExtraction:
         assert result["type_chirurgie"].vocab_valid is True
 
     def test_integer_grade_from_string(self):
+        # Grade values are normalised to strings; vocab check passes without flagging.
         extractions = {
             "grade": ExtractionValue(value="3", extraction_tier="llm"),
         }
         result = validate_extraction(extractions)
 
-        assert result["grade"].value == 3
+        assert result["grade"].value == "3"
         assert result["grade"].vocab_valid is True
 
     def test_empty_extraction_dict(self):

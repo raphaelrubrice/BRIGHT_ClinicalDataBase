@@ -9,10 +9,10 @@ existing database operations (``src.database.ops``).  Provides helpers to:
 
 Public API
 ----------
-- ``FEATURE_COLUMNS``            – List of all 102 feature column names.
-- ``EXTENDED_COLUMNS``           – ``DEFAULT_COLUMNS`` + feature columns.
-- ``extraction_result_to_row()`` – Convert ExtractionResult to a flat row dict.
-- ``extract_and_store()``        – Extract features and append to the DB.
+- ``FEATURE_COLUMNS``           , List of all 102 feature column names.
+- ``EXTENDED_COLUMNS``          , ``DEFAULT_COLUMNS`` + feature columns.
+- ``extraction_result_to_row()``, Convert ExtractionResult to a flat row dict.
+- ``extract_and_store()``       , Extract features and append to the DB.
 """
 
 from __future__ import annotations
@@ -48,7 +48,6 @@ _META_COLUMNS: list[str] = [
     "DOC_TYPE",            # Classified document type
     "DOC_DATE",            # Extracted document date
     "EXTRACTION_TIER1",    # Count of Tier 1 extractions
-    "EXTRACTION_TIER2",    # Count of Tier 2 extractions
     "EXTRACTION_FLAGGED",  # Count of flagged fields
     "EXTRACTION_TIME_MS",  # Total extraction time
 ]
@@ -76,7 +75,6 @@ def extraction_result_to_row(result: ExtractionResult) -> dict:
     row["DOC_TYPE"] = result.document_type
     row["DOC_DATE"] = result.document_date or ""
     row["EXTRACTION_TIER1"] = result.tier1_count
-    row["EXTRACTION_TIER2"] = result.tier2_count
     row["EXTRACTION_FLAGGED"] = len(result.flagged_for_review)
     row["EXTRACTION_TIME_MS"] = round(result.total_extraction_time_ms, 1)
 

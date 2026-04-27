@@ -6,23 +6,23 @@ amplifications, and fusions from French neuro-oncology documents.
 
 Public API
 ----------
-- ``extract_dates``              – Generic date extraction + normalisation.
-- ``extract_ihc``                – IHC marker extraction.
-- ``extract_molecular``          – Molecular status extraction.
-- ``extract_chromosomal``        – Chromosomal alteration extraction.
-- ``extract_binary``             – Binary (oui/non) field extraction.
-- ``extract_numerical``          – Numerical value extraction (Ki67, IK, …).
-- ``extract_amplifications``     – Gene amplification extraction.
-- ``extract_fusions``            – Gene fusion extraction.
-- ``extract_sexe``               – Patient sex (M/F) extraction.
-- ``extract_tumeur_lateralite``  – Tumour laterality extraction.
-- ``extract_evol_clinique``      – Clinical evolution label extraction.
-- ``extract_type_chirurgie``     – Surgery type extraction.
-- ``extract_classification_oms`` – WHO classification year extraction.
-- ``extract_chimios``            – Chemotherapy drug name extraction.
-- ``extract_tumeur_position``    – Tumour anatomical position extraction.
-- ``extract_diag_histologique``  – Histological diagnosis extraction.
-- ``run_rule_extraction``        – Master function running all extractors.
+- ``extract_dates``             , Generic date extraction + normalisation.
+- ``extract_ihc``               , IHC marker extraction.
+- ``extract_molecular``         , Molecular status extraction.
+- ``extract_chromosomal``       , Chromosomal alteration extraction.
+- ``extract_binary``            , Binary (oui/non) field extraction.
+- ``extract_numerical``         , Numerical value extraction (Ki67, IK, …).
+- ``extract_amplifications``    , Gene amplification extraction.
+- ``extract_fusions``           , Gene fusion extraction.
+- ``extract_sexe``              , Patient sex (M/F) extraction.
+- ``extract_tumeur_lateralite`` , Tumour laterality extraction.
+- ``extract_evol_clinique``     , Clinical evolution label extraction.
+- ``extract_type_chirurgie``    , Surgery type extraction.
+- ``extract_classification_oms``, WHO classification year extraction.
+- ``extract_chimios``           , Chemotherapy drug name extraction.
+- ``extract_tumeur_position``   , Tumour anatomical position extraction.
+- ``extract_diag_histologique`` , Histological diagnosis extraction.
+- ``run_rule_extraction``       , Master function running all extractors.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from __future__ import annotations
 import re
 from typing import Any, Optional
 
-from src.extraction.schema import (
+from .schema import (
     ExtractionValue,
     FieldDefinition,
     FieldType,
@@ -38,7 +38,7 @@ from src.extraction.schema import (
     FEATURE_GROUPS,
     get_field,
 )
-from src.extraction.negation import AssertionAnnotator
+from .negation import AssertionAnnotator
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -46,19 +46,19 @@ from src.extraction.negation import AssertionAnnotator
 
 _RE_FLAGS = re.IGNORECASE | re.UNICODE
 
-# Pseudonymised birthdate: "né(e) le YYYY-??-??"
+# Pseudonymised birthdate: "YYYY-??-??"
 _PAT_PSEUDO_BIRTHDATE = re.compile(
-    r"(?:n[ée]e?\s+le\s+|date\s+de\s+naissance\s*[:\s]\s*)(\d{4})-\?\?-\?\?",
+    r"(\d{4})-\?\?-\?\?",
     _RE_FLAGS,
 )
 
 # Context keywords for date-field assignment (replaces positional matching)
 _DATE_CONTEXT_KEYWORDS: dict[str, list[str]] = {
-    "date_de_naissance": ["né(e) le", "naissance", "DDN", "date de naissance", "né le", "née le"],
-    "chir_date": [
-        "chirurgie", "opéré", "intervention", "opération", "exérèse", "biopsie",
-        "opéré le", "opérée le", "résection", "craniotomie", "craniectomie", "reprise chir",
+    "annee_de_naissance": [
+        "né(e) le", "naissance", "DDN", "date de naissance", "année de naissance",
+        "né le", "née le", "né en", "née en", "né(e) en"
     ],
+    "date_rcp": ["rcp", "réunion de concertation pluridisciplinaire", "concertation", "staff"],
     "date_chir": [
         "chirurgie", "opéré", "intervention", "opération", "exérèse", "biopsie",
         "opéré le", "opérée le", "résection", "craniotomie", "craniectomie", "reprise chir",
@@ -158,8 +158,14 @@ def _assign_dates_by_context(
             # Keep nearest match per field (overwrite if closer)
             existing = results.get(best_field)
             if existing is None or best_distance < getattr(existing, "_ctx_distance", 999999):
+                assigned_value = norm
+                # For annee_de_naissance, extract year only from DD/MM/YYYY
+                if best_field == "annee_de_naissance":
+                    parts = norm.split("/")
+                    if len(parts) == 3:
+                        assigned_value = parts[2]
                 ev = ExtractionValue(
-                    value=norm,
+                    value=assigned_value,
                     source_span=raw,
                     source_span_start=start,
                     source_span_end=end,
@@ -673,6 +679,9 @@ def extract_molecular(text: str) -> dict[str, ExtractionValue]:
 
     def _set(field_name: str, value: str, raw: str, start: int, end: int) -> None:
         if field_name not in results:
+            if value == "mute":
+                value = f"mute ({raw.strip()})"
+            
             results[field_name] = ExtractionValue(
                 value=value,
                 source_span=raw,
@@ -696,10 +705,7 @@ def extract_molecular(text: str) -> dict[str, ExtractionValue]:
             # Check for variant pattern
             variant_match = _VARIANT_PATTERN.search(status_raw)
             if variant_match:
-                if field_name == "mol_braf":
-                    normalised = variant_match.group()
-                else:
-                    normalised = "mute"
+                normalised = "mute"
             else:
                 normalised = status_raw
 
@@ -1001,7 +1007,7 @@ def extract_binary(
 
     for field_name, keywords in _BINARY_KEYWORDS.items():
         for kw in keywords:
-            pattern = re.compile(re.escape(kw), _RE_FLAGS)
+            pattern = re.compile(r"\b" + re.escape(kw) + r"\b", _RE_FLAGS)
             match = pattern.search(text)
             if match is None:
                 continue
@@ -1212,7 +1218,7 @@ def extract_amplifications(text: str) -> dict[str, ExtractionValue]:
                 vocab_valid=True,
             )
 
-    # Negated amplifications (check FIRST — negated patterns are more
+    # Negated amplifications (check FIRST, negated patterns are more
     # specific and must take priority via the "first match wins" `_set`).
     for m in _AMPLI_NEGATED_PATTERN.finditer(text):
         gene = m.group("gene").lower()
@@ -1280,7 +1286,7 @@ def extract_fusions(text: str) -> dict[str, ExtractionValue]:
                 vocab_valid=True,
             )
 
-    # Negated fusions (check FIRST — more specific pattern wins).
+    # Negated fusions (check FIRST, more specific pattern wins).
     for m in _FUSION_NEGATED_PATTERN.finditer(text):
         gene = m.group("gene").lower()
         field_name = _FUSION_CANONICAL.get(gene, "fusion_autre")
@@ -1585,7 +1591,7 @@ def extract_evol_clinique(text: str) -> dict[str, ExtractionValue]:
                 confidence=0.85, vocab_valid=True,
             )}
 
-    # 4. Context inference (flagged — lower confidence)
+    # 4. Context inference (flagged, lower confidence)
     m = _PAT_EVOL_INITIAL_CONTEXT.search(text)
     if m:
         # If we are in a history context, this is likely a past "initial" mention, not the current one.
@@ -1759,7 +1765,7 @@ def extract_classification_oms(text: str) -> dict[str, ExtractionValue]:
                 confidence=0.95, vocab_valid=True,
             )}
 
-    # Pass 2: fallback — pick the highest (most recent) valid year
+    # Pass 2: fallback, pick the highest (most recent) valid year
     valid_matches = [(int(m.group("year")), m) for m in all_matches if m.group("year") in _VALID_OMS_YEARS]
     
     if valid_matches:
@@ -1920,7 +1926,7 @@ def extract_tumeur_position(text: str) -> dict[str, ExtractionValue]:
 
     Uses a closed neuro-oncology anatomical vocabulary.
     Multiple structures are joined with ' + '.
-    Returns None (empty dict) for unmatched — no LLM fallback.
+    Returns None (empty dict) for unmatched, no LLM fallback.
     """
     found: list[tuple[str, int, int]] = []
 
@@ -2072,6 +2078,7 @@ def run_rule_extraction(
     sections: dict[str, str],
     feature_subset: list[str],
     annotator: Optional[AssertionAnnotator] = None,
+    enabled_extractors: Optional[set[str]] = None,
 ) -> dict[str, ExtractionValue]:
     """Run all rule-based extractors on the text/sections.
 
@@ -2088,6 +2095,13 @@ def run_rule_extraction(
         ``FEATURE_ROUTING``).
     annotator : AssertionAnnotator, optional
         For negation-aware binary extraction.
+    enabled_extractors : set[str] or None
+        Names of sub-extractors to activate.  ``None`` means all are active.
+        Valid names: ``"date"``, ``"ihc"``, ``"molecular"``, ``"chromosomal"``,
+        ``"binary"``, ``"numerical"``, ``"amplification"``, ``"fusion"``,
+        ``"sexe"``, ``"tumeur_lateralite"``, ``"evol_clinique"``,
+        ``"type_chirurgie"``, ``"classification_oms"``, ``"chimios"``,
+        ``"tumeur_position"``, ``"diag_histologique"``.
 
     Returns
     -------
@@ -2095,16 +2109,19 @@ def run_rule_extraction(
         Mapping ``field_name → ExtractionValue`` for successfully
         extracted fields.
     """
+    def _on(name: str) -> bool:
+        return enabled_extractors is None or name in enabled_extractors
+
     feature_set = set(feature_subset)
     all_results: dict[str, ExtractionValue] = {}
 
     # --- Phase 0.3: Pseudonymised birthdate extraction ---
-    if "date_de_naissance" in feature_set:
+    if _on("date") and "annee_de_naissance" in feature_set:
         m = _PAT_PSEUDO_BIRTHDATE.search(text)
         if m:
             year = m.group(1)
-            all_results["date_de_naissance"] = ExtractionValue(
-                value=f"01/01/{year}",
+            all_results["annee_de_naissance"] = ExtractionValue(
+                value=year,
                 source_span=m.group(0),
                 source_span_start=m.start(),
                 source_span_end=m.end(),
@@ -2131,7 +2148,7 @@ def run_rule_extraction(
             _SECTION_EXTRACTORS["full_text"],
         )
 
-        if "date" in extractor_names:
+        if _on("date") and "date" in extractor_names:
             date_results = extract_dates(section_text)
             # Context-aware date assignment (Phase 0.1)
             date_fields_in_subset = [
@@ -2142,90 +2159,92 @@ def run_rule_extraction(
                 date_results, date_fields_in_subset, section_text
             )
             for fname, ev in context_assigned.items():
+                if fname == "annee_de_naissance" and isinstance(ev.value, str):
+                    ev.value = ev.value[-4:]  # Only keep YYYY
                 ev.section = section_name
                 all_results[fname] = ev
 
-        if "ihc" in extractor_names:
+        if _on("ihc") and "ihc" in extractor_names:
             _merge(extract_ihc(section_text), section_name)
 
-        if "molecular" in extractor_names:
+        if _on("molecular") and "molecular" in extractor_names:
             _merge(extract_molecular(section_text), section_name)
 
-        if "chromosomal" in extractor_names:
+        if _on("chromosomal") and "chromosomal" in extractor_names:
             _merge(extract_chromosomal(section_text), section_name)
 
-        if "binary" in extractor_names:
+        if _on("binary") and "binary" in extractor_names:
             _merge(extract_binary(section_text, annotator), section_name)
 
-        if "numerical" in extractor_names:
+        if _on("numerical") and "numerical" in extractor_names:
             _merge(extract_numerical(section_text), section_name)
 
-        if "amplification" in extractor_names:
+        if _on("amplification") and "amplification" in extractor_names:
             _merge(extract_amplifications(section_text), section_name)
 
-        if "fusion" in extractor_names:
+        if _on("fusion") and "fusion" in extractor_names:
             _merge(extract_fusions(section_text), section_name)
 
         # --- Phase A/B/C new extractors ---
-        if "sexe" in extractor_names:
+        if _on("sexe") and "sexe" in extractor_names:
             _merge(extract_sexe(section_text), section_name)
 
-        if "tumeur_lateralite" in extractor_names:
+        if _on("tumeur_lateralite") and "tumeur_lateralite" in extractor_names:
             _merge(extract_tumeur_lateralite(section_text), section_name)
 
-        if "evol_clinique" in extractor_names:
+        if _on("evol_clinique") and "evol_clinique" in extractor_names:
             _merge(extract_evol_clinique(section_text), section_name)
 
-        if "type_chirurgie" in extractor_names:
+        if _on("type_chirurgie") and "type_chirurgie" in extractor_names:
             _merge(extract_type_chirurgie(section_text), section_name)
 
-        if "classification_oms" in extractor_names:
+        if _on("classification_oms") and "classification_oms" in extractor_names:
             _merge(extract_classification_oms(section_text), section_name)
 
-        if "chimios" in extractor_names:
+        if _on("chimios") and "chimios" in extractor_names:
             _merge(extract_chimios(section_text), section_name)
 
-        if "tumeur_position" in extractor_names:
+        if _on("tumeur_position") and "tumeur_position" in extractor_names:
             _merge(extract_tumeur_position(section_text), section_name)
 
-        if "diag_histologique" in extractor_names:
+        if _on("diag_histologique") and "diag_histologique" in extractor_names:
             _merge(extract_diag_histologique(section_text), section_name)
 
     # If sections didn't cover everything, run on full text as catch-all
     if "full_text" not in sections:
         remaining = feature_set - set(all_results.keys())
         if remaining:
-            if "ihc" in _relevant_groups(remaining):
+            if _on("ihc") and "ihc" in _relevant_groups(remaining):
                 _merge(extract_ihc(text), "full_text")
-            if "molecular" in _relevant_groups(remaining):
+            if _on("molecular") and "molecular" in _relevant_groups(remaining):
                 _merge(extract_molecular(text), "full_text")
-            if "chromosomal" in _relevant_groups(remaining):
+            if _on("chromosomal") and "chromosomal" in _relevant_groups(remaining):
                 _merge(extract_chromosomal(text), "full_text")
-            if "binary" in _relevant_groups(remaining):
+            if _on("binary") and "binary" in _relevant_groups(remaining):
                 _merge(extract_binary(text, annotator), "full_text")
-            if "numerical" in _relevant_groups(remaining):
+            if _on("numerical") and "numerical" in _relevant_groups(remaining):
                 _merge(extract_numerical(text), "full_text")
-            if "amplification" in _relevant_groups(remaining):
+            if _on("amplification") and "amplification" in _relevant_groups(remaining):
                 _merge(extract_amplifications(text), "full_text")
-            if "fusion" in _relevant_groups(remaining):
+            if _on("fusion") and "fusion" in _relevant_groups(remaining):
                 _merge(extract_fusions(text), "full_text")
 
             # Phase A/B/C fallback extractors
-            if "sexe" in remaining:
+            if _on("sexe") and "sexe" in remaining:
                 _merge(extract_sexe(text), "full_text")
-            if "tumeur_lateralite" in remaining:
+            if _on("tumeur_lateralite") and "tumeur_lateralite" in remaining:
                 _merge(extract_tumeur_lateralite(text), "full_text")
-            if "evol_clinique" in remaining:
+            if _on("evol_clinique") and "evol_clinique" in remaining:
                 _merge(extract_evol_clinique(text), "full_text")
-            if "type_chirurgie" in remaining:
+            if _on("type_chirurgie") and "type_chirurgie" in remaining:
                 _merge(extract_type_chirurgie(text), "full_text")
-            if "classification_oms" in remaining:
+            if _on("classification_oms") and "classification_oms" in remaining:
                 _merge(extract_classification_oms(text), "full_text")
-            if "chimios" in remaining:
+            if _on("chimios") and "chimios" in remaining:
                 _merge(extract_chimios(text), "full_text")
-            if "tumeur_position" in remaining:
+            if _on("tumeur_position") and "tumeur_position" in remaining:
                 _merge(extract_tumeur_position(text), "full_text")
-            if "diag_histologique" in remaining:
+            if _on("diag_histologique") and "diag_histologique" in remaining:
                 _merge(extract_diag_histologique(text), "full_text")
 
     return all_results
@@ -2237,6 +2256,8 @@ def run_rule_extraction(
 
 def _is_date_field(field_name: str) -> bool:
     """Return True if the field is a date-type field."""
+    if field_name == "annee_de_naissance":
+        return True
     fd = ALL_FIELDS_BY_NAME.get(field_name)
     return fd is not None and fd.field_type == FieldType.DATE
 

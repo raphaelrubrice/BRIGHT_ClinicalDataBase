@@ -5,8 +5,8 @@ extracted spans are negated, hypothetical, or historical.
 
 Public API
 ----------
-- ``AnnotatedSpan``       – Result dataclass for a single span annotation.
-- ``AssertionAnnotator``  – Pre-annotate text spans with assertion status.
+- ``AnnotatedSpan``      , Result dataclass for a single span annotation.
+- ``AssertionAnnotator`` , Pre-annotate text spans with assertion status.
 """
 
 from __future__ import annotations
@@ -248,7 +248,7 @@ class AssertionAnnotator:
         doc = self._nlp.make_doc(text)  # type: ignore[union-attr]
 
         # We need to create spaCy Span objects for each input span.
-        # edsnlp works on doc.ents or doc.spans — we use doc.spans["ruler"].
+        # edsnlp works on doc.ents or doc.spans, we use doc.spans["ruler"].
         spacy_spans: list[SpacySpan] = []
         for start_char, end_char, label in spans:
             span = doc.char_span(start_char, end_char, label=label or "ENTITY")
@@ -270,7 +270,7 @@ class AssertionAnnotator:
         # Run the assertion pipeline on the doc
         doc = self._nlp(doc)  # type: ignore[union-attr]
 
-        # Build results — map back using character offsets
+        # Build results, map back using character offsets
         annotated_spans_by_offset: dict[tuple[int, int], SpacySpan] = {}
         for sp in doc.spans.get("ruler", []):
             annotated_spans_by_offset[(sp.start_char, sp.end_char)] = sp
@@ -289,7 +289,7 @@ class AssertionAnnotator:
                     is_history=getattr(sp._, "history", False),
                 ))
             else:
-                # Span was not aligned — fall back to regex for this span
+                # Span was not aligned, fall back to regex for this span
                 regex_result = self._annotate_regex(text, [(start_char, end_char, label)])
                 results.extend(regex_result)
 

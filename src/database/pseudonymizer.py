@@ -81,7 +81,7 @@ class TextPseudonymizer:
         hf_cache_dir: Optional[str] = None,
         secret_salt: Optional[str] = None,
         auto_update: bool = False,
-        keep: list[str] = ["IPP", "NDA", "DATE"]
+        keep: list[str] = ["IPP", "NDA", "DATE", "HOPITAL"]
     ) -> None:
         """
         model_path: local path to eds-pseudo artifacts directory (the path you pass to edsnlp.load)
@@ -154,7 +154,7 @@ class TextPseudonymizer:
             "ADRESSE": "[ADDRESS_{token}]",
             "ZIP": "[ZIP_{token}]",
             "VILLE": "[VILLE_{token}]",
-            "HOPITAL": "[HOPITAL_{token}]",
+            # "HOPITAL": "[HOPITAL_{token}]", we want to identify localization
             "IPP": "[IPP_{token}]",
             "NDA": "[NDA_{token}]",
             "SECU": "[SSID_{token}]"
@@ -426,10 +426,10 @@ if __name__ == "__main__":
         global _pass_count, _fail_count
         if condition:
             _pass_count += 1
-            print(f"  ✅ PASS — {description}")
+            print(f"  ✅ PASS, {description}")
         else:
             _fail_count += 1
-            print(f"  ❌ FAIL — {description}")
+            print(f"  ❌ FAIL, {description}")
 
     def section(title: str) -> None:
         print(f"\n{'=' * 60}")
@@ -437,7 +437,7 @@ if __name__ == "__main__":
         print(f"{'=' * 60}")
 
     # ──────────────────────────────────────────────────────────
-    # Test text – realistic clinical report mixing patient PHI
+    # Test text, realistic clinical report mixing patient PHI
     # and practitioner names in many formats.
     # ──────────────────────────────────────────────────────────
     test_text = textwrap.dedent("""\
@@ -445,7 +445,7 @@ if __name__ == "__main__":
         Compte-Rendu de Consultation du 01/12/2025
 
         Madame LAURENGE ep. LEPRINCE Alice, née le 18/05/1989, âgée de 36 ans,
-        a été vue en consultation par le Dr Touat dans le service du Pr Sanson.
+        a été vue en consultation par le Dr Touat dans le service du Pr Sanson à l'hopital Pitié Salpétriere.
         La patiente habite au 12 rue des Lilas, 75013 Paris.
         Téléphone : 06 12 34 56 78.  E-mail : alice.laurenge@mail.com
 
@@ -469,7 +469,7 @@ if __name__ == "__main__":
     # ──────────────────────────────────────────────────────────
     section("1 · Patient PHI is pseudonymized")
 
-    # Patient names — should NOT appear verbatim
+    # Patient names, should NOT appear verbatim
     check("LAURENGE" not in result,
           "Patient surname LAURENGE is replaced")
     check("LEPRINCE" not in result,
