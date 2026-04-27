@@ -1127,7 +1127,7 @@ def extract_numerical(text: str) -> dict[str, ExtractionValue]:
                 vocab_valid=True,
             )
 
-    # Ki67 — normalise range separators so "40 à 50" and "40 et 50" → "40-50"
+    # Ki67, normalise range separators so "40 à 50" and "40 et 50" → "40-50"
     for m in _PAT_KI67.finditer(text):
         val = _KI67_RANGE_SEP.sub("-", m.group("value").strip())
         _set("ihc_ki67", val, m.group(), m.start(), m.end())

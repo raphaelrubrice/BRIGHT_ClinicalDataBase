@@ -105,7 +105,7 @@ Add this to `.gitignore`, never commit the salt:
 (neither the `secret_salt=` parameter nor the `PSEUDO_SALT` environment variable
 is set) it raises a `ValueError` immediately rather than silently falling back to
 an insecure default. In normal CLI usage the salt is read from the sidecar file
-automatically — this only affects direct programmatic instantiation.
+automatically, this only affects direct programmatic instantiation.
 
 ---
 

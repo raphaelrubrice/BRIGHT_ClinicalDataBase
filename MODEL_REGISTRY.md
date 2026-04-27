@@ -49,7 +49,7 @@ produced lower performance than EDS-NLP and were archived.
 
 | HuggingFace Hub repo pattern | Status |
 |---|---|
-| `raphael-r/bright-gliner-{group}` | Archived — not loaded by any pipeline module |
+| `raphael-r/bright-gliner-{group}` | Archived, not loaded by any pipeline module |
 
 Training code is in `bright_models/gliner_bright/`.
 Early checkpoint artifacts are in `bright_models/old_code/artifacts/`.
@@ -89,7 +89,7 @@ Early checkpoint artifacts are in `bright_models/old_code/artifacts/`.
    python bright_models/push_to_hub.py
    ```
 
-5. **Update this registry** — add training date, dataset version, and F1 scores.
+5. **Update this registry**, add training date, dataset version, and F1 scores.
 
 ### Fields to fill in after retraining
 

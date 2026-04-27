@@ -136,7 +136,7 @@ def _hf_value_is_plausible(field_name: str, hf_val: ExtractionValue) -> bool:
     For fields with no allowed_values constraint (free-text, dates, integers)
     this always returns True so existing behaviour is unchanged.
     For vocabulary-constrained fields (categorical) it rejects spans that are
-    not in the allowed set — e.g. hallucinated years for classification_oms or
+    not in the allowed set, e.g. hallucinated years for classification_oms or
     arbitrary tokens for IHC/molecular status fields.
     """
     if hf_val is None or hf_val.value is None:
