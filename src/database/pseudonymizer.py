@@ -91,7 +91,13 @@ class TextPseudonymizer:
         """
         self.model_path = model_path
         self.hf_cache_dir = hf_cache_dir
-        self.secret_salt = secret_salt or os.environ.get("PSEUDO_SALT", "CHANGE_ME")
+        _salt = secret_salt or os.environ.get("PSEUDO_SALT")
+        if not _salt:
+            raise ValueError(
+                "No pseudonymization salt provided. Pass secret_salt= or set the "
+                "PSEUDO_SALT environment variable. See docs/pseudonymization.md."
+            )
+        self.secret_salt = _salt
         self.nlp = edsnlp.load(model_path, auto_update=auto_update)
         self.keep = keep
 
@@ -408,11 +414,9 @@ class TextPseudonymizer:
 if __name__ == "__main__":
     from pathlib import Path
     from utils import prepare_eds_registry
-    import os, sys, textwrap
+    import sys, textwrap
 
-    os.chdir(Path(__file__).resolve().parent)
-
-    artifacts_path = Path("../../hf_cache/artifacts").resolve()
+    artifacts_path = Path(__file__).resolve().parent.parent.parent / "hf_cache" / "artifacts"
     prepare_eds_registry(artifacts_path.parent)
     TP = TextPseudonymizer(str(artifacts_path))
 

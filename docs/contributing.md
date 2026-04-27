@@ -149,9 +149,11 @@ consistency:
 
 - Restore the sidecar file from backup (preferred).
 - Alternatively, set the `PSEUDO_SALT` environment variable to the original
-  salt string before running, the code falls back to this env var if the
-  sidecar is missing.
-- If neither is possible, you must re-pseudonymize all documents from scratch
+  salt string before running; the code reads this env var when the sidecar
+  file is absent.
+- If neither the sidecar file nor `PSEUDO_SALT` is available, `TextPseudonymizer`
+  raises a `ValueError` immediately rather than silently using an insecure
+  default. In that case you must re-pseudonymize all documents from scratch
   and regenerate any gold-standard annotations that referenced the old tokens.
 
 ### "CUDA out of memory" during extraction

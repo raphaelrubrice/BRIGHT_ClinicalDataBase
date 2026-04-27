@@ -10,3 +10,4 @@
 | [training_data.md](training_data.md) | ML engineers | Synthetic data generation pipeline, quality filtering, caveats |
 | [evaluation.md](evaluation.md) | ML engineers | Gold standard format, benchmarking, metrics, ablation study |
 | [contributing.md](contributing.md) | Contributors | Dev environment setup, test suite, code style, common issues |
+| [MODEL_REGISTRY.md](../MODEL_REGISTRY.md) | ML engineers + maintainers | All trained models: HF Hub repos, semantic groups, field lists, retraining guide |

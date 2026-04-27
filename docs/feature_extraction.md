@@ -50,7 +50,9 @@ Negation Handler (negation.py)
     ▼
 Result Merger (pipeline.py)
 ├── Rules merged (priority: date > controlled > eds > rule)
-├── ML fields: HF wins for ~150 fields with F1≥0.6 on synthetic benchmark
+├── ML fields: HF wins for ~50 fields with F1≥0.6 on synthetic benchmark,
+│   subject to a plausibility gate (vocabulary-constrained fields must produce
+│   a value in their allowed set; garbage spans are discarded in favour of rules)
 └── Rules win on remaining fields; confidence boosted when both agree
     │
     ▼
