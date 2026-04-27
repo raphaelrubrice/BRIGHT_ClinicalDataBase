@@ -90,9 +90,13 @@ pytest src/tests/
 
 ## Pseudonymization Pipeline
 
-Text is extracted from PDFs via EDS-PDF → PyMuPDF → pypdf, with EasyOCR/Surya-OCR for scanned pages. Each detected PHI entity is replaced by a deterministic pseudonym: `SHA256(IPP + label + entity_text + salt)[:10]`, stored in a local sidecar file (`<db_path>.pseudonym_salt`). The same entity always maps to the same token within a patient's records. Detected types: `NOM`, `PRENOM`, `DATE`, `ADRESSE`, `ZIP`, `VILLE`, `TEL`, `MAIL`, `HOPITAL`, `IPP`, `NDA`, `SECU`.
+Text is extracted from PDFs via EDS-PDF → PyMuPDF → pypdf, with EasyOCR/Surya-OCR for scanned pages. Each entity flagged for replacement is assigned a deterministic pseudonym: `SHA256(IPP + label + entity_text + salt)[:10]`, stored in a local sidecar file (`<db_path>.pseudonym_salt`). The same entity always maps to the same token within a patient's records.
 
-Practitioner names (preceded by Dr, Pr, Professeur, Docteur, or Interne) are detected separately. BRIGHT team members are whitelisted in `src/database/pseudonymizer.py` and preserved in the output by default.
+Not all detected entities are pseudonymized — some are intentionally kept as-is:
+
+- **Pseudonymized:** `NOM`, `PRENOM`, `ADRESSE`, `ZIP`, `VILLE`, `TEL`, `MAIL`, `SECU`. Birth dates (`DATE_NAISSANCE`) are partially masked: day and month are removed, year is kept.
+- **Kept as-is:** `IPP` (needed for patient linking), `HOPITAL` (retained for tumour localisation), `NDA`, and clinical dates (`DATE`).
+- **Practitioner names** (preceded by Dr, Pr, Professeur, Docteur, or Interne) are kept if the name appears in the BRIGHT team whitelist in `src/database/pseudonymizer.py`; non-whitelisted practitioners are pseudonymized.
 
 Keep the salt file secret and backed up separately — losing it breaks pseudonym consistency across runs. Do not commit it to git. This system has not been reviewed for GDPR compliance; consult a data protection officer before use in a regulated context.
 

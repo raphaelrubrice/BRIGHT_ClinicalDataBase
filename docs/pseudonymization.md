@@ -50,23 +50,26 @@ Large texts (>1000 characters) are split into overlapping chunks (350-character 
 
 ## Supported Entity Types
 
-The following entity types are detected and replaced:
+All entity types below are detected by the pipeline. Whether they are replaced or kept depends on the `keep` list (configurable; default: `["IPP", "NDA", "DATE", "HOPITAL"]`):
 
-| Label | What it covers |
-|---|---|
-| `NOM` | Family names |
-| `PRENOM` | Given names |
-| `DATE` | Dates in running text (birth dates replaced with year only) |
-| `ADRESSE` | Street addresses |
-| `ZIP` | Postal codes |
-| `VILLE` | City names |
-| `TEL` | Phone numbers |
-| `MAIL` | Email addresses |
-| `HOPITAL` | Hospital and clinic names |
-| `IPP` | Identifiant Permanent du Patient (internal patient ID) |
-| `NDA` | Numéro de Dossier Administratif |
-| `SECU` | Numéro de sécurité sociale |
-| Practitioner names | Names preceded by Dr, Pr, Professeur, Docteur, or Interne (detected by regex, separate from the EDS-NLP pass) |
+| Label | What it covers | Default behaviour |
+|---|---|---|
+| `NOM` | Family names | **Pseudonymized** → `[NOM_<token>]` |
+| `PRENOM` | Given names | **Pseudonymized** → `[PRENOM_<token>]` |
+| `DATE` | Dates in running text | **Kept as-is** (see note) |
+| `DATE_NAISSANCE` | Birth dates | **Partially masked** → year kept, day/month replaced (`YYYY-??-??`) |
+| `ADRESSE` | Street addresses | **Pseudonymized** → `[ADDRESS_<token>]` |
+| `ZIP` | Postal codes | **Pseudonymized** → `[ZIP_<token>]` |
+| `VILLE` | City names | **Pseudonymized** → `[VILLE_<token>]` |
+| `TEL` | Phone numbers | **Pseudonymized** → `[TEL_<token>]` |
+| `MAIL` | Email addresses | **Pseudonymized** → `[MAIL_<token>]` |
+| `HOPITAL` | Hospital and clinic names | **Kept as-is** (retained for tumour localisation) |
+| `IPP` | Identifiant Permanent du Patient | **Kept as-is** (needed for patient linking) |
+| `NDA` | Numéro de Dossier Administratif | **Kept as-is** |
+| `SECU` | Numéro de sécurité sociale | **Pseudonymized** → `[SSID_<token>]` |
+| Practitioner names | Names preceded by Dr, Pr, Professeur, Docteur, or Interne | **Kept as-is** if in `BRIGHT_PRACTITIONERS` whitelist; pseudonymized otherwise |
+
+> **Note on dates:** `DATE` (dates in running text, e.g. consultation dates, treatment dates) is kept by default because these are needed for the clinical timeline. Only `DATE_NAISSANCE` (birth date) is masked. If you need to suppress clinical dates as well, remove `"DATE"` from the `keep` list when instantiating `TextPseudonymizer`.
 
 ---
 
