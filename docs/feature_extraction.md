@@ -2,9 +2,9 @@
 
 ## Overview
 
-The feature extraction pipeline reads a pseudonymized clinical database CSV and produces two structured output files: `bio.csv` (biological and pathology features) and `clinique.csv` (clinical and treatment features). It processes each document independently, then aggregates results across time per patient.
+The extraction pipeline reads a pseudonymized clinical database CSV and outputs `bio.csv` (55 biological fields, one row per surgical event) and `clinique.csv` (55 clinical fields, one row per consultation). It processes each document independently, then aggregates results per patient across time.
 
-The pipeline extracts 111 standardized fields covering IHC markers, molecular mutations, chromosomal alterations, diagnosis, demographics, treatment dates, surgical details, and clinical evolution. Extraction uses a hybrid architecture: regex and rule-based methods handle deterministic fields such as dates and categorical values with fixed vocabularies; 10 fine-tuned EDS-NLP CRF models handle the remaining fields using learned clinical NER.
+Extraction is hybrid: regex and fuzzy-matching rules cover dates and fixed-vocabulary categoricals; 10 fine-tuned EDS-NLP CRF models handle the remaining fields.
 
 ---
 
@@ -40,7 +40,7 @@ Four-Tier Extraction (pipeline.py)
 │
 └── Tier 4 — ML Extractor (hf_extractor.py)
     ├── 10 fine-tuned EDS-NLP CRF models (raphael-r/bright-eds-{group})
-    ├── 10 semantic groups covering all 111 fields
+    ├── 10 semantic groups covering all 110 fields
     └── GPU: window=510 tokens, stride=382 / CPU fallback: window=128, stride=96
     │
     ▼
@@ -91,7 +91,7 @@ LLM-generated documents differ from real clinical records in vocabulary, sentenc
 
 ## The 10 Model Groups
 
-The 111 fields are split across 10 semantic groups, each served by a separate fine-tuned EDS-NLP CRF model loaded from HuggingFace Hub (`raphael-r/bright-eds-{group}`):
+The 110 fields are split across 10 semantic groups, each served by a separate fine-tuned EDS-NLP CRF model loaded from HuggingFace Hub (`raphael-r/bright-eds-{group}`):
 
 | Group | Fields covered |
 |---|---|
@@ -102,27 +102,27 @@ The 111 fields are split across 10 semantic groups, each served by a separate fi
 | `chromosomal` | ch1p, ch19q, ch1p19q_codel, ch7p, ch7q, ch10p, ch10q, ch9p, ch9q, ampli_egfr, ampli_cdk4, ampli_mdm2, ampli_mdm4, ampli_met, fusion_fgfr, fusion_ntrk, fusion_autre |
 | `demographics` | sexe, annee_de_naissance, activite_professionnelle, antecedent_tumoral, ik_clinique, dominance_cerebrale, neuroncologue, neurochirurgien, radiotherapeute, anatomo_pathologiste |
 | `tumor_location` | tumeur_lateralite, tumeur_position, localisation_chir |
-| `treatment` | chimios, chimio_protocole, chm_cycles, chm_date_debut, chm_date_fin, type_chirurgie, qualite_exerese, chir_date, rx_dose, rx_fractionnement, rx_date_debut, rx_date_fin, localisation_radiotherapie, corticoides, anti_epileptiques, optune, essai_therapeutique |
+| `treatment` | chimios, chimio_protocole, chm_cycles, chm_date_debut, chm_date_fin, type_chirurgie, qualite_exerese, rx_dose, rx_fractionnement, rx_date_debut, rx_date_fin, localisation_radiotherapie, corticoides, anti_epileptiques, optune, essai_therapeutique |
 | `symptoms_evolution` | epilepsie_1er_symptome, ceph_hic_1er_symptome, ceph_hic, deficit_1er_symptome, deficit, cognitif_1er_symptome, cognitif, autre_trouble_1er_symptome, contraste_1er_symptome, prise_de_contraste, oedeme_1er_symptome, calcif_1er_symptome, epilepsie, autre_trouble, evol_clinique, progress_clinique, progress_radiologique, reponse_radiologique |
 | `dates_outcomes` | date_chir, date_rcp, dn_date, date_deces, date_1er_symptome, exam_radio_date_decouverte, date_progression, survie_globale, infos_deces |
 
-Models are loaded one at a time to minimize memory usage. On GPU, the CRF encoder uses a sliding window of 510 tokens with a stride of 382 tokens. On CPU, a smaller window (128 tokens, stride 96) is used for a ~4× speed improvement at a minor accuracy cost.
+> **Note:** `bright_models/utils.py` defines the `treatment` training group with an extra field `chir_date` that no longer exists in the extraction schema (`schema.py`). The model was trained on it, but it is never populated in the pipeline output. If the models are retrained, `chir_date` should either be removed from `GROUPS["treatment"]` or re-added to `CLINIQUE_FIELDS`.
 
-Splitting into groups is necessary because EDS-NLP CRF models have a 512-token context limit, and running all 111 field labels simultaneously would degrade performance severely. Each model is fine-tuned specifically on the fields in its group.
+Models are loaded one at a time. GPU: window=510 tokens, stride=382. CPU fallback: window=128, stride=96 (~4× faster, minor accuracy loss).
+
+Splitting into groups is necessary because EDS-NLP CRF models have a 512-token context limit; running all fields simultaneously degrades performance significantly.
 
 ---
 
 ## Controlled Vocabulary Fields
 
-The `ControlledExtractor` (`src/extraction/controlled_extractor.py`) handles fields whose values come from a fixed vocabulary (e.g., IHC status, molecular status, chromosomal status). It uses a three-step Find & Check algorithm:
+`ControlledExtractor` (`src/extraction/controlled_extractor.py`) handles fields with a fixed value set using a three-step Find & Check algorithm:
 
-**Step 1 — Find:** scan the document for field-specific identification terms (gene names, marker names). Short terms (≤3 characters) are matched using word-boundary regex; longer terms use sliding-window fuzzy matching via `rapidfuzz.fuzz.partial_ratio`.
+1. **Find** — scan for field-specific identification terms (gene names, marker names). Terms ≤3 chars: word-boundary regex. Longer terms: sliding-window fuzzy match via `rapidfuzz`.
+2. **Check** — for each hit, fuzzy-match candidate category values against the surrounding context. A length bonus penalises short coincidental matches.
+3. **Assign** — combined score = id_score × 0.3 + category_score × 0.7; greedy assignment, one value per field.
 
-**Step 2 — Check:** for each identification hit, extract a context window around it and fuzzy-match each candidate category value (e.g., `positif`, `negatif`, `maintenu`) against that context. A length bonus rewards longer matching terms to reduce false positives from short coincidental matches.
-
-**Step 3 — Assign:** sort candidates by combined score (identification score × 0.3 + category score × 0.7) and assign each field to its best category, greedy (one value per field).
-
-The controlled vocabularies are defined in `src/extraction/schema.py` and the term lists in `src/extraction/controlled_vocab_data.py`. Covered vocabulary types:
+Vocabularies are in `src/extraction/schema.py`; term lists in `src/extraction/controlled_vocab_data.py`. Covered types:
 
 | Vocab | Values |
 |---|---|
@@ -143,16 +143,16 @@ The controlled vocabularies are defined in `src/extraction/schema.py` and the te
 
 ## Negation Handling
 
-The `AssertionAnnotator` (`src/extraction/negation.py`) checks whether each extracted entity appears in a negated, hypothetical, or historical context.
+`AssertionAnnotator` (`src/extraction/negation.py`) checks whether each entity is negated, hypothetical, or historical.
 
-**EDS-NLP backend (preferred when available):** wraps the `eds.negation`, `eds.hypothesis`, and `eds.history` EDS-NLP components. These use clinical NLP patterns tuned for French medical text.
+**EDS-NLP backend (preferred):** uses `eds.negation`, `eds.hypothesis`, `eds.history` — clinical patterns tuned for French.
 
-**Regex fallback (when EDS-NLP is unavailable):** scans a 60-character window before (and after, for hypothesis/history) each entity span for patterns such as:
+**Regex fallback:** 60-character context window before each span (and after for hypothesis/history):
 - Negation: `pas de`, `absence de`, `sans`, `aucun`, `non`, `ne...pas`, `négatif`
 - Hypothesis: `possible`, `probable`, `suspecté`, `à confirmer`, `éventuel`
 - History: `antécédent`, `histoire de`, `précédemment`, `en YYYY`
 
-When an entity is detected as negated, its value is inverted using the `SIMILARITY_FLIP` map defined in `src/extraction/pipeline.py`:
+Negated values are inverted via the `SIMILARITY_FLIP` map in `src/extraction/pipeline.py`:
 
 | Original value | Negated value |
 |---|---|
@@ -161,9 +161,7 @@ When an entity is detected as negated, its value is inverted using the `SIMILARI
 | mute / muté | wt |
 | methyle / méthylé | non methyle / non méthylé |
 
-Note: chromosomal gain/perte are **not** inverted under negation because "pas de gain" and "perte" are logically distinct states requiring manual review.
-
-For PRESENCE-type fields (e.g., `epilepsie`, `oedeme`), negation flips the value to `non`. For FREE_TEXT fields, the prefix `non ` is prepended.
+Chromosomal gain/perte are **not** inverted — "pas de gain" and "perte" are logically distinct. PRESENCE fields flip to `non`; FREE_TEXT fields get `non ` prepended.
 
 ---
 
@@ -184,13 +182,11 @@ Observed failure modes on real data:
 
 ## Output Format
 
-**`bio.csv`** — one row per surgical event per patient. Contains all 55 biological fields (`date_chir`, `num_labo`, `diag_histologique`, all IHC, histology, molecular, chromosomal, amplification, and fusion fields). When a single document references multiple surgical events (e.g., re-operation), `row_duplicator.py` detects this and produces one row per event.
+**`bio.csv`** — one row per surgical event per patient, 55 biological fields. If a document references multiple surgical events, `row_duplicator.py` splits it into one row per event.
 
-**`clinique.csv`** — one row per consultation event per patient. Contains all 56 clinical fields (demographics, care team, outcome, symptoms, radiology, tumour location, evolution, treatment, clinical state, surgery date, and adjunct therapies). Consultation events are identified by `date_rcp`; each distinct date produces a separate row.
+**`clinique.csv`** — one row per consultation per patient, 55 clinical fields. Events are identified by `date_rcp`.
 
-Both files include a patient identifier column (`IPP`) and the source document reference. Fields that could not be extracted are left empty (not filled with a default value) so that missingness is distinguishable from a truly extracted `NA` value.
-
-Temporal aggregation (`src/aggregation/temporal_aggregation.py`) applies forward-fill across timepoints: a value extracted from an earlier consultation is carried forward to later rows unless a newer value is found. Conflicts (two documents with different values for the same field at the same timepoint) are flagged in the audit log.
+Both files include an `IPP` column and a source document reference. Unextracted fields are left empty (distinguishable from an explicitly extracted `NA`). Temporal aggregation (`src/aggregation/temporal_aggregation.py`) forward-fills values across timepoints; conflicts are flagged in the audit log.
 
 ---
 

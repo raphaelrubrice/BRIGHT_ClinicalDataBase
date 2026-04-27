@@ -2,7 +2,7 @@
 
 ## Overview
 
-The pseudonymization module detects and replaces protected health information (PHI) in the free-text columns of the BRIGHT clinical database. It is designed for internal research use at Institut de Neurologie, Hôpital Pitié-Salpêtrière: the goal is to reduce re-identification risk when working with extracted clinical features, not to produce a GDPR-compliant public dataset. The pipeline covers text extraction from source PDFs, PHI detection via the `eds-pseudo` EDS-NLP model, and deterministic pseudonym generation using a secret salt.
+The pseudonymization module detects and replaces PHI in the free-text columns of the BRIGHT clinical database CSV. It covers text extraction from source PDFs, PHI detection via the `eds-pseudo` EDS-NLP model, and deterministic pseudonym generation using a secret salt. It is designed for internal research use only — not as a GDPR-compliant public release mechanism.
 
 ---
 
@@ -72,48 +72,39 @@ The following entity types are detected and replaced:
 
 ## Deterministic Pseudonymization
 
-Each detected entity is replaced by a pseudonym generated as follows:
-
 ```
 pseudonym = SHA256(IPP + "|" + label + "|" + entity_text + "|" + secret_salt)[:10].upper()
 ```
 
-The resulting 10-character uppercase hex string is then embedded in a label-specific template (e.g., `[NOM_A3F9C12B70]`). Because the hash is deterministic given a fixed salt, the same entity text always produces the same pseudonym within a patient's records. This means that cross-document entity linking is preserved: if the same name appears in three reports for the same patient, all three will be replaced by the same token.
+The 10-character hex token is embedded in a label-specific template (e.g., `[NOM_A3F9C12B70]`). The same entity text always produces the same pseudonym for a given patient, preserving cross-document entity linking within a patient's records.
 
-The `ipp` argument scopes pseudonyms to a single patient by default. Setting `consistent_across_ipp=True` produces globally consistent pseudonyms regardless of patient — useful when you need to link entities across patients (e.g., same practitioner appearing in multiple records).
+By default, pseudonyms are scoped per patient (via `ipp`). Setting `consistent_across_ipp=True` produces globally consistent pseudonyms — useful for linking practitioner names across patients.
 
 ---
 
 ## Salt Management
 
-The salt is stored in a sidecar file next to the clinical database CSV:
+The salt is stored in a sidecar file next to the database CSV:
 
 ```
-path/to/clinical_db.csv          ← your database
-path/to/clinical_db.csv.pseudonym_salt  ← salt file (auto-created on first run)
+path/to/clinical_db.csv
+path/to/clinical_db.csv.pseudonym_salt   ← auto-created on first run
 ```
 
-The salt is generated once using `secrets.token_urlsafe(32)` and written atomically (write to a temp file, then rename) to prevent corruption from concurrent runs.
+**If the salt is lost:** re-running pseudonymization on the same documents will produce different tokens, breaking all cross-run linking. Back it up in a secure location separate from the clinical data — treat it like a password.
 
-**What happens if the salt is lost:** pseudonyms become inconsistent across pipeline runs. Re-running pseudonymization on the same documents will produce different tokens, breaking any cross-run entity linking. Existing pseudonymized CSVs will no longer be reproducible.
-
-**How to back it up:** copy the `.pseudonym_salt` file to a secure, access-controlled location (separate from the clinical data). Treat it like a password — whoever has the salt and the original documents can reconstruct all pseudonyms.
-
-**Git:** add the salt file pattern to `.gitignore`:
+Add this to `.gitignore` — never commit the salt:
 ```
 *.pseudonym_salt
 ```
-The salt must never be committed to version control.
 
 ---
 
 ## Practitioner Whitelist
 
-BRIGHT team members at Pitié-Salpêtrière are listed in the `BRIGHT_PRACTITIONERS` constant in `src/database/pseudonymizer.py`. When `keep_practitioner_names=True` (the default), any practitioner name that matches the whitelist is preserved in the output rather than replaced with a pseudonym.
+BRIGHT team members are listed in `BRIGHT_PRACTITIONERS` in `src/database/pseudonymizer.py`. When `keep_practitioner_names=True` (the default), whitelisted names are preserved in the output. Non-whitelisted practitioners are pseudonymized like any other entity.
 
-Practitioner names are detected by a title-prefix regex pattern that looks for tokens like `Dr`, `Pr`, `Professeur`, `Docteur`, or `Interne` followed by a capitalized name. Non-whitelisted practitioners whose names appear after a title are still pseudonymized.
-
-To add a new team member to the whitelist, edit the `BRIGHT_PRACTITIONERS` list in `src/database/pseudonymizer.py`. Names are matched case-insensitively.
+Detection uses a title-prefix regex (`Dr`, `Pr`, `Professeur`, `Docteur`, `Interne` followed by a capitalized name). To add a team member, append their name to `BRIGHT_PRACTITIONERS`; matching is case-insensitive.
 
 ---
 
