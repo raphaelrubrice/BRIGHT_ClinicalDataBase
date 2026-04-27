@@ -9,6 +9,7 @@ Covers:
 """
 
 import pytest
+pytest.importorskip("edsnlp", reason="requires edsnlp (install via setup.sh)")
 import pandas as pd
 from unittest.mock import MagicMock, patch
 

@@ -1,13 +1,52 @@
-*cache*/
-eds-pseudo/
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.venv
+venv/
+env/
+
+# Data & sensitive files
 data/
-profiles/
-tmp_*
-tmp/
-plans_and_analyses/
-demo_outputs/
-checkpoints/
+*.csv
 *.jsonl
-*log*.txt
+hf_cache/
+*cache*/
+*.key
+*.salt
+
+# Temporary
+tmp/
+tmp_*/
+checkpoints/
+demo_outputs/
+plans_and_analyses/
 old_*
+
+# Logs
+*log*.txt
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific
+eds-pseudo/
+profiles/
 tuto*
+data_ablation/
+../final_stripes/

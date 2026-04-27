@@ -11,6 +11,7 @@ Covers:
 """
 
 import pytest
+pytest.importorskip("edsnlp", reason="requires edsnlp (install via setup.sh)")
 import pandas as pd
 
 from src.aggregation.temporal_aggregation import (
@@ -374,7 +375,6 @@ class TestSyntheticPatientTimeline:
             ch1p="perte",
             ch19q="perte",
             date_chir="10/02/2024",
-            date_chir="10/02/2024",
         )
         ext3 = _make_extraction(
             doc_id="rcp_1", doc_date="01/03/2024", doc_type="rcp",
@@ -391,7 +391,6 @@ class TestSyntheticPatientTimeline:
         )
         ext5 = _make_extraction(
             doc_id="anapath_2", doc_date="01/09/2024", doc_type="anapath",
-            date_chir="01/09/2024",
             date_chir="01/09/2024",
             ihc_idh1="positif",
             mol_tert="wt",

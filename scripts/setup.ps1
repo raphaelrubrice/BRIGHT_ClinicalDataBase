@@ -1,3 +1,7 @@
+# Sets up the BRIGHT environment on Windows: installs PyMuPDF, PyTorch, spaCy models (en/fr),
+# clones eds-pseudo, installs edsnlp, and prompts securely for a HuggingFace access token.
+# Usage: pwsh scripts/setup.ps1
+
 $ErrorActionPreference = "Stop"
 
 pip install pymupdf

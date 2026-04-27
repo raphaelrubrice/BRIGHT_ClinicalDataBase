@@ -1,6 +1,7 @@
 """Tests for DateExtractor — context-aware date extraction via eds.dates."""
 
 import pytest
+pytest.importorskip("edsnlp", reason="requires edsnlp (install via setup.sh)")
 
 from src.extraction.date_extractor import (
     DateExtractor,

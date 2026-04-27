@@ -12,6 +12,7 @@ Covers:
 """
 
 import pytest
+pytest.importorskip("edsnlp", reason="requires edsnlp (install via setup.sh)")
 
 from src.aggregation.row_duplicator import (
     detect_multiple_events,

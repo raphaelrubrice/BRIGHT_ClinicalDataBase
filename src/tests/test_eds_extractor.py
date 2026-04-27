@@ -1,4 +1,5 @@
 import pytest
+pytest.importorskip("edsnlp", reason="requires edsnlp (install via setup.sh)")
 from src.extraction.eds_extractor import EDSExtractor
 
 def test_eds_extractor_demographics():

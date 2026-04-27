@@ -1,7 +1,9 @@
-import importlib, os, sys
+import importlib, logging, os, sys
 import pkgutil
 from pathlib import Path
 from huggingface_hub import snapshot_download
+
+logger = logging.getLogger(__name__)
 
 def resolve_eds_model_path(eds_path: str | None) -> Path:
     """
@@ -59,7 +61,7 @@ def _import_recursive(package_name: str) -> None:
             except Exception as e:
                 # Non-fatal: some optional submodules may fail, but the core registry should be loaded.
                 # Keep going to mirror the behavior in test_eds.py.
-                print(f"[eds-pseudo] Warning: failed to import {name}: {e}")
+                logger.warning("[eds-pseudo] failed to import %s: %s", name, e)
 
 def prepare_eds_registry(cache_dir: Path) -> None:
     """Ensure custom eds_pseudo components are registered (per your test_eds.py)."""

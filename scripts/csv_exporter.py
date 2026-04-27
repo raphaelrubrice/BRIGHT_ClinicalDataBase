@@ -1,3 +1,7 @@
+"""Exports a single CSV field to individual .txt files with 80-char line wrapping,
+one file per row, saved alongside the source CSV.
+Usage: python scripts/csv_exporter.py --db <path.csv> --field <column_name> --output <dir>
+"""
 import argparse
 import csv
 import sys

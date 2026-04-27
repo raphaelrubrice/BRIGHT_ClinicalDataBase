@@ -1,4 +1,5 @@
 import pytest
+pytest.importorskip("edsnlp", reason="requires edsnlp (install via setup.sh)")
 import tempfile
 import pandas as pd
 from pathlib import Path

@@ -1,3 +1,6 @@
+# DEPRECATED: This script uses hardcoded absolute paths tied to the original
+# developer's machine (c:\Users\rapha\...) and cannot be run on other systems.
+# The README.md is now maintained by hand. Do not run this script.
 import sys
 import os
 

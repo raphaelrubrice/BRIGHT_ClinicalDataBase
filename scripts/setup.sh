@@ -1,3 +1,7 @@
+# Sets up the BRIGHT environment: installs PyMuPDF, PyTorch, spaCy models (en/fr),
+# clones eds-pseudo, installs edsnlp, and prompts for a HuggingFace access token.
+# Usage: bash scripts/setup.sh
+
 pip install pymupdf
 pip install torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1
 pip install --force-reinstall markupsafe jinja2 "numpy<2.0" pillow

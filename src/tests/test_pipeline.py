@@ -5,6 +5,7 @@ download overhead in CI.
 """
 
 import pytest
+pytest.importorskip("edsnlp", reason="requires edsnlp (install via setup.sh)")
 
 from src.extraction.pipeline import ExtractionPipeline
 from src.extraction.provenance import ExtractionResult

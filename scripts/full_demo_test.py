@@ -1,3 +1,8 @@
+"""End-to-end smoke test: loads a clinical DB CSV and annotation files, runs
+ExtractionPipeline (with optional HF/EDS/negation flags), generates gold-standard
+JSONs, runs benchmark evaluation, and builds a patient timeline.
+Usage: python scripts/full_demo_test.py [--no-hf] [--no-eds] [--no-neg]
+"""
 import argparse
 import csv
 import json
