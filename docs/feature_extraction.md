@@ -85,6 +85,7 @@ The ML models were trained on **synthetic clinical documents** generated using a
    - Length checks
    - Format validation
 
+**More details in `training_data.md`**
 ### Why this matters for performance
 
 LLM-generated documents differ from real clinical records in vocabulary, sentence structure, abbreviation patterns, and error frequency. Models trained on synthetic data often fail to generalize to real-world clinical text. See the Performance Warning section below.
