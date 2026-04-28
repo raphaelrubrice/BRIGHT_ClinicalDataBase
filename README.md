@@ -19,7 +19,7 @@ BRIGHT Clinical Features DataBase is a Python code base for building a structure
 > - Before relying on extracted features for any clinical or scientific analysis,
 >   **manual validation on a representative sample is mandatory**.
 >
-> To improve performance, the models must be retrained on real annotated data.
+> To improve performance, the models could be retrained on real annotated data.
 > See `docs/feature_extraction.md` for how the training data was created and
 > `docs/evaluation.md` for how to benchmark extraction quality.
 
