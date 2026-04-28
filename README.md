@@ -20,8 +20,8 @@ BRIGHT Clinical Features DataBase is a Python code base for building a structure
 >   **manual validation on a representative sample is mandatory**.
 >
 > To improve performance, the models could be retrained on real annotated data.
-> See `docs/feature_extraction.md` for how the training data was created and
-> `docs/evaluation.md` for how to benchmark extraction quality.
+> See [docs/feature_extraction.md](docs/feature_extraction.md) for how the training data was created and
+> [docs/evaluation.md](docs/evaluation.md) for how to benchmark extraction quality.
 
 ---
 
@@ -100,7 +100,7 @@ Not all detected entities are pseudonymized, some are intentionally kept as-is:
 
 Keep the salt file secret and backed up separately, losing it breaks pseudonym consistency across runs. Do not commit it to git. This system has not been reviewed for GDPR compliance; consult a data protection officer before use in a regulated context.
 
-See `docs/pseudonymization.md` for full architecture details.
+See [docs/pseudonymization.md](docs/pseudonymization.md) for full architecture details.
 
 ---
 
@@ -112,7 +112,7 @@ A document classifier routes each document to the appropriate field set (anatomo
 
 The timeline builder aggregates values per patient across all documents into two output CSVs: `bio.csv` (one row per surgical event) and `clinique.csv` (one row per consultation).
 
-See `docs/feature_extraction.md` for full pipeline architecture.
+See [docs/feature_extraction.md](docs/feature_extraction.md) for full pipeline architecture.
 
 ---
 
