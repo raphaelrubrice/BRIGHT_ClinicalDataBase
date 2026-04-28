@@ -1,6 +1,6 @@
 # BRIGHT Clinical Features DataBase
 
-BRIGHT Clinical Features DataBase is a Python toolkit for building a structured clinical database from unstructured French neuro-oncology reports. Developed at Institut de Neurologie, Hôpital Pitié-Salpêtrière for the BRIGHT team, it automates two tasks: pseudonymization of patient-identifiable information, and extraction of 110 standardized clinical and biological features from free-text medical reports.
+BRIGHT Clinical Features DataBase is a Python code base for building a structured clinical database from unstructured French neuro-oncology reports. Developed for MVA Master's Hospital Immersion course in collaboration with the BRIGHT team @ Institut de Neurologie, Hôpital Pitié-Salpêtrière. It automates two tasks: **pseudonymization** of patient-identifiable information, and **extraction of 110** standardized clinical and biological features from free-text medical reports.
 
 ---
 
